@@ -2,7 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@localhost:5432/gatekeeper_db'
+app.config.from_file('config.py')
 db = SQLAlchemy(app)
 
 class User(db.Model):
@@ -11,7 +11,6 @@ class User(db.Model):
 
 @app.route('/')
 def hello():
-    db.create_all()
     return 'Hello, World!'
 
 if __name__ == '__main__':
