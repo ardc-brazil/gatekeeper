@@ -1,18 +1,6 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
+from app import create_app
 
-app = Flask(__name__)
-app.config.from_object('config')
-app.config.from_envvar('APP_CONFIG_FILE', silent=True)
-db = SQLAlchemy(app)
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-
-@app.route('/')
-def hello():
-    return 'Hello, World!'
+app = create_app()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
