@@ -9,6 +9,7 @@ def create_app():
     app.config.from_object('config')
     app.config.from_envvar('APP_CONFIG_FILE', silent=True)
 
+    from app.models.datasets import Datasets
     migrate = Migrate(app, db)
 
     db.init_app(app)

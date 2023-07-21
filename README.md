@@ -72,8 +72,8 @@ Run `pytest`. This will execute all unit tests within `./tests` with the prefix 
 
 To create new migrations, follow the steps below.
 
-1. Map your new table in `app/models.py`
+1. Map your new table in a new file in `models/{your_new_model}.py`
 2. Run `flask db migrate -m "<comment>"`
 3. Check the generated file under `migrations/versions/<generated_file>.py`
-4. Run `flask upgrade`
+4. Run `flask db upgrade`
 
