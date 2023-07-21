@@ -51,3 +51,11 @@ def disable_dataset(dataset_id):
     except Exception:
         response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
+
+@datasets_bp.get('/categories')
+def fetch_all_categories():
+    try:
+        return make_response(jsonify(service.fetch_all_categories()), 200)
+    except Exception:
+        response = make_response(jsonify({'error': 'An error occurred'}), 500)
+        return response

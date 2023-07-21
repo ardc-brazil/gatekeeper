@@ -46,3 +46,7 @@ class DatasetService:
             repository.upsert(dataset)
         else:
             raise Exception(f'Dataset {dataset_id} not found')
+    
+    def fetch_categories(self):
+        return ["Aerosols", "Precipitation", "Atmospheric State", "Cloud Properties", "Radiometric", "Surface Properties", 
+                "Subsoil and Groundwater Properties", "Renewable Energy"]
