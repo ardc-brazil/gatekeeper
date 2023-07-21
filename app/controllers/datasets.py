@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, Flask, request, jsonify, make_response
 from app.services.datasets import DatasetService
 
@@ -53,9 +54,10 @@ def disable_dataset(dataset_id):
         return response
 
 @datasets_bp.get('/categories')
-def fetch_all_categories():
+def fetch_categories():
     try:
-        return make_response(jsonify(service.fetch_all_categories()), 200)
-    except Exception:
+        return make_response(jsonify(service.fetch_categories()), 200)
+    except Exception as e:
+        logging.error(e)
         response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
