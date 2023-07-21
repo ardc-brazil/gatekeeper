@@ -9,6 +9,7 @@ class DatasetRepository:
         return Datasets.query.filter_by(is_enabled=is_enabled).all()
 
     def upsert(self, dataset):
-        db.session.add(dataset)
+        if (dataset.id is not None):
+            db.session.add(dataset)
         db.session.commit()
         

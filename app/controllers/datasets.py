@@ -1,6 +1,6 @@
 from flask import Blueprint, Flask, request, jsonify, make_response
-
 from app.services.datasets import DatasetService
+import logging
 
 datasets_bp = Blueprint('datasets', __name__, url_prefix='/datasets')
 service = DatasetService()
@@ -12,42 +12,48 @@ def fetch_dataset(dataset_id):
         res = None
         print(dataset_id)
         if (dataset_id):
-            res = make_response(jsonify(service.fetch_dataset(dataset_id)), 200)
+            dataset = service.fetch_dataset(dataset_id)
+            if (dataset is not None):
+                res = make_response(jsonify(service.fetch_dataset(dataset_id)), 200)
+            else:
+                res = make_response(jsonify({}), 404)
         else:
             res = make_response(jsonify(service.fetch_all_datasets()), 200)
         return res
     except Exception as e:
-        response = make_response(jsonify({'error': str(e)}), 500)
+        logging.error(e)
+        response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
 
 @datasets_bp.post('/')
 def create_dataset():
     try:
         payload = request.get_json()
-        res = service.create_dataset(payload)
-        response = make_response(jsonify(res), 201)
-        return response
+        service.create_dataset(payload)
+        return make_response('', 201)
     except Exception as e:
-        response = make_response(jsonify({'error': str(e)}), 500)
+        logging.error(e)
+        response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
 
 @datasets_bp.put('/<dataset_id>')
 def update_dataset(dataset_id):
     try:
         payload = request.get_json()
-        res = service.update_dataset(dataset_id, payload)
-        response = make_response(jsonify(res), 200)
-        return response
+        service.update_dataset(dataset_id, payload)
+        return make_response('', 200)
     except Exception as e:
-        response = make_response(jsonify({'error': str(e)}), 500)
+        logging.error(e)
+        response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
 
 @datasets_bp.delete('/<dataset_id>')
 def disable_dataset(dataset_id):
     try:
-        res = service.disable_dataset(dataset_id)
-        response = make_response(jsonify(res), 200)
+        service.disable_dataset(dataset_id)
+        response = make_response('', 200)
         return response
     except Exception as e:
-        response = make_response(jsonify({'error': str(e)}), 500)
+        logging.error(e)
+        response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
