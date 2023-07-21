@@ -13,10 +13,7 @@ def create_app():
 
     db.init_app(app)
 
-    from app.routes import bp as routes_bp
-    app.register_blueprint(routes_bp)
-
-    from app.controllers.datasets import bp as datasets_bp
-    app.register_blueprint(datasets_bp)
+    from app.routes import bp
+    app.register_blueprint(bp)
 
     return app
