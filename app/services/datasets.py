@@ -1,3 +1,5 @@
+from datetime import datetime
+import logging
 from app.models.datasets import Datasets
 from app.repositories.datasets import DatasetRepository
 
@@ -30,8 +32,12 @@ class DatasetService:
             raise Exception(f'Dataset {dataset_id} not found')
 
     def create_dataset(self, request_body):
-        dataset = Datasets(name=request_body['name'], data=request_body['data'])
-        repository.upsert(dataset)
+        try:
+            dataset = Datasets(name=request_body['name'], data=request_body['data'])
+            repository.upsert(dataset)
+        except Exception as e:
+            logging.error(e)
+            raise Exception('An error occurred while creating the dataset')
     
     def disable_dataset(self, dataset_id):
         dataset = repository.fetch(dataset_id)
