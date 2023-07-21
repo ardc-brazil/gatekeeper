@@ -1,6 +1,3 @@
-from http.client import HTTPException
-import json
-
 from flask import Blueprint
 
 bp = Blueprint('routes', __name__, url_prefix='/api')
