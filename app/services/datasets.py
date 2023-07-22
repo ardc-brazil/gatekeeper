@@ -6,10 +6,13 @@ from app.repositories.datasets import DatasetRepository
 repository = DatasetRepository()
 
 class DatasetService:
+    def __adapt_dataset(self, dataset):
+        return {"id": dataset.id, "name": dataset.name, "data": dataset.data, "is_enabled": dataset.is_enabled}
+    
     def fetch_dataset(self, dataset_id):
         res = repository.fetch(dataset_id)
         if res is not None:
-            datasets = [{"id": res.id, "name": res.name, "data": res.data, "is_enabled": res.is_enabled}]
+            datasets = self.__adapt_dataset(res)
             return datasets
         
         return None
@@ -17,7 +20,7 @@ class DatasetService:
     def fetch_all_datasets(self):
         res = repository.fetch_all()
         if res is not None:
-            datasets = [{"id": dataset.id, "name": dataset.name, "data": dataset.data, "is_enabled": dataset.is_enabled} for dataset in res]
+            datasets = [self.__adapt_dataset(dataset) for dataset in res]
             return datasets
     
         return []
@@ -50,3 +53,11 @@ class DatasetService:
     def fetch_categories(self):
         return ["Aerosols", "Precipitation", "Atmospheric State", "Cloud Properties", "Radiometric", "Surface Properties", 
                 "Subsoil and Groundwater Properties", "Renewable Energy"]
+    
+    def search_datasets(self, query_params):
+        res = repository.search(query_params)
+        if res is not None:
+            datasets = [self.__adapt_dataset(dataset) for dataset in res]
+            return datasets
+        
+        return None

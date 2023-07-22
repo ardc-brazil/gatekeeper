@@ -38,6 +38,7 @@ class DatasetResponse:
     @property
     def data(self):
         return self.__data
-    @property:
+    @property
     def is_enabled(self):
         return self.__is_enabled
+    
