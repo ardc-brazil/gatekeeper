@@ -2,6 +2,9 @@ from datetime import datetime
 import logging
 from app.models.datasets import Datasets
 from app.repositories.datasets import DatasetRepository
+import json
+import importlib.resources as pkg_resources
+from .. import resources 
 
 repository = DatasetRepository()
 
@@ -50,9 +53,9 @@ class DatasetService:
         else:
             raise Exception(f'Dataset {dataset_id} not found')
     
-    def fetch_categories(self):
-        return ["Aerosols", "Precipitation", "Atmospheric State", "Cloud Properties", "Radiometric", "Surface Properties", 
-                "Subsoil and Groundwater Properties", "Renewable Energy"]
+    def fetch_available_filters(self):
+        with open(pkg_resources.files(resources) / 'categories.json') as categories:
+            return json.load(categories)
     
     def search_datasets(self, query_params):
         res = repository.search(query_params)

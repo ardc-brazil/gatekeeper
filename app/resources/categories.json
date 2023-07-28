@@ -1,0 +1,105 @@
+[
+    {
+        "id": "date_range",
+        "title": "Date range",
+        "selection": "date-range",
+        "options": [
+            {
+                "id": "date_from",
+                "label": "From",
+                "type": "date"
+            },
+            {
+                "id": "date_to",
+                "label": "To",
+                "type": "date"
+            }
+        ]
+    },
+    {
+        "id": "categories",
+        "title": "Category",
+        "selection": "multiple",
+        "options": [
+            {
+                "id": "category_aerosols",
+                "value": "AEROSOLS",
+                "label": "Aerosols"
+            },
+            {
+                "id": "category_precipitation",
+                "value": "PRECIPITATION",
+                "label": "Precipitation"
+            },
+            {
+                "id": "category_atmospheric_state",
+                "value": "ATMOSPHERIC_STATE",
+                "label": "Atmospheric State"
+            },
+            {
+                "id": "category_cloud_properties",
+                "value": "CLOUD_PROPERTIES",
+                "text": "Cloud Properties"
+            },
+            {
+                "id": "category_radiometric",
+                "value": "RADIOMETRIC",
+                "label": "Radiometric"
+            },
+            {
+                "id": "category_surface_properties",
+                "value": "SURFACE_PROPERTIES",
+                "label": "Surface Properties"
+            },
+            {
+                "id": "category_subsoil_groundwater_properties",
+                "value": "SUBSOIL_GROUNDWATER_PROPERTIES",
+                "label": "Subsoil and Groundwater Properties"
+            },
+            {
+                "id": "category_renewable_energy",
+                "value": "RENEWABLE_ENERGY",
+                "label": "Reneweble"
+            }
+        ]
+    },
+    {
+        "id": "level",
+        "title": "Level",
+        "selection": "one",
+        "options": [
+            {
+                "id": "level_l1",
+                "value": "L1",
+                "label": "L1"
+            },
+            {
+                "id": "level_l2",
+                "value": "L2",
+                "label": "L2"
+            },
+            {
+                "id": "level_l3",
+                "value": "L3",
+                "label": "L3"
+            }
+        ]
+    },
+    {
+        "id": "data_type",
+        "title": "Data Type",
+        "selection": "multiple",
+        "options": [
+            {
+                "id": "data_type_routine",
+                "value": "ROUTINE",
+                "label": "Routine"
+            },
+            {
+                "id": "data_type_exporadic",
+                "value": "EXPORADIC",
+                "label": "Exporadic"
+            }
+        ]
+    }
+]

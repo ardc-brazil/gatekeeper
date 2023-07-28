@@ -53,10 +53,10 @@ def disable_dataset(dataset_id):
         response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
 
-@datasets_bp.get('/categories')
+@datasets_bp.get('/filters')
 def fetch_categories():
     try:
-        return make_response(jsonify(service.fetch_categories()), 200)
+        return make_response(jsonify(service.fetch_available_filters()), 200)
     except Exception as e:
         logging.error(e)
         response = make_response(jsonify({'error': 'An error occurred'}), 500)
