@@ -1,0 +1,41 @@
+version: '3'
+
+services:
+  nginx-proxy:
+    build: nginx
+    restart: always
+    volumes:
+      - ./nginx/default.conf:/tmp/default.conf
+    environment: 
+      - FLASK_SERVER_ADDR=gatekeeper:8080
+    ports:
+      - "80:80"
+    depends_on:
+      - gatekeeper
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail localhost:80/health-check || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    command: /app/start.sh
+    networks:
+      - gatekeeper_gatekeeper-network
+
+  gatekeeper:
+    build: .
+    restart: always
+    environment:
+      - APP_CONFIG_FILE=/app/config_prod.py
+    ports: 
+      - '8080:8080'
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail localhost:8080/api/infra/health-check || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    networks:
+      - gatekeeper_gatekeeper-network
+
+networks:
+  gatekeeper_gatekeeper-network:
+    external: true

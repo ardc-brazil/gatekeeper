@@ -53,7 +53,7 @@ Backend for DataAmazon.
     ```
 
     ```
-    flask run -h localhost -p 8000
+    flask run -h localhost -p 8080
     ```
 
 7. If you need to delete the docker containers
