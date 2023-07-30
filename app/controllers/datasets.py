@@ -1,5 +1,5 @@
 import logging
-from flask import Blueprint, Flask, request, jsonify, make_response
+from flask import Blueprint, request, jsonify, make_response
 from app.services.datasets import DatasetService
 
 datasets_bp = Blueprint('datasets', __name__, url_prefix='/datasets')
