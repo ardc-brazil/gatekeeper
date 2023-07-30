@@ -1,0 +1,13 @@
+nginx
+README.md
+docker-compose*.yaml
+deploy.sh
+db-data
+.vscode
+__pycache__
+.pytest_cache
+venv
+.gitignore
+.git
+tests
+tools
