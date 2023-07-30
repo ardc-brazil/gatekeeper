@@ -34,7 +34,7 @@ class DatasetRepository:
             search_conditions.append(Datasets.data['level'].astext.ilike(query_params['level']))
 
         if search_conditions:
-            query = query.filter(or_(*search_conditions))
+            query = query.filter(*search_conditions)
 
         if query_params['date_from']:
             query = query.filter(Datasets.created_at >= query_params['date_from'])
