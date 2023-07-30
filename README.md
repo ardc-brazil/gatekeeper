@@ -81,10 +81,11 @@ To create new migrations, follow the steps below.
 ### Deploying
 
 1. `ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com`
-2. Copy the content from `deploy.sh` file
-3. Replace `{access_token}` with Github access token to enable repository clone
-4. `rm ~/deploy.sh`
-5. `vim ~/deploy.sh`
-6. Paste `deploy.sh` content
-7. `chmod a+x deploy.sh`
-8. `./deploy.sh`
+2. `cd gatekeeper`
+3. `docker compose -f docker-compose-infrastructure.yaml down`
+4. `docker compose -f docker-compose-infrastructure.yaml up -d`
+
+### Accessing the application in prod
+
+* For the application: `curl -X GET http://ec2-34-194-118-180.compute-1.amazonaws.com/api/`
+* For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/` in the browser.
