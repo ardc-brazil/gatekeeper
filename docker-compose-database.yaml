@@ -1,19 +1,6 @@
 version: '3'
 
 services:
-  # app:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - 8000:8000
-  #   depends_on:
-  #     - db
-  #   environment:
-  #     - DATABASE_URL=postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@gatekeeper-db/gatekeeper_db
-  #   networks:
-  #     - gatekeeper-network
-
   gatekeeper-db:
     image: postgres
     restart: always
