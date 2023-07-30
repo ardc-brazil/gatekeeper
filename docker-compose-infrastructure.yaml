@@ -3,6 +3,8 @@ version: '3'
 services:
   nginx-proxy:
     build: nginx
+    image: nginx
+    container_name: nginx
     restart: always
     volumes:
       - ./nginx/default.conf:/tmp/default.conf
@@ -23,6 +25,8 @@ services:
 
   gatekeeper:
     build: .
+    image: gatekeeper
+    container_name: gatekeeper
     restart: always
     environment:
       - APP_CONFIG_FILE=/app/config_prod.py
