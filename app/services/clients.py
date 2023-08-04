@@ -33,7 +33,7 @@ class ClientsService:
             client = Clients(name=request_body['name'], 
                              secret=hash_password(request_body['secret']),
                              is_enabled=True)
-            repository.upsert(client)
+            return repository.upsert(client).key
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while creating the client')
@@ -46,7 +46,6 @@ class ClientsService:
             
             client.name = request_body['name']
             client.secret = hash_password(request_body['secret'])
-
             repository.upsert(client)
         except Exception as e:
             logging.error(e)
@@ -58,7 +57,7 @@ class ClientsService:
             if client is None:
                 raise Exception('Client not found')
             client['is_enabled'] = False
-            repository.upsert(client)
+            return repository.upsert(client)
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while disabling the client')

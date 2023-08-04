@@ -14,6 +14,8 @@ class DatasetRepository:
         if (dataset.id is None):
             db.session.add(dataset)
         db.session.commit()
+        db.session.refresh(dataset)
+        return dataset
         
     def search(self, query_params):
         query = db.session.query(Datasets)

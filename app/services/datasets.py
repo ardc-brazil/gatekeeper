@@ -40,7 +40,7 @@ class DatasetService:
     def create_dataset(self, request_body):
         try:
             dataset = Datasets(name=request_body['name'], data=request_body['data'])
-            repository.upsert(dataset)
+            return repository.upsert(dataset).id
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while creating the dataset')

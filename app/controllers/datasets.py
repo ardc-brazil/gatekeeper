@@ -34,8 +34,7 @@ def fetch_dataset(dataset_id):
 def create_dataset():
     try:
         payload = request.get_json()
-        service.create_dataset(payload)
-        return make_response('', 201)
+        return make_response(jsonify({'id': service.create_dataset(payload)}), 201)
     except Exception:
         response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response

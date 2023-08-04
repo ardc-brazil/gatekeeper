@@ -14,4 +14,6 @@ class ClientsRepository:
         if (client.key is None):
             db.session.add(client)
         db.session.commit()
+        db.session.refresh(client)
+        return client
     

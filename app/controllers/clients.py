@@ -49,8 +49,7 @@ def fetch_client(key):
 def create_client():
     try:
         payload = request.get_json()
-        service.create(payload)
-        return make_response('', 201)
+        return make_response(jsonify({'key': service.create(payload)}), 201)
     except Exception:
         response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
