@@ -89,3 +89,8 @@ To create new migrations, follow the steps below.
 
 * For the application: `curl -X GET http://ec2-34-194-118-180.compute-1.amazonaws.com/api/`
 * For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/` in the browser.
+
+### Create a new API Key and Secret in local development
+
+1. `curl -X POST http://localhost:8080/api/clients/ -H 'Content-Type: application/json' -H "X-Admin-Secret: {shared-password}" -d '{"name": "DataAmazon BFF", "secret": "{api-password}"}'``
+2. `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:8080/api/datasets/`
