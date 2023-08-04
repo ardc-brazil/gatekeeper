@@ -5,3 +5,5 @@ from app.controllers.datasets import datasets_bp
 bp.register_blueprint(datasets_bp)
 from app.controllers.infrastructure import infrastructure_bp
 bp.register_blueprint(infrastructure_bp)
+from app.controllers.clients import clients_bp
+bp.register_blueprint(clients_bp)
