@@ -1,7 +1,9 @@
+from functools import lru_cache
 import logging
 from app.models.clients import Clients
 from app.repositories.clients import ClientsRepository
 from app.services.secrets import hash_password
+from app.services.cache import weak_lru
 
 repository = ClientsRepository()
 
@@ -12,6 +14,7 @@ class ClientsService:
                 "is_enabled": client.is_enabled,
                 "secret": client.secret}
 
+    @lru_cache
     def fetch(self, api_key):
         res = repository.fetch(api_key)
         if res is not None:
@@ -33,7 +36,9 @@ class ClientsService:
             client = Clients(name=request_body['name'], 
                              secret=hash_password(request_body['secret']),
                              is_enabled=True)
-            return repository.upsert(client).key
+            created_key = repository.upsert(client).key
+            self.fetch.cache_clear()
+            return created_key
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while creating the client')
@@ -47,6 +52,7 @@ class ClientsService:
             client.name = request_body['name']
             client.secret = hash_password(request_body['secret'])
             repository.upsert(client)
+            self.fetch.cache_clear()
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while updating the client')
@@ -57,7 +63,8 @@ class ClientsService:
             if client is None:
                 raise Exception('Client not found')
             client['is_enabled'] = False
-            return repository.upsert(client)
+            repository.upsert(client)
+            self.fetch.cache_clear()
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while disabling the client')
