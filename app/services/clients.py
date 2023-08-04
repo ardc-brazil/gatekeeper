@@ -56,15 +56,26 @@ class ClientsService:
             logging.error(e)
             raise Exception('An error occurred while updating the client')
     
-    def disable(self, api_key):
+    def disable(self, key):
         try:
-            client = self.fetch(api_key)
+            client = repository.fetch(key)
             if client is None:
                 raise Exception('Client not found')
-            client['is_enabled'] = False
+            client.is_enabled = False
             repository.upsert(client)
             self.fetch.cache_clear()
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while disabling the client')
         
+    def enable(self, key):
+        try:
+            client = repository.fetch(key, False)
+            if client is None:
+                raise Exception('Client not found')
+            client.is_enabled = True
+            repository.upsert(client)
+            self.fetch.cache_clear()
+        except Exception as e:
+            logging.error(e)
+            raise Exception('An error occurred while enabling the client')

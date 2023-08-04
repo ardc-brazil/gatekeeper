@@ -63,3 +63,21 @@ def update_client(key):
     except Exception:
         response = make_response(jsonify({'error': 'An error occurred'}), 500)
         return response
+
+@clients_bp.delete('/<key>')
+def disable_client(key):
+    try:
+        service.disable(key)
+        return make_response('', 200)
+    except Exception:
+        response = make_response(jsonify({'error': 'An error occurred'}), 500)
+        return response
+
+@clients_bp.post('/<key>/enable')
+def enable_client(key):
+    try:
+        service.enable(key)
+        return make_response('', 200)
+    except Exception:
+        response = make_response(jsonify({'error': 'An error occurred'}), 500)
+        return response
