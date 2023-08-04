@@ -82,8 +82,10 @@ To create new migrations, follow the steps below.
 
 1. `ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com`
 2. `cd gatekeeper`
-3. `docker compose -f docker-compose-infrastructure.yaml down`
-4. `docker compose -f docker-compose-infrastructure.yaml up -d`
+3. `git pull`
+4. `docker build -t gatekeeper .`
+5. `docker compose -f docker-compose-infrastructure.yaml down`
+6. `docker compose -f docker-compose-infrastructure.yaml up -d`
 
 ### Accessing the application in prod
 
