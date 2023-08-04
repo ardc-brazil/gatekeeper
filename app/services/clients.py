@@ -3,7 +3,6 @@ import logging
 from app.models.clients import Clients
 from app.repositories.clients import ClientsRepository
 from app.services.secrets import hash_password
-from app.services.cache import weak_lru
 
 repository = ClientsRepository()
 
@@ -68,3 +67,4 @@ class ClientsService:
         except Exception as e:
             logging.error(e)
             raise Exception('An error occurred while disabling the client')
+        
