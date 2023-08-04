@@ -2,7 +2,6 @@ import logging
 from app.models.clients import Clients
 from app.repositories.clients import ClientsRepository
 from app.services.secrets import hash_password
-from app.services.cache import weak_lru
 
 repository = ClientsRepository()
 
@@ -13,7 +12,6 @@ class ClientsService:
                 "is_enabled": client.is_enabled,
                 "secret": client.secret}
 
-    @weak_lru(10)
     def fetch(self, api_key):
         res = repository.fetch(api_key)
         if res is not None:
