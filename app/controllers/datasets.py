@@ -1,9 +1,16 @@
 import logging
 from flask import Blueprint, request, jsonify, make_response
+from app.controllers.interceptors.auth import requires_auth
 from app.services.datasets import DatasetService
 
 datasets_bp = Blueprint('datasets', __name__, url_prefix='/datasets')
 service = DatasetService()
+
+@datasets_bp.before_request
+@requires_auth
+def before_request():
+    # simply pass the request, since the decorator will do the authn
+    pass
 
 @datasets_bp.get('/', defaults = {'dataset_id': None})
 @datasets_bp.get('/<dataset_id>')
