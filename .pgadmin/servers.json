@@ -1,0 +1,13 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "GatekeeperDB",
+            "Group": "Servers",
+            "Port": 5432,
+            "Username": "gk_admin",
+            "Host": "gatekeeper-db",
+            "SSLMode": "prefer",
+            "MaintenanceDB": "gatekeeper_db"
+        }
+    }
+}

@@ -4,6 +4,9 @@ services:
   gatekeeper-db:
     image: postgres
     restart: always
+    # TODO: create .env file and create new passwords
+    # See more: https://docs.docker.com/compose/environment-variables/set-environment-variables/
+    # Trello Card: https://trello.com/c/SRvATXrW
     environment:
       POSTGRES_USER: gk_admin
       POSTGRES_PASSWORD: WYnAG9!qzhfx7hDatJcs
@@ -23,6 +26,8 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: gk_admin@data-amazon.com
       PGADMIN_DEFAULT_PASSWORD: mB!2pBNnyffE@8*W*C-8
+    volumes:
+      - .pgadmin/servers.json:/pgadmin4/servers.json
     depends_on:
       - gatekeeper-db
     networks:
