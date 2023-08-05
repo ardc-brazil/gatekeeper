@@ -9,10 +9,12 @@ Backend for DataAmazon.
 
 ## Environment Setup
 
+**Use Makefile targets to make your life easier!**
+
 1. Start docker containers
 
 ```sh
-docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
+make docker-run
 ```
 
 2. Access pgAdmin in your browser at <http://localhost:5050> or <http://localhost/pgadmin> to use PgAdmin to connect to
@@ -24,8 +26,7 @@ the PostgreSQL database
 3. Create a virtual environment and activate it
 
 ```sh
-python3 -m venv venv
-source venv/bin/activate
+make python-env
 ```
 
 4. Install project dependencies
@@ -34,30 +35,25 @@ source venv/bin/activate
 > `brew install openssl`
 
 ```sh
-# Install python requirements
-pip install -r requirements.txt
+make python-pip-install
 ```
 
 5. Run database migrations
 
 ```sh
-flask db upgrade
+make db-migration
 ```
 
 6. Start the application by using any of the following
 
 ```sh
-python app.py
+make python-run
 ```
 
-```sh
-flask run -h localhost -p 8080
-```
-
-1. If you need to delete the docker containers
+7. If you need to delete the docker containers
 
 ```sh
-docker-compose -f docker-compose-database.yaml -f docker-compose-infrastructure.yaml down
+make docker-down
 ```
 
 Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker 
@@ -79,17 +75,26 @@ To create new migrations, follow the steps below.
 
 ### Deploying
 
-1. `ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com`
-2. `cd gatekeeper`
-3. `git pull`
-4. `docker build -t gatekeeper .`
-5. `docker compose -f docker-compose-infrastructure.yaml down`
-6. `docker compose -f docker-compose-infrastructure.yaml up -d`
+> **WARNING:** The current deployment process causes downtime for services.
+
+```sh
+# Connect to the AWS EC2
+ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com
+
+# Navegate to the project folder
+cd gatekeeper
+
+# Get the last (main) branch version
+git pull
+
+# Refresh and deploy the last docker image.
+make docker-deployment
+```
 
 ### Accessing the application in prod
 
 * For the application: `curl -X GET http://ec2-34-194-118-180.compute-1.amazonaws.com/api/`
-* For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/` in the browser.
+* For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/pgadmin` in the browser.
 
 ### Create a new API Key and Secret in local development
 
