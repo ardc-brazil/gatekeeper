@@ -11,54 +11,50 @@ Backend for DataAmazon.
 
 1. Start docker containers
 
-    ```
-    docker-compose up -d
+    ```sh
+    docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
     ```
 
-2. Access pgAdmin in your browser at `http://localhost:5050` to configure the connection to PostgreSQL
+1. Access pgAdmin in your browser at <http://localhost:5050> to configure the connection to PostgreSQL
     - Log in using the admin credentials defined in `docker-compose.yml` file, under the service `gatekeeper-pgadmin`.
-    - Right-click on "Servers" and select "Create" -> "Server".
-    - In the "General" tab, give the server a name (e.g., "Gatekeeper DB").
-    - In the "Connection" tab, fill in the following fields:
-        - Hostname/address: gatekeeper-db
-        - Port: 5432
-        - Maintenance database: gatekeeper_db
-        - Username: gk_admin
-        - Password: check in `docker-compose.yml`
-    - Click "Save" to add the server.
+    - Double click in `Servers > Gatekeeper DB` and inform the password from `docker-compose.yml`
 
-3. Create a virtual environment and activate it
+1. Create a virtual environment and activate it
 
-    ```
+    ```sh
     python3 -m venv venv
     source venv/bin/activate
     ```
 
-4. Install project dependencies
+1. Install project dependencies
 
-    ```
+    > If your are running MacOS, install openssl first:
+    > `brew install openssl`
+
+    ```sh
+    # Install python requirements
     pip install -r requirements.txt
     ```
 
-5. Run database migrations
+1. Run database migrations
 
-    ```
+    ```sh
     flask db upgrade
     ```
 
-6. Start the application by using any of the following
+1. Start the application by using any of the following
 
-    ```
+    ```sh
     python app.py
     ```
 
-    ```
+    ```sh
     flask run -h localhost -p 8080
     ```
 
-7. If you need to delete the docker containers
+1. If you need to delete the docker containers
 
-    ```
+    ```sh
     docker-compose down
     ```
 
