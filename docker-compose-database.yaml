@@ -27,7 +27,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: gk_admin@data-amazon.com
       PGADMIN_DEFAULT_PASSWORD: mB!2pBNnyffE@8*W*C-8
     volumes:
-      - .pgadmin/servers.json:/pgadmin4/servers.json
+      - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json
     depends_on:
       - gatekeeper-db
     networks:
