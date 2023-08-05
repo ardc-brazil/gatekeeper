@@ -11,54 +11,57 @@ Backend for DataAmazon.
 
 1. Start docker containers
 
-    ```sh
-    docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
-    ```
+```sh
+docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
+```
 
-1. Access pgAdmin in your browser at <http://localhost:5050> to configure the connection to PostgreSQL
-    - Log in using the admin credentials defined in `docker-compose.yml` file, under the service `gatekeeper-pgadmin`.
-    - Double click in `Servers > Gatekeeper DB` and inform the password from `docker-compose.yml`
+2. Access pgAdmin in your browser at <http://localhost:5050> or <http://localhost/pgadmin> to use PgAdmin to connect to
+the PostgreSQL database
 
-1. Create a virtual environment and activate it
+- Log in using the admin credentials defined in `docker-compose.yml` file, under the service `gatekeeper-pgadmin`.
+- Double click in `Servers > Gatekeeper DB` and inform the password from `docker-compose.yml`
 
-    ```sh
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
+3. Create a virtual environment and activate it
 
-1. Install project dependencies
+```sh
+python3 -m venv venv
+source venv/bin/activate
+```
 
-    > If your are running MacOS, install openssl first:
-    > `brew install openssl`
+4. Install project dependencies
 
-    ```sh
-    # Install python requirements
-    pip install -r requirements.txt
-    ```
+> If your are running MacOS, install openssl first:
+> `brew install openssl`
 
-1. Run database migrations
+```sh
+# Install python requirements
+pip install -r requirements.txt
+```
 
-    ```sh
-    flask db upgrade
-    ```
+5. Run database migrations
 
-1. Start the application by using any of the following
+```sh
+flask db upgrade
+```
 
-    ```sh
-    python app.py
-    ```
+6. Start the application by using any of the following
 
-    ```sh
-    flask run -h localhost -p 8080
-    ```
+```sh
+python app.py
+```
+
+```sh
+flask run -h localhost -p 8080
+```
 
 1. If you need to delete the docker containers
 
-    ```sh
-    docker-compose down
-    ```
+```sh
+docker-compose -f docker-compose-database.yaml -f docker-compose-infrastructure.yaml down
+```
 
-    Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker volume to persistently storage data.
+Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker 
+volume to persistently storage data.
 
 ### Running tests
 
