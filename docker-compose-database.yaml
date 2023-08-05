@@ -13,7 +13,7 @@ services:
     volumes:
       - ../db-data:/var/lib/postgresql/data
     networks:
-      - gatekeeper-network
+      - gatekeeper_gatekeeper-network
 
   gatekeeper-pgadmin:
     image: dpage/pgadmin4
@@ -26,11 +26,13 @@ services:
     depends_on:
       - gatekeeper-db
     networks:
-      - gatekeeper-network
+      - gatekeeper_gatekeeper-network
 
 volumes:
   db-data:
 
 networks:
-  gatekeeper-network:
+  gatekeeper_gatekeeper-network:
     driver: bridge
+    name: gatekeeper_gatekeeper-network
+

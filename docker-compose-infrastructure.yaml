@@ -42,4 +42,5 @@ services:
 
 networks:
   gatekeeper_gatekeeper-network:
-    external: true
+    driver: bridge
+    name: gatekeeper_gatekeeper-network
