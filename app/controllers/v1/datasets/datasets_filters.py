@@ -5,15 +5,15 @@ from flask_restx import Namespace, Resource, fields
 service = DatasetService()
 namespace = Namespace('datasets', 'Dataset operations')
 
+dataset_filter_options_model = namespace.model('DatasetFilterOptions', {
+    'id': fields.String(required=True, description='Options ID'),
+    'label': fields.String(required=True, description='Options label'),
+    'value': fields.String(required=True, description='Options value')
+})
+
 dataset_filter_model = namespace.model('DatasetFilter', {
     'id': fields.String(readonly=True, required=True, description='Filter ID'),
-    'options': fields.List(
-        fields.Nested({
-            'id': fields.String(required=True, description='Options ID'),
-            'label': fields.String(required=True, description='Options label'),
-            'value': fields.String(required=True, description='Options value')
-        }
-    )),
+    'options': fields.List(fields.Nested(dataset_filter_options_model)),
     'selection': fields.String(required=True, description='Filter selection'),
     'title': fields.String(required=True, description='Filter title') 
 })
