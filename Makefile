@@ -29,6 +29,10 @@ docker-run:
 	@echo "${On_Green}Starting docker containers${Color_Off}"
 	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
 
+docker-run-db:
+	@echo "${On_Green}Starting docker containers${Color_Off}"
+	time docker-compose -f docker-compose-database.yaml up -d	
+
 docker-stop:
 	@echo "${On_Green}Stoping docker containers${Color_Off}"
 	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml stop
@@ -48,8 +52,12 @@ python-env:
 python-pip-install:
 	pip install -r requirements.txt
 
+python-pip-freeze:
+	pip freeze > requirements.txt
+
 python-run:
-	flask run -h localhost -p 8080
+	flask routes
+	FLASK_ENV=development FLASK_DEBUG=1 flask run -h localhost -p 8080
 
 # Database commands
 db-migration:

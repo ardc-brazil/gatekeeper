@@ -54,7 +54,7 @@ class DatasetService:
             raise Exception(f'Dataset {dataset_id} not found')
     
     def fetch_available_filters(self):
-        with open(pkg_resources.files(resources) / 'available_filters.json') as categories:
+        with open('app/resources/available_filters.json') as categories:
             return json.load(categories)
     
     def search_datasets(self, query_params):
