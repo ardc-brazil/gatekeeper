@@ -1,10 +1,10 @@
 from flask import Blueprint
 from flask_restx import Api
-from app.controllers.v1.datasets import namespace as datasets_ns
+from app.controllers.v1.datasets.datasets import namespace as datasets_ns
 # from app.controllers.v1.clients import namespace as clients_ns
-from app.controllers.v1.datasets_search import namespace as datasets_search_ns
-from app.controllers.v1.datasets_filters import namespace as datasets_filters_ns
-from app.controllers.v1.infrastructure import namespace as healthcheck_ns
+from app.controllers.v1.datasets.datasets_search import namespace as datasets_search_ns
+from app.controllers.v1.datasets.datasets_filters import namespace as datasets_filters_ns
+from app.controllers.v1.infrastructure.infrastructure import namespace as healthcheck_ns
 
 api = Blueprint('apiv1', __name__, url_prefix='/api/v1')
 

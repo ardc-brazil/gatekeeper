@@ -39,6 +39,7 @@ dataset_create_model = namespace.model('DatasetCreate', {
 @namespace.param('dataset_id', 'The dataset identifier')
 @namespace.response(404, 'Dataset not found')
 @namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret'])
 class DatasetsController(Resource):
 
     method_decorators = [requires_auth]
@@ -76,6 +77,7 @@ class DatasetsController(Resource):
 
 @namespace.route('/')
 @namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret'])
 class DatasetsListController(Resource):
 
     method_decorators = [requires_auth]

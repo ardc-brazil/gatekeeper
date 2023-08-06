@@ -7,7 +7,8 @@ from flask_restx import Namespace, Resource, fields
 service = DatasetService()
 namespace = Namespace('datasets', 'Dataset operations')
 
-@namespace.route('/search')        
+@namespace.route('/search')
+@namespace.doc(security=['api_key', 'api_secret']) 
 class DatasetsSearchController(Resource):
 
     method_decorators = [requires_auth]
