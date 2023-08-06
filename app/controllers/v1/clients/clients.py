@@ -1,71 +1,74 @@
-# from flask import Blueprint, jsonify, make_response, request
-# from flask_restx import Namespace, Resource
-# from app.controllers.interceptors.auth import requires_admin_auth, requires_auth
-# from app.services.clients import ClientsService
-# from app.services.secrets import check_password, hash_password
-# import logging
+from flask import request
+from flask_restx import Namespace, Resource
+from app.controllers.interceptors.auth import requires_admin_auth
+from app.services.clients import ClientsService
+from werkzeug.exceptions import NotFound
+from app.controllers.v1.clients.resources.clients_models import client_model, client_create_model
 
-# service = ClientsService()
-# namespace = Namespace('clients', 'Clients operations')
+service = ClientsService()
+namespace = Namespace('clients', 'Clients operations')
 
-# @namespace.route('/clients')
-# @namespace.param('key', 'The client identifier', 'body')
-# class ClientsController(Resource):
-#     method_decorators = [requires_admin_auth]
+@namespace.route('/<string:key>')
+@namespace.param('key', 'The client key')
+@namespace.response(404, 'Dataset not found')
+@namespace.response(500, 'Internal Server error')
+@namespace.doc(security='api_admin_key')
+class ClientsController(Resource):
 
-#     @namespace.route('/<string:key>')
-#     @namespace.doc("Get a Client")
-#     def get(self, key):
-#         try:
-#             res = None
-#             if key:
-#                 client = service.fetch(key)
-#                 if (client is not None):
-#                     res = make_response(jsonify(service.fetch(key)), 200)
-#                 else:
-#                     res = make_response(jsonify({}), 404)
-#             else:
-#                 res = make_response(jsonify(service.fetch_all()), 200)
-#             return res
-#         except Exception:
-#             response = make_response(jsonify({'error': 'An error occurred'}), 500)
-#             return response
+    method_decorators = [requires_admin_auth]
+
+    @namespace.doc("Get a Client")
+    @namespace.marshal_with(client_model)
+    def get(self, key):
+        '''Fetch a specific client'''
+        client = service.fetch(key)
+        if (client is not None):
+            return client, 200
+        else:
+            raise NotFound()
     
-#     @namespace.doc('Create a Client')
-#     def post(self, ):
-#         try:
-#             payload = request.get_json()
-#             return make_response(jsonify({'key': service.create(payload)}), 201)
-#         except Exception:
-#             response = make_response(jsonify({'error': 'An error occurred'}), 500)
-#             return response
+    @namespace.doc('Update a Client')
+    def put(self, key):
+        '''Update a specific client'''
+        payload = request.get_json()
+        service.update(key, payload)
+        return {}, 200
+            
+    @namespace.doc('Disable a Client')
+    def delete(self, key):
+        '''Disable a specific client'''
+        service.disable(key)
+        return {}, 200
+        
+@namespace.route('/')
+@namespace.response(500, 'Internal Server error')
+@namespace.doc(security='api_admin_key')
+class ClientsListController(Resource):
+
+    method_decorators = [requires_admin_auth]
     
-#     @namespace.route('/<key>')
-#     @namespace.doc('Update a Client')
-#     def put(self, key):
-#         try:
-#             payload = request.get_json()
-#             service.update(key, payload)
-#             return make_response('', 200)
-#         except Exception:
-#             response = make_response(jsonify({'error': 'An error occurred'}), 500)
-#             return response
+    @namespace.marshal_list_with(client_model)
+    def get(self):
+        '''Fetch all clients'''
+        return service.fetch_all(), 200
 
-#     @namespace.doc('Disable a Client')
-#     def delete(key):
-#         try:
-#             service.disable(key)
-#             return make_response('', 200)
-#         except Exception:
-#             response = make_response(jsonify({'error': 'An error occurred'}), 500)
-#             return response
+    @namespace.marshal_with(client_create_model)
+    def post(self):
+        '''Create a client'''
+        payload = request.get_json()
+        return {'key': service.create(payload)}, 201
 
-#     @namespace.route('/clients/<string:key>/enable')
-#     @namespace.doc('Enable a Client')
-#     def put(key):
-#         try:
-#             service.enable(key)
-#             return make_response('', 200)
-#         except Exception:
-#             response = make_response(jsonify({'error': 'An error occurred'}), 500)
-#             return response
+@namespace.route('/<string:key>/enable')
+@namespace.param('key', 'The client key')
+@namespace.response(404, 'Dataset not found')
+@namespace.response(500, 'Internal Server error')
+@namespace.doc(security='api_admin_key')
+class ClientsEnableController(Resource):
+
+    method_decorators = [requires_admin_auth]
+
+    @namespace.doc('Enable a Client')
+    def put(self, key):
+        '''Enable a specific client'''
+        service.enable(key)
+        return {}, 200

@@ -3,6 +3,7 @@ import logging
 from app.models.clients import Clients
 from app.repositories.clients import ClientsRepository
 from app.services.secrets import hash_password
+from werkzeug.exceptions import NotFound
 
 repository = ClientsRepository()
 
@@ -10,25 +11,32 @@ class ClientsService:
     def __adapt_client(self, client):
         return {"name": client.name, 
                 "key": client.key,
-                "is_enabled": client.is_enabled,
-                "secret": client.secret}
+                "is_enabled": client.is_enabled}
 
     @lru_cache
     def fetch(self, api_key):
-        res = repository.fetch(api_key)
-        if res is not None:
-            client = self.__adapt_client(res)
-            return client
-        
-        return None
-    
+        try: 
+            res = repository.fetch(api_key)
+            if res is not None:
+                client = self.__adapt_client(res)
+                return client
+            
+            return None
+        except Exception as e:
+            logging.error(e)
+            raise e
+
     def fetch_all(self):
-        res = repository.fetch_all()
-        if res is not None:
-            clients = [self.__adapt_client(client) for client in res]
-            return clients
-    
-        return []
+        try:
+            res = repository.fetch_all()
+            if res is not None:
+                clients = [self.__adapt_client(client) for client in res]
+                return clients
+        
+            return []
+        except Exception as e:
+            logging.error(e)
+            raise e
     
     def create(self, request_body):
         try:
@@ -40,13 +48,13 @@ class ClientsService:
             return created_key
         except Exception as e:
             logging.error(e)
-            raise Exception('An error occurred while creating the client')
+            raise e
         
     def update(self, key, request_body):
         try:
             client = repository.fetch(key)
             if client is None:
-                raise Exception('Client not found')
+                raise NotFound()
             
             client.name = request_body['name']
             client.secret = hash_password(request_body['secret'])
@@ -54,28 +62,28 @@ class ClientsService:
             self.fetch.cache_clear()
         except Exception as e:
             logging.error(e)
-            raise Exception('An error occurred while updating the client')
+            raise e
     
     def disable(self, key):
         try:
             client = repository.fetch(key)
             if client is None:
-                raise Exception('Client not found')
+                raise NotFound()
             client.is_enabled = False
             repository.upsert(client)
             self.fetch.cache_clear()
         except Exception as e:
             logging.error(e)
-            raise Exception('An error occurred while disabling the client')
+            raise e
         
     def enable(self, key):
         try:
             client = repository.fetch(key, False)
             if client is None:
-                raise Exception('Client not found')
+                raise NotFound()
             client.is_enabled = True
             repository.upsert(client)
             self.fetch.cache_clear()
         except Exception as e:
             logging.error(e)
-            raise Exception('An error occurred while enabling the client')
+            raise e
