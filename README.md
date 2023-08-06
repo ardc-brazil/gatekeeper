@@ -9,60 +9,55 @@ Backend for DataAmazon.
 
 ## Environment Setup
 
+**Use Makefile targets to make your life easier!**
+
 1. Start docker containers
 
-    ```
-    docker-compose up -d
-    ```
+```sh
+make docker-run
+```
 
-2. Access pgAdmin in your browser at `http://localhost:5050` to configure the connection to PostgreSQL
-    - Log in using the admin credentials defined in `docker-compose.yml` file, under the service `gatekeeper-pgadmin`.
-    - Right-click on "Servers" and select "Create" -> "Server".
-    - In the "General" tab, give the server a name (e.g., "Gatekeeper DB").
-    - In the "Connection" tab, fill in the following fields:
-        - Hostname/address: gatekeeper-db
-        - Port: 5432
-        - Maintenance database: gatekeeper_db
-        - Username: gk_admin
-        - Password: check in `docker-compose.yml`
-    - Click "Save" to add the server.
+2. Access pgAdmin in your browser at <http://localhost:5050> or <http://localhost/pgadmin> to use PgAdmin to connect to
+the PostgreSQL database
+
+- Log in using the admin credentials defined in `docker-compose.yml` file, under the service `gatekeeper-pgadmin`.
+- Double click in `Servers > Gatekeeper DB` and inform the password from `docker-compose.yml`
 
 3. Create a virtual environment and activate it
 
-    ```
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
+```sh
+make python-env
+```
 
 4. Install project dependencies
 
-    ```
-    pip install -r requirements.txt
-    ```
+> If your are running MacOS, install openssl first:
+> `brew install openssl`
+
+```sh
+make python-pip-install
+```
 
 5. Run database migrations
 
-    ```
-    flask db upgrade
-    ```
+```sh
+make db-migration
+```
 
 6. Start the application by using any of the following
 
-    ```
-    python app.py
-    ```
-
-    ```
-    flask run -h localhost -p 8080
-    ```
+```sh
+make python-run
+```
 
 7. If you need to delete the docker containers
 
-    ```
-    docker-compose down
-    ```
+```sh
+make docker-down
+```
 
-    Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker volume to persistently storage data.
+Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker 
+volume to persistently storage data.
 
 ### Running tests
 
@@ -80,17 +75,26 @@ To create new migrations, follow the steps below.
 
 ### Deploying
 
-1. `ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com`
-2. `cd gatekeeper`
-3. `git pull`
-4. `docker build -t gatekeeper .`
-5. `docker compose -f docker-compose-infrastructure.yaml down`
-6. `docker compose -f docker-compose-infrastructure.yaml up -d`
+> **WARNING:** The current deployment process causes downtime for services.
+
+```sh
+# Connect to the AWS EC2
+ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com
+
+# Navegate to the project folder
+cd gatekeeper
+
+# Get the last (main) branch version
+git pull
+
+# Refresh and deploy the last docker image.
+make docker-deployment
+```
 
 ### Accessing the application in prod
 
 * For the application: `curl -X GET http://ec2-34-194-118-180.compute-1.amazonaws.com/api/`
-* For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/` in the browser.
+* For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/pgadmin` in the browser.
 
 ### Create a new API Key and Secret in local development
 
