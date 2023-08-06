@@ -1,12 +1,22 @@
 from flask import request
 from app.controllers.interceptors.auth import requires_auth
 from app.services.datasets import DatasetService
-from flask_restx import Namespace, Resource
+from flask_restx import Namespace, Resource, fields
 from werkzeug.exceptions import NotFound
-from app.controllers.v1.datasets.resources.datasets_models import dataset_model, dataset_create_model
 
 service = DatasetService()
 namespace = Namespace('datasets', 'Dataset operations')
+
+dataset_model = namespace.model('Dataset', {
+    'id': fields.String(readonly=True, required=True, description='Dataset ID'),
+    'name': fields.Raw(required=True, description='Dataset name'),
+    'data': fields.String(required=False, description='Dataset information'),
+    'is_enabled': fields.Boolean(required=True, description='Dataset status')
+})
+
+dataset_create_model = namespace.model('DatasetCreate', {
+    'id': fields.String(readonly=True, required=True, description='Dataset ID')
+})
 
 @namespace.route('/<string:dataset_id>')
 @namespace.param('dataset_id', 'The dataset identifier')
@@ -28,11 +38,13 @@ class DatasetsController(Resource):
             raise NotFound()
 
     def put(self, dataset_id):
+        '''Update a specific dataset'''
         payload = request.get_json()
         service.update_dataset(dataset_id, payload)
         return {}, 200
     
     def delete(self, dataset_id):
+        '''Disable a specific dataset'''
         service.disable_dataset(dataset_id)
         return {}, 200
 

@@ -1,12 +1,21 @@
 from flask import request
-from flask_restx import Namespace, Resource
+from flask_restx import Namespace, Resource, fields
 from app.controllers.interceptors.auth import requires_admin_auth
 from app.services.clients import ClientsService
 from werkzeug.exceptions import NotFound
-from app.controllers.v1.clients.resources.clients_models import client_model, client_create_model
 
 service = ClientsService()
 namespace = Namespace('clients', 'Clients operations')
+
+client_model = namespace.model('Client', {
+    'key': fields.String(readonly=True, required=True, description='Client key'),
+    'name': fields.String(required=True, description='Client name'),
+    'is_enabled': fields.Boolean(required=True, description='Is client enabled?')
+})
+
+client_create_model = namespace.model('ClientCreate', {
+    'key': fields.String(readonly=True, required=True, description='Client key')
+})
 
 @namespace.route('/<string:key>')
 @namespace.param('key', 'The client key')
