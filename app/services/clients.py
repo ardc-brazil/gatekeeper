@@ -11,7 +11,8 @@ class ClientsService:
     def __adapt_client(self, client):
         return {"name": client.name, 
                 "key": client.key,
-                "is_enabled": client.is_enabled}
+                "is_enabled": client.is_enabled,
+                "secret": client.secret}
 
     @lru_cache
     def fetch(self, api_key):
