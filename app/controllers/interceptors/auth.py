@@ -2,29 +2,10 @@ import logging
 from flask import request, jsonify, make_response
 from functools import wraps
 
-from app.repositories.clients import ClientsRepository
 from app.services.clients import ClientsService
-from app.services.secrets import check_password, hash_password
+from app.services.secrets import check_password
 
 service = ClientsService()
-
-def public_route(decorated_function):
-    """
-    This is a decorator to specify public endpoints in our flask routes
-    :param decorated_function:
-    :return:
-    """
-    decorated_function.is_public = True
-    return decorated_function
-
-
-def _perform_auth(method):
-    is_public_endpoint = getattr(method, 'is_public', False)
-    # place the validation here
-    print("ispub", is_public_endpoint)
-
-    return method
-
 
 def requires_auth(f):
     @wraps(f)
