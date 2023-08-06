@@ -26,7 +26,7 @@ class DatasetsFilterController(Resource):
     method_decorators = [requires_auth]
 
     @namespace.doc("Get a Dataset filter")
-    # @namespace.marshal_list_with(dataset_filter_model)
+    @namespace.marshal_list_with(dataset_filter_model)
     def get(self):
         '''Fetch dataset available filters'''
         return service.fetch_available_filters(), 200
