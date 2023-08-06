@@ -10,6 +10,7 @@ namespace = Namespace('datasets', 'Dataset operations')
 
 @namespace.route('/filters')
 @namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret'])
 class DatasetsFilterController(Resource):
 
     method_decorators = [requires_auth]
