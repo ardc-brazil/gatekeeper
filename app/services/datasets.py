@@ -20,14 +20,6 @@ class DatasetService:
         
         return None
 
-    def fetch_all_datasets(self):
-        res = repository.fetch_all()
-        if res is not None:
-            datasets = [self.__adapt_dataset(dataset) for dataset in res]
-            return datasets
-    
-        return []
-
     def update_dataset(self, dataset_id, request_body):
         dataset = repository.fetch(dataset_id)
         if (dataset is not None):
@@ -63,4 +55,4 @@ class DatasetService:
             datasets = [self.__adapt_dataset(dataset) for dataset in res]
             return datasets
         
-        return None
+        return []
