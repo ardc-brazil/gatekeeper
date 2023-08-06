@@ -47,7 +47,7 @@ docker-deployment: docker-stop docker-down docker-run
 # Python commands
 python-env:
 	python3 -m venv venv
-	source venv/bin/activate
+	. venv/bin/activate
 
 python-pip-install:
 	pip install -r requirements.txt
