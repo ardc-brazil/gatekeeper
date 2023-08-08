@@ -72,3 +72,25 @@ class UsersService:
         except Exception as e:
             logging.error(e)
             raise e
+
+    def disable(self, id):
+        try:
+            user = repository.fetch_by_id(id)
+            if (user is None):
+                raise NotFound(f'User {id} not found')
+            user.is_enabled = False
+            repository.upsert(user)
+        except Exception as e:
+            logging.error(e)
+            raise e
+
+    def enable(self, id):
+        try:
+            user = repository.fetch_by_id(id)
+            if (user is None):
+                raise NotFound(f'User {id} not found')
+            user.is_enabled = True
+            repository.upsert(user)
+        except Exception as e:
+            logging.error(e)
+            raise e
