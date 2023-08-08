@@ -29,7 +29,6 @@ class Users(db.Model):
 
     __table_args__ = (Index('idx_users_email', email, unique=True),)
 
-
 class Providers(db.Model):
     __tablename__ = 'providers'
     id = db.Column(db.Integer, primary_key=True)
