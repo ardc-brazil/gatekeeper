@@ -10,9 +10,9 @@ user_provider_association = db.Table('user_provider',
     db.Column('provider_id', db.Integer, db.ForeignKey('providers.id'), primary_key=True)
 )
 
-user_group_association = db.Table('user_group_association',
+user_roles_association = db.Table('user_roles_association',
     db.Column('user_id', UUID(as_uuid=True), db.ForeignKey('users.id'), primary_key=True),
-    db.Column('group_id', db.Integer, db.ForeignKey('groups.id'), primary_key=True)
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True)
 )
 
 class Users(db.Model):
@@ -25,7 +25,7 @@ class Users(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     
     providers = relationship('Provider', secondary=user_provider_association, backref='users')
-    groups = relationship('Group', secondary=user_group_association, backref='users')
+    roles = relationship('Role', secondary=user_roles_association, backref='users')
 
     __table_args__ = (Index('idx_email', 'email'))
 
@@ -34,7 +34,7 @@ class Providers(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(256), nullable=False)
 
-class Group(db.Model):
-    __tablename__ = 'groups'
+class Roles(db.Model):
+    __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
