@@ -1,4 +1,4 @@
-from app.controllers.interceptors.auth import requires_auth
+from app.controllers.interceptors.authentication import requires_auth
 from app.services.datasets import DatasetService
 from flask_restx import Namespace, Resource, fields
 

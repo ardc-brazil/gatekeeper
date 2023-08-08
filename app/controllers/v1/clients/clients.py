@@ -1,6 +1,6 @@
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from app.controllers.interceptors.auth import requires_admin_auth
+from app.controllers.interceptors.authentication import requires_admin_auth
 from app.services.clients import ClientsService
 from werkzeug.exceptions import NotFound
 
