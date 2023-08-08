@@ -6,11 +6,11 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
 user_provider_association = db.Table('user_provider',
-    db.Column('user_id', db.UUID(as_uuid=True), db.ForeignKey('users.id'), primary_key=True),
+    db.Column('user_id', UUID(as_uuid=True), db.ForeignKey('users.id'), primary_key=True),
     db.Column('provider_id', db.Integer, db.ForeignKey('providers.id'), primary_key=True)
 )
 
-user_roles_association = db.Table('user_roles_association',
+user_roles_association = db.Table('user_roles',
     db.Column('user_id', UUID(as_uuid=True), db.ForeignKey('users.id'), primary_key=True),
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True)
 )
@@ -27,7 +27,8 @@ class Users(db.Model):
     providers = relationship('Provider', secondary=user_provider_association, backref='users')
     roles = relationship('Role', secondary=user_roles_association, backref='users')
 
-    __table_args__ = (Index('idx_email', 'email'))
+    __table_args__ = (Index('idx_users_email', email, unique=True),)
+
 
 class Providers(db.Model):
     __tablename__ = 'providers'

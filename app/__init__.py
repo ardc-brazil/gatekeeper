@@ -15,6 +15,7 @@ def create_app():
     app.config.from_envvar('APP_CONFIG_FILE', silent=True)
 
     from app.models.datasets import Datasets
+    from app.models.users import Users
     migrate = Migrate(app, db)
 
     db.init_app(app)
@@ -28,10 +29,10 @@ def create_app():
     # from app.controllers.v2 import api 
     # app.register_blueprint(api)
 
-    casbin_adapter = CasbinSQLAlchemyAdapter(db)
+    casbin_adapter = CasbinSQLAlchemyAdapter(app.config.get('SQLALCHEMY_DATABASE_URI'))
     enforcer = Enforcer('app/resources/casbin_policy.conf', casbin_adapter)
     enforcer.load_policy()
 
-    app = authorization_middleware(enforcer)(app)
+    app.wsgi_app = authorization_middleware(enforcer)(app.wsgi_app)
 
     return app
