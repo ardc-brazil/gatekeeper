@@ -1,5 +1,5 @@
 import logging
-from app.models.users import Providers, Roles, Users
+from app.models.users import Providers, Users
 from app.repositories.users import UsersRepository
 from werkzeug.exceptions import NotFound
 from app.controllers.interceptors.authorization import enforcer
