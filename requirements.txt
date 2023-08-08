@@ -34,3 +34,4 @@ Werkzeug==2.3.6
 zipp==3.16.2
 casbin==1.23.0
 casbin_sqlalchemy_adapter==0.5.2
+casbin-postgresql-watcher==0.2.0
