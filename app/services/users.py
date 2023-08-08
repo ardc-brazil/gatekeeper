@@ -2,6 +2,7 @@ import logging
 from app.models.users import Providers, Roles, Users
 from app.repositories.users import UsersRepository
 from werkzeug.exceptions import NotFound
+from app.controllers.interceptors.authorization import enforcer
 
 repository = UsersRepository()
 
@@ -20,10 +21,12 @@ class UsersService:
             user = Users(name=request_body['name'],
                          email=request_body['email'])
             user.providers.append(Providers(name=request_body['provider']))
-            for role in request_body['roles']:
-                user.roles.append(Roles(name=role))
             
-            return repository.upsert(user).id
+            user_id = repository.upsert(user).id
+
+            for role in request_body['roles']:
+                enforcer.add_role_for_user(user.id, role)
+            return user_id
         except Exception as e:
             logging.error(e)
             raise e
@@ -46,8 +49,7 @@ class UsersService:
             if user is None:
                 raise NotFound(f'User {id} not found')
             for role in roles:
-                user.roles.append(role)
-            repository.upsert(user)
+                enforcer.add_role_for_user(id, role)
         except Exception as e:
             logging.error(e)
             raise e
@@ -58,8 +60,7 @@ class UsersService:
             if (user is None):
                 raise NotFound(f'User {id} not found')
             for role in roles:
-                user.roles.remove(role)
-            repository.upsert(user)
+                enforcer.delete_role_for_user(id, role)
         except Exception as e:
             logging.error(e)
             raise e
