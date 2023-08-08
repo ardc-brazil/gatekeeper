@@ -1,5 +1,5 @@
 import logging
-from app.models.users import Users
+from app.models.users import Providers, Roles, Users
 from app.repositories.users import UsersRepository
 from werkzeug.exceptions import NotFound
 
@@ -12,14 +12,16 @@ class UsersService:
     def fetch_by_email(self, email, is_enabled=True):
         return repository.fetch_by_email(email, is_enabled)
     
+    def fetch_all(self):
+        return repository.fetch_all()
+
     def create(self, request_body):
         try:
             user = Users(name=request_body['name'],
                          email=request_body['email'])
-            user.providers.append(request_body['provider'])
-            roles = request_body['role'].split(',')
-            for role in roles:
-                user.roles.append(role)
+            user.providers.append(Providers(name=request_body['provider']))
+            for role in request_body['roles']:
+                user.roles.append(Roles(name=role))
             
             return repository.upsert(user).id
         except Exception as e:
