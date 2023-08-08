@@ -2,10 +2,13 @@ from flask import make_response, request, jsonify
 from casbin import Enforcer
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from functools import wraps
+from postgresql_watcher import PostgresqlWatcher
 
 casbin_adapter = CasbinSQLAlchemyAdapter('postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@localhost:5432/gatekeeper_db')
 enforcer = Enforcer('app/resources/casbin_policy.conf', casbin_adapter)
-enforcer.load_policy()
+watcher = PostgresqlWatcher(host='localhost',user='gk_admin',password='WYnAG9!qzhfx7hDatJcs',port=5432,dbname='gatekeeper_db')
+watcher.set_update_callback(enforcer.load_policy)
+enforcer.set_watcher(watcher)
 
 def __get_user_from_request(request):
     return request.headers.get('X-Customer-Id')
