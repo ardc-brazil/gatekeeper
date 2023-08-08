@@ -3,6 +3,7 @@ from app import db
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import Index
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 
 user_provider_association = db.Table('user_provider',
     db.Column('user_id', db.UUID(as_uuid=True), db.ForeignKey('users.id'), primary_key=True),
@@ -17,6 +18,8 @@ class Users(db.Model):
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    
+    providers = relationship('Provider', secondary=user_provider_association, backref='users')
 
     __table_args__ = (Index('idx_email', 'email'))
 
