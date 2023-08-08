@@ -1,6 +1,7 @@
 from flask import request
 from flask_restx import Namespace, Resource, fields
 from app.controllers.interceptors.authentication import requires_admin_auth
+from app.controllers.interceptors.authorization import authorize
 from app.services.clients import ClientsService
 from werkzeug.exceptions import NotFound
 
@@ -24,7 +25,7 @@ client_create_model = namespace.model('ClientCreate', {
 @namespace.doc(security='api_admin_key')
 class ClientsController(Resource):
 
-    method_decorators = [requires_admin_auth]
+    method_decorators = [requires_admin_auth, authorize]
 
     @namespace.doc("Get a Client")
     @namespace.marshal_with(client_model)
@@ -54,7 +55,7 @@ class ClientsController(Resource):
 @namespace.doc(security='api_admin_key')
 class ClientsListController(Resource):
 
-    method_decorators = [requires_admin_auth]
+    method_decorators = [requires_admin_auth, authorize]
     
     @namespace.marshal_list_with(client_model)
     def get(self):
@@ -74,7 +75,7 @@ class ClientsListController(Resource):
 @namespace.doc(security='api_admin_key')
 class ClientsEnableController(Resource):
 
-    method_decorators = [requires_admin_auth]
+    method_decorators = [requires_admin_auth, authorize]
 
     @namespace.doc('Enable a Client')
     def put(self, key):

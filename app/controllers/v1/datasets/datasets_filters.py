@@ -1,4 +1,5 @@
 from app.controllers.interceptors.authentication import requires_auth
+from app.controllers.interceptors.authorization import authorize
 from app.services.datasets import DatasetService
 from flask_restx import Namespace, Resource, fields
 
@@ -23,7 +24,7 @@ dataset_filter_model = namespace.model('DatasetFilter', {
 @namespace.doc(security=['api_key', 'api_secret'])
 class DatasetsFilterController(Resource):
 
-    method_decorators = [requires_auth]
+    method_decorators = [requires_auth, authorize]
 
     @namespace.doc("Get a Dataset filter")
     @namespace.marshal_list_with(dataset_filter_model)

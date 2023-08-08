@@ -1,4 +1,5 @@
 from app.controllers.interceptors.authentication import requires_auth
+from app.controllers.interceptors.authorization import authorize
 from app.services.users import UsersService
 from flask_restx import Namespace, Resource, fields
 from werkzeug.exceptions import NotFound
@@ -35,7 +36,7 @@ user_provider_add_model = namespace.model('UserProviderAdd', {
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersController(Resource):
         
-    method_decorators = [requires_auth]
+    method_decorators = [requires_auth, authorize]
 
     @namespace.doc("Get a User")
     @namespace.marshal_with(user_model)
@@ -65,7 +66,7 @@ class UsersController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersListController(Resource):
     
-        method_decorators = [requires_auth]
+        method_decorators = [requires_auth, authorize]
         
         @namespace.marshal_list_with(user_model)
         def get(self):
@@ -98,7 +99,7 @@ class UsersEnableController(Resource):
 @namespace.response(500, 'Internal Server error')
 class UsersRolesController(Resource):
     
-    method_decorators = [requires_auth]
+    method_decorators = [requires_auth, authorize]
     
     @namespace.doc('Add roles to a User')
     def put(self, id):
@@ -120,7 +121,7 @@ class UsersRolesController(Resource):
 @namespace.response(500, 'Internal Server error')
 class UsersProvidersController(Resource):
         
-        method_decorators = [requires_auth]
+        method_decorators = [requires_auth, authorize]
         
         @namespace.doc('Add provider to a User')
         def put(self, id):
