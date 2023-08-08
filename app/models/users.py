@@ -24,8 +24,8 @@ class Users(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     
-    providers = relationship('Provider', secondary=user_provider_association, backref='users')
-    roles = relationship('Role', secondary=user_roles_association, backref='users')
+    providers = relationship('Providers', secondary=user_provider_association, backref='users')
+    roles = relationship('Roles', secondary=user_roles_association, backref='users')
 
     __table_args__ = (Index('idx_users_email', email, unique=True),)
 
