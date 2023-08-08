@@ -41,7 +41,7 @@ docker-down:
 	@echo "${On_Green}Downing docker containers${Color_Off}"
 	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml down
 
-docker-deployment: docker-stop docker-down docker-run
+docker-deployment: docker-build docker-stop docker-down docker-run
 	
 
 # Python commands

@@ -36,7 +36,5 @@ api_extension = Api(
 
 api_extension.add_namespace(datasets_ns)
 api_extension.add_namespace(datasets_filters_ns)
-
 api_extension.add_namespace(clients_ns)
-
 api_extension.add_namespace(healthcheck_ns)

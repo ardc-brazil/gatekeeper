@@ -8,11 +8,12 @@ repository = DatasetRepository()
 
 class DatasetService:
     def __adapt_dataset(self, dataset):
-        return {"id": dataset.id, "name": dataset.name, "data": dataset.data, "is_enabled": dataset.is_enabled}
+        return {"id": dataset.id, "name": dataset.name, "data": json.dumps(dataset.data), "is_enabled": dataset.is_enabled}
     
     def fetch_dataset(self, dataset_id):
         try: 
             res = repository.fetch(dataset_id)
+
             if res is not None:
                 datasets = self.__adapt_dataset(res)
                 return datasets
