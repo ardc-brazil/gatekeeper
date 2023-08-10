@@ -8,7 +8,7 @@ for i in data:
     c = {"name": i["name"]}
     del i["name"]
     c["data"] = i
-    r = requests.post('http://ec2-34-194-118-180.compute-1.amazonaws.com:8080/api/datasets/', json=c)
+    r = requests.post('http://ec2-34-194-118-180.compute-1.amazonaws.com/api/datasets/', json=c)
     print(r.status_code)
 
 f.close()
