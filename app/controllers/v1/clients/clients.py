@@ -25,7 +25,7 @@ client_create_model = namespace.model('ClientCreate', {
 @namespace.doc(security='api_admin_key')
 class ClientsController(Resource):
 
-    method_decorators = [requires_admin_auth, authorize]
+    method_decorators = [requires_admin_auth]
 
     @namespace.doc("Get a Client")
     @namespace.marshal_with(client_model)
@@ -55,7 +55,7 @@ class ClientsController(Resource):
 @namespace.doc(security='api_admin_key')
 class ClientsListController(Resource):
 
-    method_decorators = [requires_admin_auth, authorize]
+    method_decorators = [requires_admin_auth]
     
     @namespace.marshal_list_with(client_model)
     def get(self):
@@ -75,7 +75,7 @@ class ClientsListController(Resource):
 @namespace.doc(security='api_admin_key')
 class ClientsEnableController(Resource):
 
-    method_decorators = [requires_admin_auth, authorize]
+    method_decorators = [requires_admin_auth]
 
     @namespace.doc('Enable a Client')
     def put(self, key):
