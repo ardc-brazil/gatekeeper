@@ -28,3 +28,6 @@ class Providers(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(256), nullable=False)
     reference = db.Column(db.String(256), nullable=True)
+
+    __table_args__ = (Index('idx_providers_reference', name, unique=False),
+                      Index('idx_providers_name', name, unique=False))
