@@ -11,7 +11,7 @@ watcher.set_update_callback(enforcer.load_policy)
 enforcer.set_watcher(watcher)
 
 def __get_user_from_request(request):
-    return request.headers.get('X-Customer-Id')
+    return request.headers.get('X-User-Id')
 
 def authorize(f):
     @wraps(f)
