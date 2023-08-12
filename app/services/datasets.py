@@ -64,7 +64,10 @@ class DatasetService:
             if dataset.is_enabled:
                 is_enabled = False
                 
-            dataset = Datasets(id=dataset_id, is_enabled=is_enabled, name=dataset.name, data=dataset.data)
+            dataset.id = dataset_id
+            dataset.is_enabled = is_enabled
+            dataset.name = dataset.name
+            dataset.data = dataset.data
 
             repository.upsert(dataset)
         except Exception as e:
