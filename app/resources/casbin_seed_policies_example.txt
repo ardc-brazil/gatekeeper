@@ -1,0 +1,27 @@
+p, admin, /*, .*, allow
+
+p, datasets_read, /api/v1/datasets/:id, GET, allow
+p, datasets_search, /api/v1/datasets, GET, allow
+p, datasets_filters, /api/v1/datasets/filters, GET, allow
+p, datasets_write, /api/v1/datasets/:id, (POST|PUT), allow
+p, datasets_admin, /api/v1/datasets/:id/(disable|enable), (PUT|DELETE), allow
+
+# role inheritance, it means data *_write will have all *_read policies
+g, datasets_search, datasets_read
+g, datasets_search, datasets_filters
+g, datasets_write, datasets_search
+g, datasets_admin, datasets_write
+
+p, users_search, /api/v1/users, GET, allow
+p, users_read, /api/v1/users/:id, GET, allow
+p, users_write, /api/v1/users/:id, (POST|PUT|DELETE), allow
+
+g, users_search, users_read
+g, users_write, users_search
+
+# for this user in specific, this route is denied
+p, 9e88b14b-8874-481e-beb5-4f398af58cbc, /api/v1/users/123, .*, deny
+
+# user with datasets_admin role, it menas that it have access to everything in datasets (GET, POST, PUT, DELETE)
+g, 9e88b14b-8874-481e-beb5-4f398af58cbc, datasets_write
+g, 9e88b14b-8874-481e-beb5-4f398af58cbc, users_write
