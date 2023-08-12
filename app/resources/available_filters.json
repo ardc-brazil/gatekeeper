@@ -39,7 +39,7 @@
             {
                 "id": "category_cloud_properties",
                 "value": "CLOUD_PROPERTIES",
-                "text": "Cloud Properties"
+                "label": "Cloud Properties"
             },
             {
                 "id": "category_radiometric",

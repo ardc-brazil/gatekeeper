@@ -9,7 +9,8 @@ namespace = Namespace('datasets', 'Dataset operations')
 dataset_filter_options_model = namespace.model('DatasetFilterOptions', {
     'id': fields.String(required=True, description='Options ID'),
     'label': fields.String(required=True, description='Options label'),
-    'value': fields.String(required=True, description='Options value')
+    'value': fields.String(required=True, description='Options value'),
+    'type': fields.String(required=False, description='Options type')
 })
 
 dataset_filter_model = namespace.model('DatasetFilter', {
