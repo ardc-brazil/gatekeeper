@@ -1,5 +1,6 @@
-from app.controllers.interceptors.authentication import requires_auth
+from app.controllers.interceptors.authentication import requires_admin_auth, requires_auth
 from app.controllers.interceptors.authorization import authorize
+from app.controllers.utils.method_decorator import decorate_per_method
 from app.services.users import UsersService
 from flask_restx import Namespace, Resource, fields
 from werkzeug.exceptions import NotFound
@@ -8,17 +9,31 @@ from flask import request
 service = UsersService()
 namespace = Namespace('users', 'Users operations')
 
+provider_model = namespace.model('Provider', {
+    'name': fields.String(required=True, description='Provider name'),
+    'reference': fields.String(required=True, description='Provider reference')
+})
+
 user_model = namespace.model('User', {
     'id': fields.String(readonly=True, required=True, description='User id'),
     'name': fields.String(required=True, description='User name'),
     'email': fields.String(required=False, description='User email'),
     'roles': fields.List(fields.String, required=False, description='User roles'),
-    'providers': fields.List(fields.String, required=False, description='User providers'),
-    'is_enabled': fields.Boolean(required=True, description='Is user enabled?')
+    'providers': fields.List(fields.Nested(provider_model), required=False, description='User providers'),
+    'is_enabled': fields.Boolean(required=True, description='Is user enabled?'),
+    'created_at': fields.DateTime(required=True, description='User creation date'),
+    'updated_at': fields.DateTime(required=True, description='User last update date')
 })
 
-user_create_model = namespace.model('UserCreate', {
+user_create_response_model = namespace.model('UserCreateResponse', {
     'id': fields.String(readonly=True, required=True, description='User id')
+})
+
+user_create_request_model = namespace.model('UserCreateRequest', {
+    'name': fields.String(required=True, description='User name'),
+    'email': fields.String(required=False, description='User email'),
+    'providers': fields.List(fields.Nested(provider_model), required=False, description='User providers'),
+    'roles': fields.List(fields.String, required=False, description='User roles')
 })
 
 user_role_add_model = namespace.model('UserRoleAdd', {
@@ -40,9 +55,10 @@ class UsersController(Resource):
 
     @namespace.doc("Get a User")
     @namespace.marshal_with(user_model)
+    @namespace.param('is_enabled', 'Flag to filter enabled users. Default is true')
     def get(self, id):
         '''Fetch a specific user'''
-        user = service.fetch_by_id(id)
+        user = service.fetch_by_id(id, request.args.get('is_enabled'))
         if (user is not None):
             return user, 200
         else:
@@ -66,14 +82,22 @@ class UsersController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersListController(Resource):
     
-        method_decorators = [requires_auth, authorize]
+        method_decorators = [requires_auth, decorate_per_method(['get'], authorize)]
         
+        @namespace.doc('Search users')
+        @namespace.param('email', 'User email')
+        @namespace.param('is_enabled', 'Flag to filter enabled users. Default is true')
         @namespace.marshal_list_with(user_model)
         def get(self):
             '''Fetch all users'''
-            return service.fetch_all(), 200
+            query_params = {
+                'email' : request.args.get('email'),
+                'is_enabled' : request.args.get('is_enabled')
+            }
+            return service.search(query_params), 200
     
-        @namespace.marshal_with(user_create_model)
+        @namespace.marshal_with(user_create_response_model)
+        @namespace.expect(user_create_request_model, validate=True)
         def post(self):
             '''Create a user'''
             payload = request.get_json()
@@ -83,9 +107,10 @@ class UsersListController(Resource):
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
 @namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret'])
 class UsersEnableController(Resource):
     
-    method_decorators = [requires_auth]
+    method_decorators = [requires_auth, authorize]
     
     @namespace.doc('Enable a User')
     def put(self, id):
@@ -97,9 +122,10 @@ class UsersEnableController(Resource):
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
 @namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret'])
 class UsersRolesController(Resource):
     
-    method_decorators = [requires_auth, authorize]
+    method_decorators = [requires_admin_auth]
     
     @namespace.doc('Add roles to a User')
     def put(self, id):
@@ -119,6 +145,7 @@ class UsersRolesController(Resource):
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
 @namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret'])
 class UsersProvidersController(Resource):
         
         method_decorators = [requires_auth, authorize]
@@ -136,3 +163,23 @@ class UsersProvidersController(Resource):
             payload = request.get_json()
             service.remove_provider(id, payload['provider'])
             return {}, 200
+        
+@namespace.route('/providers/<string:provider_name>/<string:reference>')
+@namespace.param('provider_name', 'The provider name')
+@namespace.param('reference', 'The provider reference')
+@namespace.response(404, 'User not found')
+@namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret'])
+class UsersGetByProviderController(Resource):
+            
+    method_decorators = [requires_auth]
+    
+    @namespace.doc('Get a User by provider')
+    @namespace.marshal_with(user_model)
+    def get(self, provider_name, reference):
+        '''Fetch a specific user by provider'''
+        user = service.fetch_by_provider(provider_name, reference)
+        if (user is not None):
+            return user, 200
+        else:
+            raise NotFound()
