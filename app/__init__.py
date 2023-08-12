@@ -18,6 +18,9 @@ def create_app():
 
     db.init_app(app)
 
+    # remove trailing slash in the api
+    app.url_map.strict_slashes = False
+
     from app.controllers.v1 import api 
     app.register_blueprint(api)
 
