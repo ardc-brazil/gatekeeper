@@ -17,6 +17,11 @@ dataset_model = namespace.model('Dataset', {
     'created_at': fields.String(required=True, description='Dataset created at datetime')
 })
 
+datasets_list_model = namespace.model('Datasets', {
+    'content': fields.Nested(dataset_model, description='List of datasets'),
+    'size': fields.Integer(required=False, description='Dataset information')
+})
+
 dataset_create_model = namespace.model('DatasetCreate', {
     'id': fields.String(readonly=True, required=True, description='Dataset ID')
 })
@@ -78,7 +83,7 @@ class DatasetsListController(Resource):
     @namespace.param('date_from', 'Dataset date from, YYYY-MM-DD')
     @namespace.param('date_to', 'Dataset date to, YYYY-MM-DD')
     @namespace.param('full_text', 'Dataset full text')
-    @namespace.marshal_list_with(dataset_model)
+    @namespace.marshal_with(datasets_list_model)
     def get(self):
         '''Fetch all datasets'''
         query_params = {
@@ -90,7 +95,13 @@ class DatasetsListController(Resource):
             'full_text': request.args.get('full_text')
         }
 
-        return service.search_datasets(query_params), 200
+        datasets = service.search_datasets(query_params)
+        payload =  {
+            'content': datasets,
+            'size': len(datasets)
+        }
+
+        return payload, 200
         
     @namespace.marshal_with(dataset_create_model)
     def post(self):
