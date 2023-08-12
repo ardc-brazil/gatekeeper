@@ -1,3 +1,4 @@
+import logging
 from flask import make_response, request, jsonify
 from casbin import Enforcer
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
@@ -5,7 +6,7 @@ from functools import wraps
 from postgresql_watcher import PostgresqlWatcher
 
 casbin_adapter = CasbinSQLAlchemyAdapter('postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@localhost:5432/gatekeeper_db')
-enforcer = Enforcer('app/resources/casbin_policy.conf', casbin_adapter)
+enforcer = Enforcer('app/resources/casbin_model.conf', casbin_adapter)
 watcher = PostgresqlWatcher(host='localhost',user='gk_admin',password='WYnAG9!qzhfx7hDatJcs',port=5432,dbname='gatekeeper_db')
 watcher.set_update_callback(enforcer.load_policy)
 enforcer.set_watcher(watcher)
@@ -25,6 +26,7 @@ def authorize(f):
         action = request.method
         
         if not enforcer.enforce(user_id, resource, action):
+            logging.info('User %s is not authorized to %s %s', user_id, action, resource)
             return make_response(jsonify({'message': 'Forbidden'}), 403)
         
         return f(*args, **kwargs)
