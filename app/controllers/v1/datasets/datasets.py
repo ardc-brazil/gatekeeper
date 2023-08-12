@@ -48,7 +48,20 @@ class DatasetsController(Resource):
     
     def delete(self, dataset_id):
         '''Disable a specific dataset'''
-        service.disable_dataset(dataset_id)
+        service.toggle_dataset(dataset_id)
+        return {}, 200
+    
+@namespace.route('/<string:dataset_id>/enable')
+@namespace.param('dataset_id', 'The dataset identifier')
+@namespace.response(404, 'Dataset not found')
+@namespace.response(500, 'Internal Server error')
+class DatasetsEnableController(Resource):
+
+    method_decorators = [requires_auth, authorize]
+
+    def put(self, dataset_id):
+        '''Enable a specific dataset'''
+        service.toggle_dataset(dataset_id)
         return {}, 200
 
 @namespace.route('/')
