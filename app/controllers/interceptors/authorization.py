@@ -4,8 +4,9 @@ from casbin import Enforcer
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from functools import wraps
 from postgresql_watcher import PostgresqlWatcher
+import os
 
-casbin_adapter = CasbinSQLAlchemyAdapter('postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@localhost:5432/gatekeeper_db')
+casbin_adapter = CasbinSQLAlchemyAdapter(os.environ['CASBIN_DATABASE_URL'])
 enforcer = Enforcer('app/resources/casbin_model.conf', casbin_adapter)
 watcher = PostgresqlWatcher(host='localhost',user='gk_admin',password='WYnAG9!qzhfx7hDatJcs',port=5432,dbname='gatekeeper_db')
 watcher.set_update_callback(enforcer.load_policy)
