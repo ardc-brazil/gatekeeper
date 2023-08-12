@@ -49,14 +49,14 @@ class DatasetsController(Resource):
         service.disable_dataset(dataset_id)
         return {}, 200
 
-@namespace.route('/', strict_slashes=False)
+@namespace.route('/')
 @namespace.response(500, 'Internal Server error')
 @namespace.doc(security=['api_key', 'api_secret'])
 class DatasetsListController(Resource):
 
     method_decorators = [requires_auth, authorize]
     
-    @namespace.doc("Search datasets")
+    @namespace.doc('Search datasets')
     @namespace.param('categories', 'Dataset categories, comma separated')
     @namespace.param('level', 'Dataset level')
     @namespace.param('data_types', 'Dataset data types, comma separated')
