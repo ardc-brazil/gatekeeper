@@ -17,12 +17,22 @@ dataset_model = namespace.model('Dataset', {
     'created_at': fields.String(required=True, description='Dataset created at datetime')
 })
 
+dataset_create_request_model = namespace.model('DatasetCreateRequest', {
+    'name': fields.String(required=True, description='Dataset name'),
+    'data': fields.Raw(required=False, description='Dataset information in JSON format'),
+})
+
+dataset_update_request_model = namespace.model('DatasetUpdateRequest', {
+    'name': fields.String(required=True, description='Dataset name'),
+    'data': fields.Raw(required=False, description='Dataset information in JSON format'),
+})
+
 datasets_list_model = namespace.model('Datasets', {
     'content': fields.Nested(dataset_model, description='List of datasets'),
     'size': fields.Integer(required=False, description='Dataset information')
 })
 
-dataset_create_model = namespace.model('DatasetCreate', {
+dataset_create_response_model = namespace.model('DatasetCreate', {
     'id': fields.String(readonly=True, required=True, description='Dataset ID')
 })
 
@@ -45,6 +55,7 @@ class DatasetsController(Resource):
         else:
             raise NotFound()
 
+    @namespace.expect(dataset_create_request_model, validate=True)
     def put(self, dataset_id):
         '''Update a specific dataset'''
         payload = request.get_json()
@@ -53,7 +64,7 @@ class DatasetsController(Resource):
     
     def delete(self, dataset_id):
         '''Disable a specific dataset'''
-        service.toggle_dataset(dataset_id)
+        service.disable_dataset(dataset_id)
         return {}, 200
     
 @namespace.route('/<string:dataset_id>/enable')
@@ -67,7 +78,7 @@ class DatasetsEnableController(Resource):
 
     def put(self, dataset_id):
         '''Enable a specific dataset'''
-        service.toggle_dataset(dataset_id)
+        service.enable_dataset(dataset_id)
         return {}, 200
 
 @namespace.route('/')
@@ -104,7 +115,8 @@ class DatasetsListController(Resource):
 
         return payload, 200
         
-    @namespace.marshal_with(dataset_create_model)
+    @namespace.marshal_with(dataset_create_response_model)
+    @namespace.expect(dataset_create_request_model, validate=True)
     def post(self):
         '''Create a new dataset'''
         payload = request.get_json()
