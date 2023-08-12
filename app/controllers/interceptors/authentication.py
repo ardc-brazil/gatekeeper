@@ -7,7 +7,7 @@ from app.services.secrets import check_password
 
 service = ClientsService()
 
-def requires_auth(f):
+def authenticate(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         api_key = request.headers.get('X-Api-Key')
@@ -28,7 +28,7 @@ def requires_auth(f):
     
     return decorated
 
-def requires_admin_auth(f):
+def authenticate_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         try: 

@@ -1,4 +1,4 @@
-from app.controllers.interceptors.authentication import requires_admin_auth, requires_auth
+from app.controllers.interceptors.authentication import authenticate_admin, authenticate
 from app.controllers.interceptors.authorization import authorize
 from app.controllers.utils.method_decorator import decorate_per_method
 from app.services.users import UsersService
@@ -51,7 +51,7 @@ user_provider_add_model = namespace.model('UserProviderAdd', {
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersController(Resource):
         
-    method_decorators = [requires_auth, authorize]
+    method_decorators = [authenticate, authorize]
 
     @namespace.doc("Get a User")
     @namespace.marshal_with(user_model)
@@ -82,7 +82,7 @@ class UsersController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersListController(Resource):
     
-        method_decorators = [requires_auth, decorate_per_method(['get'], authorize)]
+        method_decorators = [authenticate, decorate_per_method(['get'], authorize)]
         
         @namespace.doc('Search users')
         @namespace.param('email', 'User email')
@@ -110,7 +110,7 @@ class UsersListController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersEnableController(Resource):
     
-    method_decorators = [requires_auth, authorize]
+    method_decorators = [authenticate, authorize]
     
     @namespace.doc('Enable a User')
     def put(self, id):
@@ -125,7 +125,7 @@ class UsersEnableController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersRolesController(Resource):
     
-    method_decorators = [requires_admin_auth]
+    method_decorators = [authenticate_admin]
     
     @namespace.doc('Add roles to a User')
     def put(self, id):
@@ -148,7 +148,7 @@ class UsersRolesController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersProvidersController(Resource):
         
-        method_decorators = [requires_auth, authorize]
+        method_decorators = [authenticate, authorize]
         
         @namespace.doc('Add provider to a User')
         def put(self, id):
@@ -172,7 +172,7 @@ class UsersProvidersController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class UsersGetByProviderController(Resource):
             
-    method_decorators = [requires_auth]
+    method_decorators = [authenticate]
     
     @namespace.doc('Get a User by provider')
     @namespace.marshal_with(user_model)

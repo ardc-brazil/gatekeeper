@@ -1,5 +1,5 @@
 from flask import request
-from app.controllers.interceptors.authentication import requires_auth
+from app.controllers.interceptors.authentication import authenticate
 from app.controllers.interceptors.authorization import authorize
 from app.services.datasets import DatasetService
 from flask_restx import Namespace, Resource, fields
@@ -28,7 +28,7 @@ dataset_create_model = namespace.model('DatasetCreate', {
 @namespace.doc(security=['api_key', 'api_secret'])
 class DatasetsController(Resource):
 
-    method_decorators = [requires_auth, authorize]
+    method_decorators = [authenticate, authorize]
 
     @namespace.doc("Get a Dataset")
     @namespace.marshal_with(dataset_model)
@@ -57,7 +57,7 @@ class DatasetsController(Resource):
 @namespace.response(500, 'Internal Server error')
 class DatasetsEnableController(Resource):
 
-    method_decorators = [requires_auth, authorize]
+    method_decorators = [authenticate, authorize]
 
     def put(self, dataset_id):
         '''Enable a specific dataset'''
@@ -69,7 +69,7 @@ class DatasetsEnableController(Resource):
 @namespace.doc(security=['api_key', 'api_secret'])
 class DatasetsListController(Resource):
 
-    method_decorators = [requires_auth, authorize]
+    method_decorators = [authenticate, authorize]
     
     @namespace.doc('Search datasets')
     @namespace.param('categories', 'Dataset categories, comma separated')
