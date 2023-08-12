@@ -51,21 +51,33 @@ class DatasetService:
         except Exception as e:
             logging.error(e)
             raise e
-    
-    def toggle_dataset(self, dataset_id):
+        
+    def disable_dataset(self, dataset_id):
         try: 
             dataset = repository.fetch(dataset_id)
 
             if dataset is None:
                 raise NotFound(f'Dataset {dataset_id} not found')
             
-            is_enabled = True
-
-            if dataset.is_enabled:
-                is_enabled = False
-                
             dataset.id = dataset_id
-            dataset.is_enabled = is_enabled
+            dataset.is_enabled = False
+            dataset.name = dataset.name
+            dataset.data = dataset.data
+
+            repository.upsert(dataset)
+        except Exception as e:
+            logging.error(e)
+            raise e
+    
+    def enable_dataset(self, dataset_id):
+        try: 
+            dataset = repository.fetch(dataset_id, False)
+
+            if dataset is None:
+                raise NotFound(f'Dataset {dataset_id} not found')
+            
+            dataset.id = dataset_id
+            dataset.is_enabled = True
             dataset.name = dataset.name
             dataset.data = dataset.data
 
