@@ -48,7 +48,7 @@ user_provider_add_model = namespace.model('UserProviderAdd', {
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security=['api_key', 'api_secret'])
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class UsersController(Resource):
         
     method_decorators = [authenticate, authorize]
@@ -79,7 +79,7 @@ class UsersController(Resource):
 
 @namespace.route('/')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security=['api_key', 'api_secret'])
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class UsersListController(Resource):
     
         method_decorators = [authenticate, decorate_per_method(['get'], authorize)]
@@ -107,7 +107,7 @@ class UsersListController(Resource):
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security=['api_key', 'api_secret'])
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class UsersEnableController(Resource):
     
     method_decorators = [authenticate, authorize]
@@ -122,7 +122,7 @@ class UsersEnableController(Resource):
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security=['api_key', 'api_secret'])
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class UsersRolesController(Resource):
     
     method_decorators = [authenticate_admin]
@@ -145,7 +145,7 @@ class UsersRolesController(Resource):
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security=['api_key', 'api_secret'])
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class UsersProvidersController(Resource):
         
         method_decorators = [authenticate, authorize]

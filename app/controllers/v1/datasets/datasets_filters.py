@@ -21,7 +21,7 @@ dataset_filter_model = namespace.model('DatasetFilter', {
 
 @namespace.route('/filters')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security=['api_key', 'api_secret'])
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class DatasetsFilterController(Resource):
 
     method_decorators = [authenticate, authorize]

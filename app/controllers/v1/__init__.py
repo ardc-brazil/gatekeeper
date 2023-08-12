@@ -23,6 +23,11 @@ authorizations = {
         'type': 'apiKey',
         'in': 'header',
         'name': 'X-Admin-Secret'
+    },
+    'user_id': {
+        'type': 'apiKey',
+        'in': 'header',
+        'name': 'X-User-Id'
     }
 }
 
