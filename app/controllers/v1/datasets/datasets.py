@@ -12,7 +12,9 @@ dataset_model = namespace.model('Dataset', {
     'id': fields.String(readonly=True, required=True, description='Dataset ID'),
     'name': fields.Raw(required=True, description='Dataset name'),
     'data': fields.String(required=False, description='Dataset information'),
-    'is_enabled': fields.Boolean(required=True, description='Dataset status')
+    'is_enabled': fields.Boolean(required=True, description='Dataset status'),
+    'updated_at': fields.String(required=True, description='Dataset updated at datetime'),
+    'created_at': fields.String(required=True, description='Dataset created at datetime')
 })
 
 dataset_create_model = namespace.model('DatasetCreate', {

@@ -8,7 +8,14 @@ repository = DatasetRepository()
 
 class DatasetService:
     def __adapt_dataset(self, dataset):
-        return {"id": dataset.id, "name": dataset.name, "data": json.dumps(dataset.data), "is_enabled": dataset.is_enabled}
+        return {
+            'id': dataset.id, 
+            'name': dataset.name, 
+            'data': json.dumps(dataset.data), 
+            'is_enabled': dataset.is_enabled,
+            'created_at': dataset.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': dataset.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
     
     def fetch_dataset(self, dataset_id):
         try: 
