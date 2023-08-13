@@ -32,6 +32,7 @@ services:
       # Move to .env file
       - APP_CONFIG_FILE=/app/config_prod.py
       - CASBIN_DATABASE_URL=postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@gatekeeper-gatekeeper-db-1:5432/gatekeeper_db
+      - CASBIN_WATCHER_HOST=gatekeeper-gatekeeper-db-1
     ports: 
       - '8080:8080'
     healthcheck:
