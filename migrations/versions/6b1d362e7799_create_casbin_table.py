@@ -6,7 +6,8 @@ Create Date: 2023-08-08 01:07:33.185026
 
 """
 from alembic import op
-import sqlalchemy as sa, inspect
+import sqlalchemy as sa
+from sqlalchemy.engine.reflection import Inspector
 
 # revision identifiers, used by Alembic.
 revision = '6b1d362e7799'
@@ -15,12 +16,9 @@ branch_labels = None
 depends_on = None
 
 def _has_table(table_name):
-    config = op.get_context().config
-    engine = engine_from_config(
-        config.get_section(config.config_ini_section), prefix="sqlalchemy."
-    )
-    inspector = reflection.Inspector.from_engine(engine)
-    tables = inspector.get_table_names()
+    conn = op.get_bind()
+    inspector = Inspector.from_engine(conn)
+    tables = inspector.get_table_names()    
     return table_name in tables
 
 def upgrade():
