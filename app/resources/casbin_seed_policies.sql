@@ -24,17 +24,17 @@ SET row_security = off;
 -- Data for Name: casbin_rule; Type: TABLE DATA; Schema: public; Owner: gk_admin
 --
 
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'admin', '/*', '.*', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_read', '/api/v1/datasets/:id', 'GET', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets/:id', '(POST|PUT)', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_admin', '/api/v1/datasets/:id/(disable|enable)', '(PUT|DELETE)', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_filters', '/api/v1/datasets/filters', 'GET', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_search', '/api/v1/datasets', 'GET', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_search', 'datasets_read', NULL, NULL, NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_search', 'datasets_filters', NULL, NULL, NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_write', 'datasets_search', NULL, NULL, NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_admin', 'datasets_write', NULL, NULL, NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'users_write', 'users_search', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'admin', '/*', '.*', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_read', '/api/v1/datasets/:id', 'GET', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets/:id', '(POST|PUT)', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_admin', '/api/v1/datasets/:id/(disable|enable)', '(PUT|DELETE)', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_filters', '/api/v1/datasets/filters', 'GET', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_search', '/api/v1/datasets', 'GET', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_search', 'datasets_read', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_search', 'datasets_filters', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_write', 'datasets_search', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'datasets_admin', 'datasets_write', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'users_write', 'users_search', NULL, NULL, NULL, NULL);
 
 -- Completed on 2023-08-12 22:33:18 UTC
 
