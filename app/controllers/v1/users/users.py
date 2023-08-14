@@ -41,7 +41,8 @@ user_role_add_model = namespace.model('UserRoleAdd', {
 })
 
 user_provider_add_model = namespace.model('UserProviderAdd', {
-    'provider': fields.String(required=True, description='User provider')
+    'provider': fields.String(required=True, description='User provider'),
+    'reference': fields.String(required=True, description='User provider reference')
 })
 
 @namespace.route('/<string:id>')
@@ -128,6 +129,7 @@ class UsersRolesController(Resource):
     method_decorators = [authorize]
     
     @namespace.doc('Add roles to a User')
+    @namespace.expect(user_role_add_model, validate=True)
     def put(self, id):
         '''Add roles to a specific user'''
         payload = request.get_json()
@@ -135,6 +137,7 @@ class UsersRolesController(Resource):
         return {}, 200
     
     @namespace.doc('Remove roles from a User')
+    @namespace.expect(user_role_add_model, validate=True)
     def delete(self, id):
         '''Remove roles from a specific user'''
         payload = request.get_json()
@@ -151,17 +154,19 @@ class UsersProvidersController(Resource):
         method_decorators = [authenticate, authorize]
         
         @namespace.doc('Add provider to a User')
+        @namespace.expect(user_provider_add_model, validate=True)
         def put(self, id):
             '''Add provider to a specific user'''
             payload = request.get_json()
-            service.add_provider(id, payload['provider'])
+            service.add_provider(id, payload['provider'], payload['reference'])
             return {}, 200
         
         @namespace.doc('Remove provider from a User')
+        @namespace.expect(user_provider_add_model, validate=True)
         def delete(self, id):
             '''Remove provider from a specific user'''
             payload = request.get_json()
-            service.remove_provider(id, payload['provider'])
+            service.remove_provider(id, payload['provider'], payload['reference'])
             return {}, 200
         
 @namespace.route('/providers/<string:provider_name>/<string:reference>')

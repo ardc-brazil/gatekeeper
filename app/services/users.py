@@ -86,12 +86,26 @@ class UsersService:
             logging.error(e)
             raise e
     
-    def add_provider(self, id, provider):
+    def add_provider(self, id, provider, reference):
         try:
             user = repository.fetch_by_id(id)
             if (user is None):
                 raise NotFound(f'User {id} not found')
-            user.providers.append(provider)
+            user.providers.append(Providers(name=provider, reference=reference))
+            repository.upsert(user)
+        except Exception as e:
+            logging.error(e)
+            raise e
+    
+    def remove_provider(self, id, provider_name, reference):
+        try:
+            user = repository.fetch_by_id(id)
+            if (user is None):
+                raise NotFound(f'User {id} not found')
+            for provider in user.providers:
+                if (provider.name == provider_name and provider.reference == reference):
+                    user.providers.remove(provider)
+                    break
             repository.upsert(user)
         except Exception as e:
             logging.error(e)
