@@ -27,19 +27,3 @@ def authenticate(f):
         return f(*args, **kwargs)
     
     return decorated
-
-def authenticate_admin(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        try: 
-            secret = request.headers.get('X-Admin-Secret')
-            if secret is None:
-                return make_response(jsonify({'message': 'Unauthorized - requires admin auth'}), 401)
-            if not check_password(secret, "$2b$12$W8b4N6emgwvuXuhsR.O0lO09E3w1YWXMn86aL4Eq5oP8TakRHEh.W"):
-                return make_response( jsonify({'message': 'Unauthorized - requires admin auth'}), 401)
-        except Exception as e:
-            logging.error(e)
-            return make_response(jsonify({'message': 'Unauthorized - requires admin auth'}), 401)
-        
-        return f(*args, **kwargs)
-    return decorated

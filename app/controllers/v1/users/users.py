@@ -1,4 +1,4 @@
-from app.controllers.interceptors.authentication import authenticate_admin, authenticate
+from app.controllers.interceptors.authentication import authenticate
 from app.controllers.interceptors.authorization import authorize
 from app.controllers.utils.method_decorator import decorate_per_method
 from app.services.users import UsersService
@@ -125,7 +125,7 @@ class UsersEnableController(Resource):
 @namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class UsersRolesController(Resource):
     
-    method_decorators = [authenticate_admin]
+    method_decorators = [authorize]
     
     @namespace.doc('Add roles to a User')
     def put(self, id):
