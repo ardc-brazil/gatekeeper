@@ -1,7 +1,6 @@
 import sqlalchemy
 from app import db
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy import Index
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
 class Clients(db.Model):

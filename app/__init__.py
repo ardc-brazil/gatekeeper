@@ -3,7 +3,6 @@ from flask_migrate import Migrate
 import flask_restx
 from flask_sqlalchemy import SQLAlchemy
 
-from app.controllers.interceptors.authorization import authorize
 
 db = SQLAlchemy()
 

@@ -40,6 +40,6 @@ class UsersRepository:
         if query_params['is_enabled']:
             query = query.filter(Users.is_enabled == query_params['is_enabled'])
         else:
-            query = query.filter(Users.is_enabled == True)
+            query = query.filter(Users.is_enabled is True)
         
         return query.all()
