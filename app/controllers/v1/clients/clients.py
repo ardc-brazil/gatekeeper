@@ -21,7 +21,7 @@ client_create_model = namespace.model('ClientCreate', {
 @namespace.param('key', 'The client key')
 @namespace.response(404, 'Dataset not found')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security='api_admin_key')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class ClientsController(Resource):
 
     method_decorators = [authorize]
@@ -51,7 +51,7 @@ class ClientsController(Resource):
         
 @namespace.route('/')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security='api_admin_key')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class ClientsListController(Resource):
 
     method_decorators = [authorize]
@@ -71,7 +71,7 @@ class ClientsListController(Resource):
 @namespace.param('key', 'The client key')
 @namespace.response(404, 'Dataset not found')
 @namespace.response(500, 'Internal Server error')
-@namespace.doc(security='api_admin_key')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class ClientsEnableController(Resource):
 
     method_decorators = [authorize]

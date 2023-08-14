@@ -19,11 +19,6 @@ authorizations = {
         'in': 'header',
         'name': 'X-Api-Secret'
     },
-    'api_admin_key': {
-        'type': 'apiKey',
-        'in': 'header',
-        'name': 'X-Admin-Secret'
-    },
     'user_id': {
         'type': 'apiKey',
         'in': 'header',
