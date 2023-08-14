@@ -1,11 +1,17 @@
+from fastapi import APIRouter, Depends
+from app.services.infrastructure import InfrastructureService
+from dependency_injector.wiring import inject, Provide
+from app.config.container import Container
 
-from flask_restx import Namespace, Resource
+router = APIRouter(
+    prefix="/health-check",
+)
 
-namespace = Namespace('health-check', 'Infrastructure operations')
+# @router.get("/")
+# @inject
+# async def root(infrastructure_service: InfrastructureService = Depends(Provide[Container.infrastructure_service])):
+#     return infrastructure_service.health_check()
 
-@namespace.route('/')
-class HealhCheckController(Resource):
-
-	@namespace.doc("Get health check status")
-	def get(self):
-		return "success"
+@router.get('')
+async def root():
+    return "success"
