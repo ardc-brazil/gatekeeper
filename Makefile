@@ -61,4 +61,4 @@ python-run:
 
 # Database commands
 db-migration:
-	flask db upgrade
+	CASBIN_WATCHER_HOST='gatekeeper-gatekeeper-db-1' CASBIN_DATABASE_URL='postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@127.0.0.1:5432/gatekeeper_db' flask db upgrade
