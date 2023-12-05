@@ -1,9 +1,13 @@
 from flask import Flask
 from flask_migrate import Migrate
-import flask_restx
 from flask_sqlalchemy import SQLAlchemy
-
-from app.controllers.interceptors.authorization import authorize
+from flask import Flask
+from casbin.persist.adapters import FileAdapter
+from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
+from casbin import Enforcer
+from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
+from app.controllers.interceptors.authorizar_container import AuthorizerContainer
+import os
 
 db = SQLAlchemy()
 
@@ -12,6 +16,13 @@ def create_app():
     app.config.from_object('config')
     app.config.from_envvar('APP_CONFIG_FILE', silent=True)
 
+    # Casbin config
+    casbin_adapter = CasbinSQLAlchemyAdapter(os.environ['CASBIN_DATABASE_URL'])
+    enforcer = Enforcer('app/resources/casbin_model.conf', casbin_adapter)
+    enforcer.enable_auto_build_role_links(True)
+    AuthorizerContainer.instance(app, enforcer, casbin_adapter)
+
+    # Models config
     from app.models.datasets import Datasets
     from app.models.users import Users
     migrate = Migrate(app, db)

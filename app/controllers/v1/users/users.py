@@ -45,6 +45,13 @@ user_provider_add_model = namespace.model('UserProviderAdd', {
     'reference': fields.String(required=True, description='User provider reference')
 })
 
+user_enforce_model = namespace.model('UserEnforceModel', {
+    'user_id': fields.String(required=True, description='User id'),
+    'resource': fields.String(required=True, description='resource'),
+    'action': fields.String(required=True, description='action')
+})
+
+
 @namespace.route('/<string:id>')
 @namespace.param('id', 'The user id')
 @namespace.response(404, 'User not found')
@@ -188,3 +195,35 @@ class UsersGetByProviderController(Resource):
             return user, 200
         else:
             raise NotFound()
+
+
+@namespace.route('/<string:id>/enforce')
+@namespace.param('id', 'The user id')
+@namespace.response(404, 'User not found')
+@namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
+class UsersEnforceController(Resource):
+            
+    method_decorators = [authenticate]
+    
+    @namespace.doc('Check users permissions')
+    @namespace.expect(user_enforce_model, validate=True)
+    def post(self, id):
+        '''Get user enforce'''
+        payload = request.get_json()
+        enforce = service.enforce(payload['user_id'], payload['resource'], payload['action'])
+        return enforce, 200
+
+
+@namespace.route('/force-policy-reload')
+@namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
+class UsersEnforceController(Resource):
+            
+    method_decorators = [authenticate]
+    
+    @namespace.doc('Force policy reload')
+    def get(self):
+        '''Load policy'''
+        service.load_policy()
+        return {}, 200
