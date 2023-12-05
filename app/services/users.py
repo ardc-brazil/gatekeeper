@@ -2,7 +2,7 @@ import logging
 from app.models.users import Providers, Users
 from app.repositories.users import UsersRepository
 from werkzeug.exceptions import NotFound
-from app.controllers.interceptors.authorization import enforcer
+from app.controllers.interceptors.authorizar_container import AuthorizerContainer
 
 repository = UsersRepository()
 
@@ -11,20 +11,20 @@ class UsersService:
         user = repository.fetch_by_id(id, is_enabled)
         if user is None:
             raise NotFound(f'User with id {id} not found')
-        user.roles = enforcer.get_roles_for_user(str(user.id))
+        user.roles = AuthorizerContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
         return user
     
     def fetch_by_email(self, email, is_enabled=True):
         user = repository.fetch_by_email(email, is_enabled)
         if user is None:
             raise NotFound(f'User with email {email} not found')
-        user.roles = enforcer.get_roles_for_user(str(user.id))
+        user.roles = AuthorizerContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
         return user
     
     def fetch_all(self):
         users = repository.fetch_all()
         for user in users:
-            user.roles = enforcer.get_roles_for_user(str(user.id))
+            user.roles = AuthorizerContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
         
         return users
     
@@ -32,7 +32,7 @@ class UsersService:
         user = repository.fetch_by_provider(provider_name, reference, is_enabled)
         if user is None:
             raise NotFound(f'User with provider {provider_name} and reference {reference} not found')
-        user.roles = enforcer.get_roles_for_user(str(user.id))
+        user.roles = AuthorizerContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
         return user
 
     def create(self, request_body):
@@ -46,7 +46,9 @@ class UsersService:
             user_id = repository.upsert(user).id
 
             for role in request_body['roles']:
-                enforcer.add_role_for_user(str(user.id), role)
+                # Authorizer.instance().getEnforcer().add_role_for_user(str(user.id), role)
+                # Authorizer.instance().getEnforcer().update_policy()
+                AuthorizerContainer.instance().getEnforcer().add_grouping_policy(str(user.id), role)
             return user_id
         except Exception as e:
             logging.error(e)
@@ -70,7 +72,7 @@ class UsersService:
             if user is None:
                 raise NotFound(f'User {id} not found')
             for role in roles:
-                enforcer.add_role_for_user(id, role)
+                AuthorizerContainer.instance().getEnforcer().add_role_for_user(id, role)
         except Exception as e:
             logging.error(e)
             raise e
@@ -81,7 +83,7 @@ class UsersService:
             if (user is None):
                 raise NotFound(f'User {id} not found')
             for role in roles:
-                enforcer.delete_role_for_user(id, role)
+                AuthorizerContainer.instance().getEnforcer().delete_role_for_user(id, role)
         except Exception as e:
             logging.error(e)
             raise e
@@ -137,6 +139,12 @@ class UsersService:
         logging.error(query_params)
         users = repository.search(query_params)
         for user in users:
-            user.roles = enforcer.get_roles_for_user(str(user.id))
+            user.roles = AuthorizerContainer.instance().getEnforcer().get_implicit_roles_for_user(str(user.id))
         
         return users
+    
+    def enforce(self, user_id,resource, action) -> bool:
+        return AuthorizerContainer.instance().getEnforcer().enforce(user_id,resource,action)
+    
+    def load_policy(self) -> bool:
+        return AuthorizerContainer.instance().getEnforcer().load_policy()
