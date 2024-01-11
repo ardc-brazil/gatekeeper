@@ -100,3 +100,8 @@ make docker-deployment
 
 1. `curl -X POST http://localhost:8080/api/clients/ -H 'Content-Type: application/json' -H "X-Admin-Secret: {shared-password}" -d '{"name": "DataAmazon BFF", "secret": "{api-password}"}'`
 2. `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:8080/api/datasets/`
+
+### Issues
+
+1. If you have the psycopg_2 problem, run `brew install postgresql`
+2. If you have the "Failed to build dependency-injector", use Python 3.10.4
