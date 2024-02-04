@@ -4,9 +4,10 @@ from flask_sqlalchemy import SQLAlchemy
 from flask import Flask
 from casbin.persist.adapters import FileAdapter
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
-from casbin import Enforcer
+from casbin import SyncedEnforcer
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
-from app.controllers.interceptors.authorizar_container import AuthorizerContainer
+from app.controllers.interceptors.authorization_container import AuthorizationContainer
+from postgresql_watcher import PostgresqlWatcher
 import os
 
 db = SQLAlchemy()
@@ -18,9 +19,14 @@ def create_app():
 
     # Casbin config
     casbin_adapter = CasbinSQLAlchemyAdapter(os.environ['CASBIN_DATABASE_URL'])
-    enforcer = Enforcer('app/resources/casbin_model.conf', casbin_adapter)
+    enforcer = SyncedEnforcer('app/resources/casbin_model.conf', casbin_adapter)
     enforcer.enable_auto_build_role_links(True)
-    AuthorizerContainer.instance(app, enforcer, casbin_adapter)
+    enforcer.start_auto_load_policy(5) # reload policy every 5 seconds
+    enforcer.set_watcher
+    watcher = PostgresqlWatcher(host=os.environ['DB_HOST'],user=os.environ['DB_USER'],password=os.environ['DB_PASSWORD'],port=os.environ['DB_PORT'],dbname=os.environ['DB_NAME'])
+    watcher.set_update_callback(enforcer.load_policy)
+    enforcer.set_watcher(watcher)
+    AuthorizationContainer.instance(app, enforcer, casbin_adapter)
 
     # Models config
     from app.models.datasets import Datasets
