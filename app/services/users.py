@@ -40,15 +40,16 @@ class UsersService:
             user = Users(name=request_body['name'],
                          email=request_body['email'])
             
-            for provider in request_body['providers']:
-                user.providers.append(Providers(name=provider['name'], reference=provider['reference']))
-            
+            if 'providers' in request_body:
+                for provider in request_body['providers']:
+                    user.providers.append(Providers(name=provider['name'], reference=provider['reference']))
+                
             user_id = repository.upsert(user).id
 
-            for role in request_body['roles']:
-                # Authorizer.instance().getEnforcer().add_role_for_user(str(user.id), role)
-                # Authorizer.instance().getEnforcer().update_policy()
-                AuthorizationContainer.instance().getEnforcer().add_grouping_policy(str(user.id), role)
+            if 'roles' in request_body:
+                for role in request_body['roles']:
+                    AuthorizationContainer.instance().getEnforcer().add_grouping_policy(str(user.id), role)
+            
             return user_id
         except Exception as e:
             logging.error(e)

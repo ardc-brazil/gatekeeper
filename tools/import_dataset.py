@@ -8,7 +8,7 @@ for i in data:
     c = {"name": i["name"]}
     del i["name"]
     c["data"] = i
-    r = requests.post('http://ec2-34-194-118-180.compute-1.amazonaws.com/api/datasets/', json=c)
+    r = requests.post('http://localhost:8080/api/v1/datasets/', json=c, headers={'X-Api-Key':'2836396d-7316-4db2-859b-d9047d4b3469', 'X-Api-Secret': '1234'})
     print(r.status_code)
 
 f.close()
