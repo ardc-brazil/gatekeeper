@@ -17,6 +17,11 @@ client_create_model = namespace.model('ClientCreate', {
     'key': fields.String(readonly=True, required=True, description='Client key')
 })
 
+client_create_request_model = namespace.model('ClientCreateRequest', {
+    'name': fields.String(required=True, description='Client Name'),
+    'secret': fields.String(required=True, description='Client secret')
+})
+
 @namespace.route('/<string:key>')
 @namespace.param('key', 'The client key')
 @namespace.response(404, 'Dataset not found')
@@ -62,6 +67,7 @@ class ClientsListController(Resource):
         return service.fetch_all(), 200
 
     @namespace.marshal_with(client_create_model)
+    @namespace.expect(client_create_request_model, validate=True)
     def post(self):
         '''Create a client'''
         payload = request.get_json()
