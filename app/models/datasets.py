@@ -13,6 +13,7 @@ class Datasets(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
+    tenancy = db.Column(db.String(256), nullable=True)
 
     __table_args__ = (Index('idx_is_enabled', 'is_enabled'),
                       Index('idx_name', 'name'))
