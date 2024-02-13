@@ -65,5 +65,8 @@ python-run:
 	FLASK_ENV=development FLASK_DEBUG=1 flask run -h localhost -p 8080
 
 # Database commands
-db-migration:
-	CASBIN_WATCHER_HOST='gatekeeper-gatekeeper-db-1' CASBIN_DATABASE_URL='postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@127.0.0.1:5432/gatekeeper_db' flask db upgrade
+db-upgrade:
+	flask db upgrade
+
+db-create-migration: # Usage: make MESSAGE="Add tenancy column to datasets" db-create-migration
+	flask db migrate -m "$(MESSAGE)"
