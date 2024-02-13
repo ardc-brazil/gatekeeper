@@ -1,3 +1,8 @@
+#!make
+
+include dev.env
+export $(shell sed 's/=.*//' dev.env)
+
 # Reset
 Color_Off=\033[0m       # Text Reset
 

@@ -96,10 +96,45 @@ make docker-deployment
 * For the application: `curl -X GET http://ec2-34-194-118-180.compute-1.amazonaws.com/api/`
 * For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/pgadmin` in the browser.
 
-### Create a new API Key and Secret in local development
+# First Setup for Local Development
 
-1. `curl -X POST http://localhost:8080/api/clients/ -H 'Content-Type: application/json' -H "X-Admin-Secret: {shared-password}" -d '{"name": "DataAmazon BFF", "secret": "{api-password}"}'`
-2. `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:8080/api/datasets/`
+## Create a new API Key and Secret in local development
+
+1. For the first client, the easiest way is to remove the `authorize` interceptor from the client creation endpoint
+2. Create with `curl -X POST http://localhost:8080/api/v1/clients -H 'Content-Type: application/json' -d '{"name": "DataAmazon Local Client", "secret": "{secret}"}'`
+3. Test with `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:8080/api/datasets/v1`
+
+## Dataset import
+
+1. Change the database host, api key and api secret in `tools/import_dataset.py`
+2. Remove the authorization interceptor for the dataset creation route
+3. `python tools/import_dataset.py`
+
+## User Creation
+
+1. Open `http://localhost:8080/api/v1/docs` in the browser
+2. Under the "Authorize" button (top right corner), paste the api key and secret
+3. Execute the POST for users route and create a new user
+
+## Role management
+
+1. Open the pgAdmin at `http://localhost:8080/pgadmin` and login
+2. Execute below SQL in the gatekeeper database, remember to replace the USER ID in the seconds insert
+
+```
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'admin', '/*', '.*', 'allow', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', '09928f56-2e88-4a1c-a8fb-1393d092634f', 'admin', NULL, NULL, NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_read', '/api/v1/users', 'GET', 'allow', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_write', '/api/v1/users', '(GET|POST|PUT)', 'allow', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_write', '/api/v1/users/.*/enable', 'PUT', 'deny', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_admin', '/api/v1/users', '(POST|PUT|GET|DELETE)', 'allow', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_read', '/api/v1/datasets', 'GET', 'allow', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets', '(GET|POST|PUT)', 'allow', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_admin', '/api/v1/datasets', '(GET|POST|PUT|DELETE)', 'allow', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets/.*/enable', 'PUT', 'deny', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_write', '/api/v1/users/.*/roles', '(PUT|DELETE)', 'deny', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_admin', '/api/v1/users/.*/roles', '(PUT|DELETE)', 'deny', NULL, NULL);
+```
 
 ### Issues
 

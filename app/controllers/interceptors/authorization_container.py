@@ -3,7 +3,7 @@ from functools import wraps
 from casbin import Enforcer
 
 
-class AuthorizerContainer:
+class AuthorizationContainer:
     '''A singleton instance for casbin enforcer'''
 
     _instance = None
