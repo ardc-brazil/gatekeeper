@@ -31,3 +31,10 @@ class Providers(db.Model):
 
     __table_args__ = (Index('idx_providers_reference', name, unique=False),
                       Index('idx_providers_name', name, unique=False))
+
+class UsersTenancies(db.Model):
+    __tablename__ = 'users_tenancies'
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), primary_key=True, nullable=False)
+    tenancy = db.Column(db.String(256), primary_key=True, nullable=False)
+
+    __table_args__ = (Index('idx_users_tenancies_user_id', user_id, unique=False),)
