@@ -1,39 +1,47 @@
 import logging
 from app.models.users import Providers, Users
+from app.repositories.tenancies import TenancyRepository
 from app.repositories.users import UsersRepository
 from werkzeug.exceptions import NotFound
 from app.controllers.interceptors.authorization_container import AuthorizationContainer
 
 repository = UsersRepository()
+tenancy_repository = TenancyRepository()
 
 class UsersService:
+    def __adapt_user(self, user):
+        return {
+            'id': user.id, 
+            'name': user.name, 
+            'email': user.email,
+            'roles': user.roles,
+            'is_enabled': user.is_enabled,
+            'providers': user.providers,
+            'tenancies': [tenancy.name for tenancy in user.tenancies],
+            'created_at': user.created_at,
+            'updated_at': user.updated_at
+        }
+    
     def fetch_by_id(self, id, is_enabled=True):
         user = repository.fetch_by_id(id, is_enabled)
         if user is None:
             raise NotFound(f'User with id {id} not found')
         user.roles = AuthorizationContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
-        return user
+        return self.__adapt_user(user)
     
     def fetch_by_email(self, email, is_enabled=True):
         user = repository.fetch_by_email(email, is_enabled)
         if user is None:
             raise NotFound(f'User with email {email} not found')
         user.roles = AuthorizationContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
-        return user
-    
-    def fetch_all(self):
-        users = repository.fetch_all()
-        for user in users:
-            user.roles = AuthorizationContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
-        
-        return users
+        return self.__adapt_user(user)
     
     def fetch_by_provider(self, provider_name, reference, is_enabled=True):
         user = repository.fetch_by_provider(provider_name, reference, is_enabled)
         if user is None:
             raise NotFound(f'User with provider {provider_name} and reference {reference} not found')
         user.roles = AuthorizationContainer.instance().getEnforcer().get_roles_for_user(str(user.id))
-        return user
+        return self.__adapt_user(user)
 
     def create(self, request_body):
         try:
@@ -137,15 +145,49 @@ class UsersService:
             raise e
 
     def search(self, query_params):
-        logging.error(query_params)
-        users = repository.search(query_params)
-        for user in users:
+        users = []
+        
+        for user in repository.search(query_params):
             user.roles = AuthorizationContainer.instance().getEnforcer().get_implicit_roles_for_user(str(user.id))
+            users.append(self.__adapt_user(user))
         
         return users
     
-    def enforce(self, user_id,resource, action) -> bool:
+    def enforce(self, user_id, resource, action) -> bool:
         return AuthorizationContainer.instance().getEnforcer().enforce(user_id,resource,action)
     
     def load_policy(self) -> bool:
         return AuthorizationContainer.instance().getEnforcer().load_policy()
+    
+    def add_tenancies(self, user_id, tenancies):
+        try:
+            # TODO check editor has the access to the tenancy
+            user = repository.fetch_by_id(user_id)
+            if (user is None):
+                raise NotFound(f'User {user_id} not found')
+            for tenancy in tenancies:
+                # Only way I found to make this work with pre-existing tenancy data
+                existing_tenancy = tenancy_repository.fetch(tenancy)
+                user.tenancies.append(existing_tenancy)
+            repository.upsert(user)
+        except Exception as e:
+            logging.error(e)
+            raise e
+        
+    def remove_tenancies(self, user_id, tenancies):
+        try:
+            # TODO check editor has the access to the tenancy
+            user = repository.fetch_by_id(user_id)
+            if (user is None):
+                raise NotFound(f'User {user_id} not found')
+            for existing_tenancy in user.tenancies:
+                for tenancy in tenancies:
+                    if (existing_tenancy.name == tenancy):
+                        # Only way I found to make this work with pre-existing tenancy data
+                        database_tenancy = tenancy_repository.fetch(tenancy)
+                        user.tenancies.remove(database_tenancy)
+                        break
+            repository.upsert(user)
+        except Exception as e:
+            logging.error(e)
+            raise e

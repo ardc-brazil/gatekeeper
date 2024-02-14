@@ -20,6 +20,7 @@ user_model = namespace.model('User', {
     'email': fields.String(required=False, description='User email'),
     'roles': fields.List(fields.String, required=False, description='User roles'),
     'providers': fields.List(fields.Nested(provider_model), required=False, description='User providers'),
+    'tenancies': fields.List(fields.String, required=False, description='User tenancies'),
     'is_enabled': fields.Boolean(required=True, description='Is user enabled?'),
     'created_at': fields.DateTime(required=True, description='User creation date'),
     'updated_at': fields.DateTime(required=True, description='User last update date')
@@ -51,6 +52,9 @@ user_enforce_model = namespace.model('UserEnforceModel', {
     'action': fields.String(required=True, description='action')
 })
 
+user_tenancy_request_model = namespace.model('UserTenancyModel', {
+    'tenancies': fields.List(fields.String, required=True, description='User tenancies')
+})
 
 @namespace.route('/<string:id>')
 @namespace.param('id', 'The user id')
@@ -195,6 +199,31 @@ class UsersGetByProviderController(Resource):
             return user, 200
         else:
             raise NotFound()
+        
+@namespace.route('/<string:id>/tenancy')
+@namespace.param('id', 'The user id')
+@namespace.response(404, 'User not found')
+@namespace.response(500, 'Internal Server Error')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
+class UsersTenanciesController(Resource):
+    
+    method_decorators = [authenticate, authorize]
+
+    @namespace.doc('Add user to a tenancy')
+    @namespace.expect(user_tenancy_request_model, validate=True)
+    def post(self, id):
+        '''Add tenancy to users'''
+        payload = request.get_json()
+        result = service.add_tenancies(id, payload['tenancies'])
+        return result, 200
+    
+    @namespace.doc('Remove Tenancy from a User')
+    @namespace.expect(user_tenancy_request_model, validate=True)
+    def delete(self, id):
+        '''Remove tenancies from a specific user'''
+        payload = request.get_json()
+        service.remove_tenancies(id, payload['tenancies'])
+        return {}, 200
 
 
 @namespace.route('/<string:id>/enforce')
