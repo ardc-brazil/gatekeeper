@@ -119,21 +119,11 @@ make docker-deployment
 ## Role management
 
 1. Open the pgAdmin at `http://localhost:8080/pgadmin` and login
-2. Execute below SQL in the gatekeeper database, remember to replace the USER ID in the seconds insert
+2. Execute SQL in `app/resources/casbin_seed_policies.sql` and `app/resources/tenancy_seed.sql` in the gatekeeper database
+3. Add your own user to the admin role, so you can test everything:
 
 ```
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'admin', '/*', '.*', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', '09928f56-2e88-4a1c-a8fb-1393d092634f', 'admin', NULL, NULL, NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_read', '/api/v1/users', 'GET', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_write', '/api/v1/users', '(GET|POST|PUT)', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_write', '/api/v1/users/.*/enable', 'PUT', 'deny', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_admin', '/api/v1/users', '(POST|PUT|GET|DELETE)', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_read', '/api/v1/datasets', 'GET', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets', '(GET|POST|PUT)', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_admin', '/api/v1/datasets', '(GET|POST|PUT|DELETE)', 'allow', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets/.*/enable', 'PUT', 'deny', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_write', '/api/v1/users/.*/roles', '(PUT|DELETE)', 'deny', NULL, NULL);
-INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'users_admin', '/api/v1/users/.*/roles', '(PUT|DELETE)', 'deny', NULL, NULL);
+INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', '{used_id}', 'admin', NULL, NULL, NULL, NULL);
 ```
 
 ### Issues

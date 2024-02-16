@@ -1,4 +1,3 @@
-import logging
 from app.models.datasets import Datasets
 from app import db
 from sqlalchemy import or_, cast, String

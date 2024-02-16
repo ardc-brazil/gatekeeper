@@ -10,9 +10,6 @@ class UsersRepository:
     def fetch_by_email(self, email, is_enabled=True):
         return Users.query.filter_by(email=email, is_enabled=is_enabled).first()
     
-    def fetch_all(self):
-        return Users.query.all()
-    
     def fetch_by_provider(self, provider_name, reference, is_enabled=True):
         provider_alias = aliased(Providers)
         
