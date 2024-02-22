@@ -214,8 +214,8 @@ class UsersTenanciesController(Resource):
     def post(self, id):
         '''Add tenancy to users'''
         payload = request.get_json()
-        result = service.add_tenancies(id, payload['tenancies'])
-        return result, 200
+        service.add_tenancies(id, payload['tenancies'])
+        return {}, 200
     
     @namespace.doc('Remove Tenancy from a User')
     @namespace.expect(user_tenancy_request_model, validate=True)
