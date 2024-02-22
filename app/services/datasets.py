@@ -14,12 +14,13 @@ class DatasetService:
             'data': json.dumps(dataset.data), 
             'is_enabled': dataset.is_enabled,
             'created_at': dataset.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': dataset.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+            'updated_at': dataset.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'tenancy': dataset.tenancy
         }
     
-    def fetch_dataset(self, dataset_id):
+    def fetch_dataset(self, dataset_id, is_enabled=True, tenancies=[]):
         try: 
-            res = repository.fetch(dataset_id)
+            res = repository.fetch(dataset_id, is_enabled, tenancies)
 
             if res is not None:
                 datasets = self.__adapt_dataset(res)
@@ -39,6 +40,7 @@ class DatasetService:
             
             dataset.name = request_body['name']
             dataset.data = request_body['data']
+            dataset.tenancy = request_body['tenancy']
             repository.upsert(dataset)
         except Exception as e:
             logging.error(e)
@@ -46,7 +48,7 @@ class DatasetService:
 
     def create_dataset(self, request_body):
         try:
-            dataset = Datasets(name=request_body['name'], data=request_body['data'])
+            dataset = Datasets(name=request_body['name'], data=request_body['data'], tenancy=request_body['tenancy'])
             return repository.upsert(dataset).id
         except Exception as e:
             logging.error(e)
@@ -63,6 +65,7 @@ class DatasetService:
             dataset.is_enabled = False
             dataset.name = dataset.name
             dataset.data = dataset.data
+            dataset.tenancy = dataset.tenancy
 
             repository.upsert(dataset)
         except Exception as e:
@@ -80,6 +83,7 @@ class DatasetService:
             dataset.is_enabled = True
             dataset.name = dataset.name
             dataset.data = dataset.data
+            dataset.tenancy = dataset.tenancy
 
             repository.upsert(dataset)
         except Exception as e:
@@ -90,9 +94,9 @@ class DatasetService:
         with open('app/resources/available_filters.json') as categories:
             return json.load(categories)
     
-    def search_datasets(self, query_params):
+    def search_datasets(self, query_params, tenancies=[]):
         try: 
-            res = repository.search(query_params)
+            res = repository.search(query_params, tenancies)
             if res is not None:
                 datasets = [self.__adapt_dataset(dataset) for dataset in res]
                 return datasets

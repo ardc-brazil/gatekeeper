@@ -1,10 +1,19 @@
 from app.models.datasets import Datasets
 from app import db
-from sqlalchemy import or_, cast, String
+from sqlalchemy import and_, or_, cast, String
 
 class DatasetRepository:
-    def fetch(self, dataset_id, is_enabled=True):
-        return Datasets.query.filter_by(id=dataset_id, is_enabled=is_enabled).first()
+    def fetch(self, dataset_id, is_enabled=True, tenancies=[]):
+        query = db.session.query(Datasets)
+        query = query.filter(Datasets.id == dataset_id)
+
+        if is_enabled:
+            query = query.filter(Datasets.is_enabled == is_enabled)
+
+        if tenancies:
+            query = query.filter(Datasets.tenancy.in_(tenancies))
+        
+        return query.first()
     
     def upsert(self, dataset):
         if (dataset.id is None):
@@ -13,7 +22,7 @@ class DatasetRepository:
         db.session.refresh(dataset)
         return dataset
         
-    def search(self, query_params):
+    def search(self, query_params, tenancies=[]):
         query = db.session.query(Datasets)
 
         search_conditions = []
@@ -43,5 +52,8 @@ class DatasetRepository:
         if query_params['full_text']:
             search_term = f'%{query_params["full_text"]}%'
             query = query.filter(or_(cast(Datasets.data, String).ilike(search_term), Datasets.name.ilike(search_term)))
+        
+        if tenancies:
+            query = query.filter(Datasets.tenancy.in_(tenancies))
         
         return query.all()

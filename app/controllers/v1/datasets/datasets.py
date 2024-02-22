@@ -1,6 +1,7 @@
-from flask import request
+from flask import request, g
 from app.controllers.interceptors.authentication import authenticate
 from app.controllers.interceptors.authorization import authorize
+from app.controllers.interceptors.tenancy_parser import parse_tenancy_header
 from app.services.datasets import DatasetService
 from flask_restx import Namespace, Resource, fields
 from werkzeug.exceptions import NotFound
@@ -14,17 +15,20 @@ dataset_model = namespace.model('Dataset', {
     'data': fields.String(required=False, description='Dataset information'),
     'is_enabled': fields.Boolean(required=True, description='Dataset status'),
     'updated_at': fields.String(required=True, description='Dataset updated at datetime'),
-    'created_at': fields.String(required=True, description='Dataset created at datetime')
+    'created_at': fields.String(required=True, description='Dataset created at datetime'),
+    'tenancy': fields.String(required=False, description='Dataset tenancy')
 })
 
 dataset_create_request_model = namespace.model('DatasetCreateRequest', {
     'name': fields.String(required=True, description='Dataset name'),
     'data': fields.Raw(required=False, description='Dataset information in JSON format'),
+    'tenancy': fields.String(required=True, description='Dataset tenancy')
 })
 
 dataset_update_request_model = namespace.model('DatasetUpdateRequest', {
     'name': fields.String(required=True, description='Dataset name'),
     'data': fields.Raw(required=False, description='Dataset information in JSON format'),
+    'tenancy': fields.String(required=True, description='Dataset tenancy')
 })
 
 datasets_list_model = namespace.model('Datasets', {
@@ -47,9 +51,12 @@ class DatasetsController(Resource):
 
     @namespace.doc("Get a Dataset")
     @namespace.marshal_with(dataset_model)
+    @namespace.param('is_enabled', 'Flag to filter enabled datasets. Default is true')
+    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+    @parse_tenancy_header
     def get(self, dataset_id):
         '''Fetch a specific dataset'''
-        dataset = service.fetch_dataset(dataset_id)
+        dataset = service.fetch_dataset(dataset_id, request.args.get('is_enabled'), g.tenancies)
         if (dataset is not None):
             return dataset
         else:
@@ -96,6 +103,8 @@ class DatasetsListController(Resource):
     @namespace.param('date_to', 'Dataset date to, YYYY-MM-DD')
     @namespace.param('full_text', 'Dataset full text')
     @namespace.marshal_with(datasets_list_model)
+    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+    @parse_tenancy_header
     def get(self):
         '''Fetch all datasets'''
         query_params = {
@@ -107,7 +116,7 @@ class DatasetsListController(Resource):
             'full_text': request.args.get('full_text')
         }
 
-        datasets = service.search_datasets(query_params)
+        datasets = service.search_datasets(query_params, g.tenancies)
         payload =  {
             'content': datasets,
             'size': len(datasets)
