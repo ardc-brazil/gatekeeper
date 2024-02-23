@@ -11,6 +11,11 @@ services:
       POSTGRES_USER: gk_admin
       POSTGRES_PASSWORD: WYnAG9!qzhfx7hDatJcs
       POSTGRES_DB: gatekeeper_db
+      DB_HOST: localhost
+      DB_USER: gk_admin
+      DB_PASSWORD: WYnAG9!qzhfx7hDatJcs
+      DB_PORT: 5432
+      DB_NAME: gatekeeper_db
     ports:
       - 5432:5432
     volumes:
