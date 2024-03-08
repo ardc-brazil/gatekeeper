@@ -8,7 +8,7 @@ def parse_tenancy_header(f):
         g.tenancies = []
 
         if tenancies:
-            g.tenancies.extend(tenancy.strip() for tenancy in tenancies.split(','))
+            g.tenancies.extend(tenancy.strip() for tenancy in tenancies.split(';'))
 
         return f(*args, **kwargs)
     
