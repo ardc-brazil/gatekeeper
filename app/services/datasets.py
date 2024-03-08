@@ -61,12 +61,8 @@ class DatasetService:
             if dataset is None:
                 raise NotFound(f'Dataset {dataset_id} not found')
             
-            dataset.id = dataset_id
             dataset.is_enabled = False
-            dataset.name = dataset.name
-            dataset.data = dataset.data
-            dataset.tenancy = dataset.tenancy
-
+            
             repository.upsert(dataset)
         except Exception as e:
             logging.error(e)

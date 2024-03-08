@@ -10,8 +10,7 @@ class DatasetRepository:
         if is_enabled:
             query = query.filter(Datasets.is_enabled == is_enabled)
 
-        if tenancies:
-            query = query.filter(Datasets.tenancy.in_(tenancies))
+        query = query.filter(Datasets.tenancy.in_(tenancies))
         
         return query.first()
     
@@ -52,8 +51,7 @@ class DatasetRepository:
         if query_params['full_text']:
             search_term = f'%{query_params["full_text"]}%'
             query = query.filter(or_(cast(Datasets.data, String).ilike(search_term), Datasets.name.ilike(search_term)))
-        
-        if tenancies:
-            query = query.filter(Datasets.tenancy.in_(tenancies))
+    
+        query = query.filter(Datasets.tenancy.in_(tenancies))
         
         return query.all()
