@@ -31,8 +31,8 @@ services:
     environment:
       # Move to .env file
       - APP_CONFIG_FILE=/app/config_prod.py
-      - CASBIN_DATABASE_URL=postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@gatekeeper_gatekeeper-db_1:5432/gatekeeper_db
-      - CASBIN_WATCHER_HOST=gatekeeper_gatekeeper-db_1
+      - CASBIN_DATABASE_URL=postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@gatekeeper-db:5432/gatekeeper_db
+      - CASBIN_WATCHER_HOST=gatekeeper-db
       - DB_HOST=localhost
       - DB_USER=gk_admin
       - DB_PASSWORD=WYnAG9!qzhfx7hDatJcs
