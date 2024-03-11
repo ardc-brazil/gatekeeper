@@ -6,7 +6,7 @@ setup(
     author='Caio Maia',
     author_email='caio.maia@usp.br',
     description='Gatekeeper Backend',
-    url='https://github.com/cnmaia',
+    url='https://github.com/ardc-brazil/gatekeeper',
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
