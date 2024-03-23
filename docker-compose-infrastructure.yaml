@@ -25,8 +25,8 @@ services:
       retries: 3
     networks:
       - gatekeeper_gatekeeper-network
-    depends_on:
-      - minio
+    # depends_on:
+    #   - minio
 
   # minio:
   #   image: minio/minio:RELEASE.2024-03-21T23-13-43Z
