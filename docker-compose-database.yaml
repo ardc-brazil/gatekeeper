@@ -31,6 +31,7 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: gk_admin@data-amazon.com
       PGADMIN_DEFAULT_PASSWORD: mB!2pBNnyffE@8*W*C-8
+      PGADMIN_LISTEN_PORT: 5050
     volumes:
       - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json
     depends_on:

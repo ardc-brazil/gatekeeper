@@ -14,6 +14,6 @@ COPY --from=builder /install /usr/local
 COPY . /app
 RUN apk --no-cache add libpq
 WORKDIR /app
-EXPOSE 8080
+EXPOSE 9092
 
-CMD ["gunicorn", "-w 3", "-t 60" , "-b 0.0.0.0:8080", "app:create_app()", "--access-logfile -", "--error-logfile -"]
+CMD ["gunicorn", "-w 3", "-t 60" , "-b 0.0.0.0:9092", "app:create_app()", "--access-logfile -", "--error-logfile -"]

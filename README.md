@@ -101,8 +101,8 @@ make docker-deployment
 ## Create a new API Key and Secret in local development
 
 1. For the first client, the easiest way is to remove the `authorize` interceptor from the client creation endpoint
-2. Create with `curl -X POST http://localhost:8080/api/v1/clients -H 'Content-Type: application/json' -d '{"name": "DataAmazon Local Client", "secret": "{secret}"}'`
-3. Test with `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:8080/api/datasets/v1`
+2. Create with `curl -X POST http://localhost:9092/api/v1/clients -H 'Content-Type: application/json' -d '{"name": "DataAmazon Local Client", "secret": "{secret}"}'`
+3. Test with `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:9092/api/datasets/v1`
 
 ## Dataset import
 
@@ -112,13 +112,13 @@ make docker-deployment
 
 ## User Creation
 
-1. Open `http://localhost:8080/api/v1/docs` in the browser
+1. Open `http://localhost:9092/api/v1/docs` in the browser
 2. Under the "Authorize" button (top right corner), paste the api key and secret
 3. Execute the POST for users route and create a new user
 
 ## Role management
 
-1. Open the pgAdmin at `http://localhost:8080/pgadmin` and login
+1. Open the pgAdmin at `http://localhost:9092/pgadmin` and login
 2. Execute SQL in `app/resources/casbin_seed_policies.sql` and `app/resources/tenancy_seed.sql` in the gatekeeper database
 3. Add your own user to the admin role, so you can test everything:
 
