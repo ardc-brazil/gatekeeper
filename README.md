@@ -101,7 +101,7 @@ DB_HOST=localhost:5432 DB_USER=gk_admin DB_PASSWORD='{db_password}' DB_PORT=5432
 deactivate
 
 # Stop backend containers
-docker-compose -f docker-compose-infrastructure down
+docker-compose -f docker-compose-infrastructure.yaml down
 
 # Rebuild the image (to make sure)
 docker-compose -f docker-compose-infrastructure.yaml build
