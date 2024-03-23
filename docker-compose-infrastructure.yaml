@@ -19,7 +19,7 @@ services:
     ports: 
       - '9092:9092'
     healthcheck:
-      test: ["CMD-SHELL", "curl --silent --fail localhost:9092/api/infra/health-check || exit 1"]
+      test: ["CMD-SHELL", "curl --silent --fail localhost:9092/api/v1/health-check || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 3

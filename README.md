@@ -78,8 +78,8 @@ To create new migrations, follow the steps below.
 > **WARNING:** The current deployment process causes downtime for services.
 
 ```sh
-# Connect to the AWS EC2
-ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com
+# Connect to USP infra
+ssh datamap@143.107.102.162 -p 5010
 
 # Navegate to the project folder
 cd gatekeeper
@@ -87,8 +87,31 @@ cd gatekeeper
 # Get the last (main) branch version
 git pull
 
+# Start python virtual env
+python3 -m venv venv
+. venv/bin/activate
+
+# Install libraries
+make python-pip-install
+
+# Run db migrations
+DB_HOST=localhost:5432 DB_USER=gk_admin DB_PASSWORD='{db_password}' DB_PORT=5432 DB_NAME=gatekeeper_db CASBIN_DATABASE_URL='postgresql://gk_admin:{db_password}@localhost:5432/gatekeeper_db' flask db upgrade
+
+# Deactivate python virtual env
+deactivate
+
+# Stop backend containers
+docker-compose -f docker-compose-infrastructure down
+
+# Rebuild the image (to make sure)
+docker-compose -f docker-compose-infrastructure.yaml build
+
+# Start backend
+docker-compose -f docker-compose-infrastructure.yaml up -d
+
+# TODO Fix Makefile to deploy in new infra and work in local env simultaneously
 # Refresh and deploy the last docker image.
-make docker-deployment
+# make docker-deployment
 ```
 
 ### Accessing the application in prod
