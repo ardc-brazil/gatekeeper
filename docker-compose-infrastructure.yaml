@@ -11,7 +11,7 @@ services:
       - APP_CONFIG_FILE=/app/config_prod.py
       - CASBIN_DATABASE_URL=postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@gatekeeper_gatekeeper-db_1:5432/gatekeeper_db
       - CASBIN_WATCHER_HOST=gatekeeper_gatekeeper-db_1
-      - DB_HOST=localhost
+      - DB_HOST=gatekeeper_gatekeeper-db_1
       - DB_USER=gk_admin
       - DB_PASSWORD=WYnAG9!qzhfx7hDatJcs
       - DB_PORT=5432
@@ -25,8 +25,6 @@ services:
       retries: 3
     networks:
       - gatekeeper_gatekeeper-network
-    # depends_on:
-    #   - minio
 
   # minio:
   #   image: minio/minio:RELEASE.2024-03-21T23-13-43Z
