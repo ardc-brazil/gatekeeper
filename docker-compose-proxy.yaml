@@ -14,10 +14,6 @@ services:
       - "80:80"
       - "9000"
       - "9001"
-    depends_on:
-      - minio
-      - tusd
-      - gatekeeper
     healthcheck:
       test: ["CMD-SHELL", "curl --silent --fail localhost:80/health-check || exit 1"]
       interval: 10s
