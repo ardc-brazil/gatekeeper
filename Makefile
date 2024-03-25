@@ -62,7 +62,7 @@ python-pip-freeze:
 
 python-run:
 	flask routes
-	FLASK_ENV=development FLASK_DEBUG=1 flask run -h localhost -p 8080
+	FLASK_ENV=development FLASK_DEBUG=1 flask run -h localhost -p 9092
 
 # Database commands
 db-upgrade:

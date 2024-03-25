@@ -1,28 +1,6 @@
 version: '3'
 
 services:
-  nginx-proxy:
-    build: ./infrastructure/nginx/
-    image: nginx
-    container_name: nginx
-    restart: always
-    volumes:
-      - ./infrastructure/nginx/default.conf:/tmp/default.conf
-    environment: 
-      - FLASK_SERVER_ADDR=gatekeeper:8080
-    ports:
-      - "80:80"
-    depends_on:
-      - gatekeeper
-    healthcheck:
-      test: ["CMD-SHELL", "curl --silent --fail localhost:80/health-check || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 3
-    command: /app/start.sh
-    networks:
-      - gatekeeper_gatekeeper-network
-
   gatekeeper:
     build: .
     image: gatekeeper
@@ -31,22 +9,60 @@ services:
     environment:
       # Move to .env file
       - APP_CONFIG_FILE=/app/config_prod.py
-      - CASBIN_DATABASE_URL=postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@gatekeeper-gatekeeper-db-1:5432/gatekeeper_db
-      - CASBIN_WATCHER_HOST=gatekeeper-gatekeeper-db-1
-      - DB_HOST=localhost
+      - CASBIN_DATABASE_URL=postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@gatekeeper_gatekeeper-db_1:5432/gatekeeper_db
+      - CASBIN_WATCHER_HOST=gatekeeper_gatekeeper-db_1
+      - DB_HOST=gatekeeper_gatekeeper-db_1
       - DB_USER=gk_admin
       - DB_PASSWORD=WYnAG9!qzhfx7hDatJcs
       - DB_PORT=5432
       - DB_NAME=gatekeeper_db
     ports: 
-      - '8080:8080'
-    healthcheck:
-      test: ["CMD-SHELL", "curl --silent --fail localhost:8080/api/infra/health-check || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 3
+      - '9092:9092'
     networks:
       - gatekeeper_gatekeeper-network
+
+  # minio:
+  #   image: minio/minio:RELEASE.2024-03-21T23-13-43Z
+  #   command: server /storage --console-address ":9001"
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin
+  #   healthcheck:
+  #     test: ["CMD", "mc", "ready", "local"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #       - gatekeeper_gatekeeper-network
+  #   hostname: minio
+  #   volumes:
+  #     - "../data-storage:/storage/"
+  
+  # tusd:
+  #   image: tusproject/tusd:v2.4
+  #   ports: 
+  #     - "1080:1080"
+  #   environment:
+  #     AWS_ACCESS_KEY_ID: 7fTIhzFBSrrAUp5ZVb7t
+  #     AWS_SECRET_ACCESS_KEY: qw2AnkWos6RFIsR7ahK0FRVIFhUCvRtIzAnMgoFS
+  #     AWS_REGION: us-east-1
+  #   command: -port 1080 -s3-bucket datamap -s3-endpoint http://minio:9000
+  #   depends_on: 
+  #     - minio
+  #   networks:
+  #     - gatekeeper_gatekeeper-network
+
+  # frontend:
+  #   image: nginx:1.17.3-alpine
+  #   ports:
+  #     - "9506:80"
+  #   volumes:
+  #     - "./public/:/usr/share/nginx/html:ro"
+  #   depends_on: 
+  #     - tusd
 
 networks:
   gatekeeper_gatekeeper-network:

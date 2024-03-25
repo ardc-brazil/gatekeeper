@@ -78,8 +78,8 @@ To create new migrations, follow the steps below.
 > **WARNING:** The current deployment process causes downtime for services.
 
 ```sh
-# Connect to the AWS EC2
-ssh -i ~/.ssh/data-amazon-key-pair.pem ec2-user@ec2-34-194-118-180.compute-1.amazonaws.com
+# Connect to USP infra
+ssh datamap@143.107.102.162 -p 5010
 
 # Navegate to the project folder
 cd gatekeeper
@@ -87,8 +87,31 @@ cd gatekeeper
 # Get the last (main) branch version
 git pull
 
+# Start python virtual env
+python3 -m venv venv
+. venv/bin/activate
+
+# Install libraries
+make python-pip-install
+
+# Run db migrations
+DB_HOST=localhost:5432 DB_USER=gk_admin DB_PASSWORD='{db_password}' DB_PORT=5432 DB_NAME=gatekeeper_db CASBIN_DATABASE_URL='postgresql://gk_admin:{db_password}@localhost:5432/gatekeeper_db' flask db upgrade
+
+# Deactivate python virtual env
+deactivate
+
+# Stop backend containers
+docker-compose -f docker-compose-infrastructure.yaml down
+
+# Rebuild the image (to make sure)
+docker-compose -f docker-compose-infrastructure.yaml build
+
+# Start backend
+docker-compose -f docker-compose-infrastructure.yaml up -d
+
+# TODO Fix Makefile to deploy in new infra and work in local env simultaneously
 # Refresh and deploy the last docker image.
-make docker-deployment
+# make docker-deployment
 ```
 
 ### Accessing the application in prod
@@ -101,8 +124,8 @@ make docker-deployment
 ## Create a new API Key and Secret in local development
 
 1. For the first client, the easiest way is to remove the `authorize` interceptor from the client creation endpoint
-2. Create with `curl -X POST http://localhost:8080/api/v1/clients -H 'Content-Type: application/json' -d '{"name": "DataAmazon Local Client", "secret": "{secret}"}'`
-3. Test with `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:8080/api/datasets/v1`
+2. Create with `curl -X POST http://localhost:9092/api/v1/clients -H 'Content-Type: application/json' -d '{"name": "DataAmazon Local Client", "secret": "{secret}"}'`
+3. Test with `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:9092/api/datasets/v1`
 
 ## Dataset import
 
@@ -112,13 +135,13 @@ make docker-deployment
 
 ## User Creation
 
-1. Open `http://localhost:8080/api/v1/docs` in the browser
+1. Open `http://localhost:9092/api/v1/docs` in the browser
 2. Under the "Authorize" button (top right corner), paste the api key and secret
 3. Execute the POST for users route and create a new user
 
 ## Role management
 
-1. Open the pgAdmin at `http://localhost:8080/pgadmin` and login
+1. Open the pgAdmin at `http://localhost:9092/pgadmin` and login
 2. Execute SQL in `app/resources/casbin_seed_policies.sql` and `app/resources/tenancy_seed.sql` in the gatekeeper database
 3. Add your own user to the admin role, so you can test everything:
 
