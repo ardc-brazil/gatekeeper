@@ -54,9 +54,9 @@ class DatasetService:
             logging.error(e)
             raise e
         
-    def disable_dataset(self, dataset_id):
+    def disable_dataset(self, dataset_id, tenancies=[]):
         try: 
-            dataset = repository.fetch(dataset_id)
+            dataset = repository.fetch(dataset_id=dataset_id, tenancies=tenancies)
 
             if dataset is None:
                 raise NotFound(f'Dataset {dataset_id} not found')
@@ -68,9 +68,9 @@ class DatasetService:
             logging.error(e)
             raise e
     
-    def enable_dataset(self, dataset_id):
+    def enable_dataset(self, dataset_id, tenancies):
         try: 
-            dataset = repository.fetch(dataset_id, False)
+            dataset = repository.fetch(dataset_id=dataset_id, is_enabled=False, tenancies=tenancies)
 
             if dataset is None:
                 raise NotFound(f'Dataset {dataset_id} not found')

@@ -49,6 +49,7 @@ class DatasetsController(Resource):
 
     method_decorators = [authenticate, authorize]
 
+    # GET /api/v1/datasets/:dataset_id
     @namespace.doc("Get a Dataset")
     @namespace.marshal_with(dataset_model)
     @namespace.param('is_enabled', 'Flag to filter enabled datasets. Default is true')
@@ -62,6 +63,7 @@ class DatasetsController(Resource):
         else:
             raise NotFound()
 
+    # PUT /api/v1/datasets/:dataset_id
     @namespace.expect(dataset_create_request_model, validate=True)
     def put(self, dataset_id):
         '''Update a specific dataset'''
@@ -69,9 +71,13 @@ class DatasetsController(Resource):
         service.update_dataset(dataset_id, payload)
         return {}, 200
     
+    # DELETE /api/v1/datasets/:dataset_id
+    @namespace.doc("Delete a Dataset")
+    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+    @parse_tenancy_header
     def delete(self, dataset_id):
         '''Disable a specific dataset'''
-        service.disable_dataset(dataset_id)
+        service.disable_dataset(dataset_id, g.tenancies)
         return {}, 200
     
 @namespace.route('/<string:dataset_id>/enable')
@@ -83,9 +89,12 @@ class DatasetsEnableController(Resource):
 
     method_decorators = [authenticate, authorize]
 
+    # PUT /api/v1/datasets/:dataset_id/enable
+    @namespace.doc("Enable a Dataset")
+    @parse_tenancy_header
     def put(self, dataset_id):
         '''Enable a specific dataset'''
-        service.enable_dataset(dataset_id)
+        service.enable_dataset(dataset_id, g.tenancies)
         return {}, 200
 
 @namespace.route('/')
@@ -95,6 +104,7 @@ class DatasetsListController(Resource):
 
     method_decorators = [authenticate, authorize]
     
+    # GET /api/v1/datasets
     @namespace.doc('Search datasets')
     @namespace.param('categories', 'Dataset categories, comma separated')
     @namespace.param('level', 'Dataset level')
@@ -102,6 +112,7 @@ class DatasetsListController(Resource):
     @namespace.param('date_from', 'Dataset date from, YYYY-MM-DD')
     @namespace.param('date_to', 'Dataset date to, YYYY-MM-DD')
     @namespace.param('full_text', 'Dataset full text')
+    @namespace.param('include_deleted', 'True to include disabled Datasets')
     @namespace.marshal_with(datasets_list_model)
     @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
     @parse_tenancy_header
@@ -113,7 +124,8 @@ class DatasetsListController(Resource):
             'data_types': request.args.get('data_types').split(',') if request.args.get('data_types') else [],
             'date_from': request.args.get('date_from'),
             'date_to': request.args.get('date_to'),
-            'full_text': request.args.get('full_text')
+            'full_text': request.args.get('full_text'),
+            'include_deleted': request.args.get('include_deleted', False)
         }
 
         datasets = service.search_datasets(query_params, g.tenancies)
@@ -124,6 +136,7 @@ class DatasetsListController(Resource):
 
         return payload, 200
         
+    # POST /api/v1/datasets
     @namespace.marshal_with(dataset_create_response_model)
     @namespace.expect(dataset_create_request_model, validate=True)
     def post(self):

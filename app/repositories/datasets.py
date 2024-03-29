@@ -47,6 +47,9 @@ class DatasetRepository:
         
         if query_params['date_to']:
             query = query.filter(Datasets.created_at <= query_params['date_to'])
+
+        if not query_params['include_deleted']:
+            query = query.filter(Datasets.is_enabled == True)
         
         if query_params['full_text']:
             search_term = f'%{query_params["full_text"]}%'
