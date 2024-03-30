@@ -112,7 +112,7 @@ class DatasetsListController(Resource):
     @namespace.param('date_from', 'Dataset date from, YYYY-MM-DD')
     @namespace.param('date_to', 'Dataset date to, YYYY-MM-DD')
     @namespace.param('full_text', 'Dataset full text')
-    @namespace.param('include_deleted', 'True to include disabled Datasets')
+    @namespace.param('include_disabled', 'True to include disabled Datasets')
     @namespace.marshal_with(datasets_list_model)
     @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
     @parse_tenancy_header
@@ -125,7 +125,7 @@ class DatasetsListController(Resource):
             'date_from': request.args.get('date_from'),
             'date_to': request.args.get('date_to'),
             'full_text': request.args.get('full_text'),
-            'include_deleted': request.args.get('include_deleted', False)
+            'include_disabled': request.args.get('include_disabled', False)
         }
 
         datasets = service.search_datasets(query_params, g.tenancies)

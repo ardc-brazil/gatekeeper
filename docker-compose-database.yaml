@@ -4,7 +4,6 @@ services:
   gatekeeper-db:
     image: postgres
     restart: always
-    hostname: gatekeeper_db
     # TODO: create .env file and create new passwords
     # See more: https://docs.docker.com/compose/environment-variables/set-environment-variables/
     # Trello Card: https://trello.com/c/SRvATXrW
