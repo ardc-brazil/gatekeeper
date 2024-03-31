@@ -15,7 +15,8 @@
           inline: true,
           target: '#drag-drop-area'
         })
-        .use(Uppy.Tus, {endpoint: 'http://127.0.0.1:1080/files/'})
+        .use(Uppy.Tus, {endpoint: 'https://datamap.pcs.usp.br/files/'})
+        // Change above endpoint to test locally
 
       uppy.on('complete', (result) => {
         console.log('Upload complete! We’ve uploaded these files:', result.successful)

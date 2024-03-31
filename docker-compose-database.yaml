@@ -4,19 +4,9 @@ services:
   gatekeeper-db:
     image: postgres
     restart: always
-    hostname: gatekeeper_db
-    # TODO: create .env file and create new passwords
-    # See more: https://docs.docker.com/compose/environment-variables/set-environment-variables/
-    # Trello Card: https://trello.com/c/SRvATXrW
-    environment:
-      POSTGRES_USER: gk_admin
-      POSTGRES_PASSWORD: WYnAG9!qzhfx7hDatJcs
-      POSTGRES_DB: gatekeeper_db
-      DB_HOST: localhost
-      DB_USER: gk_admin
-      DB_PASSWORD: WYnAG9!qzhfx7hDatJcs
-      DB_PORT: 5432
-      DB_NAME: gatekeeper_db
+    container_name: datamap_gatekeeper_db
+    env_file:
+      - ${ENV_FILE_PATH}
     ports:
       - 5432:5432
     volumes:
@@ -27,12 +17,11 @@ services:
   gatekeeper-pgadmin:
     image: dpage/pgadmin4
     restart: always
+    container_name: datamap_pgadmin
+    env_file:
+      - ${ENV_FILE_PATH}
     ports:
       - 5050:5050
-    environment:
-      PGADMIN_DEFAULT_EMAIL: gk_admin@data-amazon.com
-      PGADMIN_DEFAULT_PASSWORD: mB!2pBNnyffE@8*W*C-8
-      PGADMIN_LISTEN_PORT: 5050
     volumes:
       - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json
     depends_on:

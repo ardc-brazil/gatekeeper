@@ -5,7 +5,7 @@
             "Group": "Servers",
             "Port": 5432,
             "Username": "gk_admin",
-            "Host": "gatekeeper-db",
+            "Host": "datamap_gatekeeper_db",
             "SSLMode": "prefer",
             "MaintenanceDB": "gatekeeper_db"
         }

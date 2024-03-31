@@ -4,7 +4,7 @@ services:
   gatekeeper:
     build: .
     image: gatekeeper
-    container_name: gatekeeper
+    container_name: datamap_gatekeeper
     restart: always
     env_file:
       - ${ENV_FILE_PATH}
@@ -45,16 +45,6 @@ services:
       - minio
     networks:
       - gatekeeper_gatekeeper-network
-
-  frontend:
-    image: nginx:1.17.3-alpine
-    container_name: test-upload
-    ports:
-      - "9506:80"
-    volumes:
-      - "./public/:/usr/share/nginx/html:ro"
-    depends_on: 
-      - tusd
 
 networks:
   gatekeeper_gatekeeper-network:
