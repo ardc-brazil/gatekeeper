@@ -4,12 +4,12 @@ services:
   nginx-proxy:
     build: ./infrastructure/nginx/
     image: nginx
-    container_name: nginx
+    container_name: datamap_nginx
     restart: always
     volumes:
-      - ./infrastructure/nginx/default.conf:/tmp/default.conf
-    environment: 
-      - FLASK_SERVER_ADDR=gatekeeper:9092
+      - ./infrastructure/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    env_file:
+      - ${ENV_FILE_PATH}
     ports:
       - "80:80"
       - "9000"
@@ -19,7 +19,6 @@ services:
       interval: 10s
       timeout: 10s
       retries: 3
-    command: /app/start.sh
     networks:
       - gatekeeper_gatekeeper-network
 
