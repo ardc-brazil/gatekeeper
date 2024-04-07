@@ -14,16 +14,17 @@ db = SQLAlchemy()
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object('config')
-    app.config.from_envvar('APP_CONFIG_FILE', silent=True)
+    
+    # Load app configuration
+    app.config.from_prefixed_env('GATEKEEPER')
 
     # Casbin config
-    casbin_adapter = CasbinSQLAlchemyAdapter(os.environ['CASBIN_DATABASE_URL'])
+    casbin_adapter = CasbinSQLAlchemyAdapter(app.config['CASBIN_DATABASE_URL'])
     enforcer = SyncedEnforcer('app/resources/casbin_model.conf', casbin_adapter)
     enforcer.enable_auto_build_role_links(True)
     enforcer.start_auto_load_policy(5) # reload policy every 5 seconds
     enforcer.set_watcher
-    watcher = PostgresqlWatcher(host=os.environ['DB_HOST'],user=os.environ['DB_USER'],password=os.environ['DB_PASSWORD'],port=os.environ['DB_PORT'],dbname=os.environ['DB_NAME'])
+    watcher = PostgresqlWatcher(host=app.config['DB_HOST'],user=app.config['DB_USER'],password=app.config['DB_PASSWORD'],port=app.config['DB_PORT'],dbname=app.config['DB_NAME'])
     watcher.set_update_callback(enforcer.load_policy)
     enforcer.set_watcher(watcher)
     AuthorizationContainer.instance(app, enforcer, casbin_adapter)
