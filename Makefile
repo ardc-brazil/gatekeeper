@@ -70,3 +70,6 @@ db-upgrade:
 
 db-create-migration: # Usage: make MESSAGE="Add tenancy column to datasets" db-create-migration
 	flask db migrate -m "$(MESSAGE)"
+
+db-downgrade:
+	flask db downgrade
