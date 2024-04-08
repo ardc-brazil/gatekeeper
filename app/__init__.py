@@ -30,7 +30,7 @@ def create_app():
     AuthorizationContainer.instance(app, enforcer, casbin_adapter)
 
     # Models config
-    from app.models.datasets import Datasets, DatasetVersion, DataFile
+    from app.models.datasets import Datasets, DatasetVersions, DataFiles
     from app.models.users import Users
     migrate = Migrate(app, db)
 
