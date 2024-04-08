@@ -25,14 +25,16 @@ class Datasets(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
     tenancy = db.Column(db.String(256), nullable=True)
+    
+    version_id = db.Column(UUID(as_uuid=True), db.ForeignKey('dataset_versions.id'), unique=True)
+    version = relationship('DatasetVersions', uselist=False, backref='dataset')
 
-    versions = relationship('DatasetVersions', secondary=dataset_version_association, backref='users')
-    files = relationship('DataFiles', secondary=dataset_files_association, backref='users')
+    files = relationship('DataFiles', secondary=dataset_files_association, backref='dataset')
 
     __table_args__ = (Index('idx_is_enabled', 'is_enabled'),
                       Index('idx_name', 'name'))
 
-class DatasetVersion(db.Model):
+class DatasetVersions(db.Model):
     __tablename__ = 'dataset_versions'
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=sqlalchemy.text("gen_random_uuid()"))
     name = db.Column(db.String(256), nullable=False)
@@ -40,11 +42,12 @@ class DatasetVersion(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     author_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
 
     __table_args__ = (Index('idx_dataset_versions_name', 'name'),
                       Index('idx_dataset_versions_created_at', 'created_at'))
 
-class DataFile(db.Model):
+class DataFiles(db.Model):
     __tablename__ = 'data_files'
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=sqlalchemy.text("gen_random_uuid()"))
     name = db.Column(db.String(1024), nullable=False)
