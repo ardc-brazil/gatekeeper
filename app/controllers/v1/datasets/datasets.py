@@ -2,12 +2,25 @@ from flask import request, g
 from app.controllers.interceptors.authentication import authenticate
 from app.controllers.interceptors.authorization import authorize
 from app.controllers.interceptors.tenancy_parser import parse_tenancy_header
+from app.controllers.interceptors.user_parser import parse_user_header
 from app.services.datasets import DatasetService
 from flask_restx import Namespace, Resource, fields
 from werkzeug.exceptions import NotFound
 
 service = DatasetService()
 namespace = Namespace('datasets', 'Dataset operations')
+
+data_file_model = namespace.model('DataFile', {
+    'name': fields.String(required=True, description='Data file name'),
+    'size_bytes': fields.Integer(required=True, description='File size in bytes'),
+    'extension': fields.String(required=False, description='File extension'),
+    'format': fields.String(required=False, description='File format'),
+    'storage_file_name': fields.String(required=False, description='File name in storage'),
+    'storage_path': fields.String(required=False, description='File path in storage'),
+    'updated_at': fields.String(required=True, description='Data file updated at datetime'),
+    'created_at': fields.String(required=True, description='Data file created at datetime'),
+    'author_id': fields.String(required=True, description="Data file author id")
+})
 
 dataset_model = namespace.model('Dataset', {
     'id': fields.String(readonly=True, required=True, description='Dataset ID'),
@@ -16,7 +29,18 @@ dataset_model = namespace.model('Dataset', {
     'is_enabled': fields.Boolean(required=True, description='Dataset status'),
     'updated_at': fields.String(required=True, description='Dataset updated at datetime'),
     'created_at': fields.String(required=True, description='Dataset created at datetime'),
-    'tenancy': fields.String(required=False, description='Dataset tenancy')
+    'tenancy': fields.String(required=False, description='Dataset tenancy'),
+    'version': fields.String(required=False, description='Dataset current version'),
+    'files': fields.List(fields.Nested(data_file_model), required=False, description="Dataset data files")
+})
+
+data_file_create_request_model = namespace.model('DataFileCreateRequest', {
+    'name': fields.String(required=True, description='Data file name'),
+    'size_bytes': fields.Integer(required=True, description='File size in bytes'),
+    'extension': fields.String(required=False, description='File extension'),
+    'format': fields.String(required=False, description='File format'),
+    'storage_file_name': fields.String(required=False, description='File name in storage'),
+    'storage_path': fields.String(required=False, description='File path in storage')
 })
 
 dataset_create_request_model = namespace.model('DatasetCreateRequest', {
@@ -36,8 +60,20 @@ datasets_list_model = namespace.model('Datasets', {
     'size': fields.Integer(required=False, description='Dataset information')
 })
 
+dataset_create_nested_response_model = namespace.model('DatasetCreateNested', {
+    'id': fields.String(readonly=True, required=True, description='Dataset ID'),
+    'design_state': fields.String(readonly=True, required=True, description='The actual state of design'),
+})
+
+dataset_version_create_nested_response_model = namespace.model('DatasetVersionNested', {
+    'id': fields.String(readonly=True, required=True, description='Dataset Version ID'),
+    'name': fields.String(readonly=True, required=True, description='Dataset version name'),
+    'design_state': fields.String(readonly=True, required=True, description='The actual state of design'),
+})
+
 dataset_create_response_model = namespace.model('DatasetCreate', {
-    'id': fields.String(readonly=True, required=True, description='Dataset ID')
+    'dataset': fields.Nested(dataset_create_nested_response_model, description='Dataset response model'),
+    'version': fields.Nested(dataset_version_create_nested_response_model, description='Dataset version response model'),
 })
 
 @namespace.route('/<string:dataset_id>')
@@ -64,11 +100,13 @@ class DatasetsController(Resource):
             raise NotFound()
 
     # PUT /api/v1/datasets/:dataset_id
+    @namespace.doc("Update a Dataset")
     @namespace.expect(dataset_create_request_model, validate=True)
+    @parse_user_header
     def put(self, dataset_id):
         '''Update a specific dataset'''
         payload = request.get_json()
-        service.update_dataset(dataset_id, payload)
+        service.update_dataset(dataset_id, payload, g.user_id)
         return {}, 200
     
     # DELETE /api/v1/datasets/:dataset_id
@@ -91,6 +129,7 @@ class DatasetsEnableController(Resource):
 
     # PUT /api/v1/datasets/:dataset_id/enable
     @namespace.doc("Enable a Dataset")
+    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
     @parse_tenancy_header
     def put(self, dataset_id):
         '''Enable a specific dataset'''
@@ -102,7 +141,7 @@ class DatasetsEnableController(Resource):
 @namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class DatasetsListController(Resource):
 
-    method_decorators = [authenticate, authorize]
+    # method_decorators = [authenticate, authorize]
     
     # GET /api/v1/datasets
     @namespace.doc('Search datasets')
@@ -139,7 +178,35 @@ class DatasetsListController(Resource):
     # POST /api/v1/datasets
     @namespace.marshal_with(dataset_create_response_model)
     @namespace.expect(dataset_create_request_model, validate=True)
+    @parse_user_header
     def post(self):
         '''Create a new dataset'''
         payload = request.get_json()
-        return {'id': service.create_dataset(payload)}, 201
+        return service.create_dataset(payload, g.user_id), 201
+
+@namespace.route('/<string:dataset_id>/versions/<string:version>')
+@namespace.param('dataset_id', 'The dataset identifier')
+@namespace.param('version', 'The version name')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
+class DatasetsVersionController(Resource):
+
+    method_decorators = [authenticate, authorize]
+
+# @namespace.route('/<string:dataset_id>/files')
+# @namespace.param('dataset_id', 'The dataset identifier')
+# @namespace.response(500, 'Internal Server Error')
+# @namespace.doc(security=['api_key', 'api_secret', 'user_id'])
+# class DatasetsBatchFilesControlles(Resource):
+
+#     method_decorators = [authenticate, authorize]
+
+#     # POST /api/v1/datasets/:dataset_id/files
+#     @namespace.doc("Create dataset file")
+#     @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+#     @parse_tenancy_header
+#     def post(self, dataset_id):
+#         '''Create dataset files'''
+#         payload = request.get_json()
+#         service.create_files(dataset_id, payload, g.tenancies)
+#         return {}, 201
+

@@ -1,5 +1,5 @@
 import logging
-from app.models.datasets import Datasets
+from app.models.datasets import Datasets, DatasetVersions, DataFiles, DesignState
 from app.repositories.datasets import DatasetRepository
 from werkzeug.exceptions import NotFound
 import json
@@ -7,7 +7,7 @@ import json
 repository = DatasetRepository()
 
 class DatasetService:
-    def __adapt_dataset(self, dataset):
+    def _adapt_dataset(self, dataset):
         return {
             'id': dataset.id, 
             'name': dataset.name, 
@@ -15,15 +15,17 @@ class DatasetService:
             'is_enabled': dataset.is_enabled,
             'created_at': dataset.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': dataset.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'tenancy': dataset.tenancy
+            'tenancy': dataset.tenancy,
+            'version': dataset.version,
+            'files': dataset.files
         }
-    
+
     def fetch_dataset(self, dataset_id, is_enabled=True, tenancies=[]):
         try: 
             res = repository.fetch(dataset_id, is_enabled, tenancies)
 
             if res is not None:
-                datasets = self.__adapt_dataset(res)
+                datasets = self._adapt_dataset(res)
                 return datasets
             
             return None
@@ -31,7 +33,21 @@ class DatasetService:
             logging.error(e)
             raise e
 
-    def update_dataset(self, dataset_id, request_body):
+    def _get_latest_dataset_version(self, dataset):
+        if dataset.versions:
+            latest_version = sorted(dataset.versions, key=lambda x: x.created_at, reverse=True)[0]
+            return latest_version
+        else:
+            return None
+
+    def _bump_dataset_version(self, dataset):
+        latest_version = self._get_latest_dataset_version(dataset)
+        if (latest_version is None):
+            latest_version = 0
+
+        return int(latest_version) + 1
+
+    def update_dataset(self, dataset_id, request_body, user_id):
         try: 
             dataset = repository.fetch(dataset_id)
 
@@ -41,15 +57,66 @@ class DatasetService:
             dataset.name = request_body['name']
             dataset.data = request_body['data']
             dataset.tenancy = request_body['tenancy']
+            dataset.owner_id = user_id
+            
+            # create new version
+            new_version = self._bump_dataset_version(dataset)
+            dataset.versions = DatasetVersions(name=str(new_version),
+                                               author_id=user_id)
+            
+            # attach files
+            if 'files' in request_body:
+                for file in request_body['files']:
+                    dataset.files.append(DataFiles(name=file['name'],
+                                                   size_bytes=file['size_bytes'],
+                                                   extension=file['extension'],
+                                                   format=file['format'],
+                                                   storage_file_name=file['storage_file_name'],
+                                                   storage_path=file['storage_path'],
+                                                   author_id=user_id))
+
             repository.upsert(dataset)
         except Exception as e:
             logging.error(e)
             raise e
 
-    def create_dataset(self, request_body):
+    def create_dataset(self, request_body, user_id):
         try:
-            dataset = Datasets(name=request_body['name'], data=request_body['data'], tenancy=request_body['tenancy'])
-            return repository.upsert(dataset).id
+            dataset = Datasets(name=request_body['name'], 
+                               data=request_body['data'], 
+                               tenancy=request_body['tenancy'],
+                               design_state=DesignState.DRAFT,
+                               owner_id=user_id)
+            
+            # create new version
+            dataset.versions.append(DatasetVersions(name='1',
+                                                    design_state=DesignState.DRAFT,
+                                                    created_by=user_id))
+            
+            # # attach files
+            # if 'files' in request_body:
+            #     for file in request_body['files']:
+            #         dataset.files.append(DataFiles(name=file['name'],
+            #                                        size_bytes=file['size_bytes'],
+            #                                        extension=file['extension'],
+            #                                        format=file['format'],
+            #                                        storage_file_name=file['storage_file_name'],
+            #                                        storage_path=file['storage_path'],
+            #                                        author_id=user_id))
+
+            created = repository.upsert(dataset)
+            return {
+                'dataset': {
+                    'id': created.id,
+                    'design_state': created.design_state.name,
+                },
+                'version': {
+                    'id': created.versions[0].id,
+                    'name': created.versions[0].name,
+                    'design_state': created.versions[0].design_state.name,
+                }
+            }
+        
         except Exception as e:
             logging.error(e)
             raise e
@@ -86,6 +153,8 @@ class DatasetService:
             logging.error(e)
             raise e
         
+    # TODO enable/disable dataset versions
+    
     def fetch_available_filters(self):
         with open('app/resources/available_filters.json') as categories:
             return json.load(categories)
@@ -94,7 +163,7 @@ class DatasetService:
         try: 
             res = repository.search(query_params, tenancies)
             if res is not None:
-                datasets = [self.__adapt_dataset(dataset) for dataset in res]
+                datasets = [self._adapt_dataset(dataset) for dataset in res]
                 return datasets
             
             return []
