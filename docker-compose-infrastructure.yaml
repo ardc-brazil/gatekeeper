@@ -40,7 +40,7 @@ services:
       - "1080:1080"
     env_file:
       - ${ENV_FILE_PATH}
-    command: -port 1080 -s3-bucket datamap -s3-endpoint http://minio:9000
+    command: -port 1080 -s3-bucket datamap -s3-endpoint http://minio:9000 -cors-allow-headers X-User-Id
     depends_on: 
       - minio
     networks:
