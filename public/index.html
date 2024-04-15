@@ -1,26 +1,38 @@
 <!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <title>Uppy</title>
-    <link href="https://transloadit.edgly.net/releases/uppy/v1.3.0/uppy.min.css" rel="stylesheet">
-  </head>
-  <body>
-    <div id="drag-drop-area"></div>
 
-    <script src="https://transloadit.edgly.net/releases/uppy/v1.3.0/uppy.min.js"></script>
-    <script>
-      var uppy = Uppy.Core()
-        .use(Uppy.Dashboard, {
-          inline: true,
-          target: '#drag-drop-area'
-        })
-        .use(Uppy.Tus, {endpoint: 'https://datamap.pcs.usp.br/files/'})
-        // Change above endpoint to test locally
+<head>
+  <meta charset="utf-8">
+  <title>Uppy</title>
+  <link href="https://transloadit.edgly.net/releases/uppy/v1.3.0/uppy.min.css" rel="stylesheet">
+</head>
 
-      uppy.on('complete', (result) => {
-        console.log('Upload complete! We’ve uploaded these files:', result.successful)
+<body>
+  <div id="drag-drop-area"></div>
+
+  <script src="https://transloadit.edgly.net/releases/uppy/v1.3.0/uppy.min.js"></script>
+  <script>
+    var uppy = Uppy.Core(
+      {
+        autoProceed: true,
+      }
+    )
+      .use(Uppy.Dashboard, {
+        inline: true,
+        target: '#drag-drop-area'
       })
-    </script>
-  </body>
+      .use(Uppy.Tus, {
+        endpoint: 'http://localhost:1080/files/',
+        headers: {
+          "X-User-Id": 'test',
+        }
+      })
+    // Change above endpoint to test locally
+
+    uppy.on('complete', (result) => {
+      console.log('Upload complete! We’ve uploaded these files:', result.successful)
+    })
+  </script>
+</body>
+
 </html>
