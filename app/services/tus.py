@@ -35,3 +35,4 @@ class TusService:
         except Exception as e:
             logging.error(e)
             return TusResult(status_code=500, body_msg=str(e), reject_upload=True)
+        
