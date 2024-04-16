@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID
 import jwt
 from app.controllers.interceptors.authorization_container import AuthorizationContainer
 from app.exceptions.UnauthorizedException import UnauthorizedException
@@ -23,9 +24,13 @@ class AuthService:
             logging.warn(f'incorrect api_secret {salted_api_secret}')
             raise UnauthorizedException('wrong_credentials')
 
-    def is_token_valid(self, user_token: str):
+    def validate_jwt_and_decode(self, user_token: str) -> dict:
+        '''Validate JWT signature and return the token payload'''
+        if user_token is None:
+            raise UnauthorizedException('missing_information')
+
         try:
-            jwt.decode(user_token, 
+            return jwt.decode(user_token, 
                        app.config['USER_TOKEN_SECRET'], 
                        algorithms=['HS256'])
         except jwt.ExpiredSignatureError as e:
@@ -34,11 +39,14 @@ class AuthService:
         except jwt.InvalidTokenError:
             logging.warn(f'invalid token: {user_token}')
             raise UnauthorizedException('invalid_token')
+        except Exception as e:
+            logging.error(f'failed to validate jwt. {e}')
+            raise e
 
-    def is_user_authorized(self, user_id: str, resource: str, action: str):
+    def is_user_authorized(self, user_id: UUID, resource: str, action: str):
         if user_id is None or resource is None or action is None:
             raise UnauthorizedException('missing_information')
         
-        if not AuthorizationContainer.instance().getEnforcer().enforce(user_id, resource, action):
+        if not AuthorizationContainer.instance().getEnforcer().enforce(str(user_id), resource, action):
             logging.info('User %s is not authorized to %s %s', user_id, action, resource)
             raise UnauthorizedException('not_authorized')

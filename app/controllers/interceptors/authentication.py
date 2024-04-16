@@ -14,7 +14,7 @@ def authenticate(f):
 
         try: 
             auth_service.is_client_authorized(api_key, api_secret)
-        except UnauthorizedException as e:
+        except UnauthorizedException:
             return make_response(jsonify({'message': 'Unauthorized'}), 401)
 
         return f(*args, **kwargs)
