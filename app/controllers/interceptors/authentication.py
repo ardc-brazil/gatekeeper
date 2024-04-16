@@ -2,9 +2,9 @@ from flask import request, jsonify, make_response
 from functools import wraps
 
 from app.exceptions.UnauthorizedException import UnauthorizedException
-from app.services.authentication import AuthenticationService
+from app.services.auth import AuthService
 
-authentication_service = AuthenticationService()
+auth_service = AuthService()
 
 def authenticate(f):
     @wraps(f)
@@ -13,7 +13,7 @@ def authenticate(f):
         api_secret = request.headers.get('X-Api-Secret')
 
         try: 
-            authentication_service.authenticate_client(api_key, api_secret)
+            auth_service.is_client_authorized(api_key, api_secret)
         except UnauthorizedException as e:
             return make_response(jsonify({'message': 'Unauthorized'}), 401)
 
