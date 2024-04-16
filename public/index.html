@@ -10,12 +10,18 @@
 
     <script src="https://transloadit.edgly.net/releases/uppy/v1.3.0/uppy.min.js"></script>
     <script>
-      var uppy = Uppy.Core()
+      var uppy = Uppy.Core({meta: {"dataset_id": "d4338d15-ef18-4173-9e89-14bad828b9aa"}})
         .use(Uppy.Dashboard, {
           inline: true,
-          target: '#drag-drop-area'
+          target: '#drag-drop-area',
         })
-        .use(Uppy.Tus, {endpoint: 'https://datamap.pcs.usp.br/files/'})
+        .use(Uppy.Tus, {
+          endpoint: 'http://localhost:1080/files/', 
+          headers: {
+            "X-User-Id": "09928f56-2e88-4a1c-a8fb-1393d092634f",
+            "X-User-Token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.ysqb87NSBiesxz24uFUXiwsegEJkL28glEXayoFcIPg"
+          }
+        })
         // Change above endpoint to test locally
 
       uppy.on('complete', (result) => {
