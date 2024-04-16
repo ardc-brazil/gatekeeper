@@ -10,6 +10,14 @@ Backend for DataAmazon.
 ## Environment Setup
 
 **Use Makefile targets to make your life easier!**
+0. Environment variable setup.
+Set the env file path before start docker containers
+
+```sh
+export ENV_FILE_PATH=~/workspace/gatekeeper/dev.env
+```
+
+You have to change the path to the `dev.env` correcly based on the local environment.
 
 1. Start docker containers
 
