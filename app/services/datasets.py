@@ -1,10 +1,14 @@
 import logging
+from uuid import UUID
 from app.models.datasets import Datasets, DatasetVersions, DataFiles, DesignState
 from app.repositories.datasets import DatasetRepository
 from werkzeug.exceptions import NotFound
 import json
 
+from app.services.users import UsersService
+
 repository = DatasetRepository()
+user_service = UsersService()
 
 class DatasetService:
     def _adapt_dataset(self, dataset):
@@ -16,10 +20,11 @@ class DatasetService:
             'created_at': dataset.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': dataset.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
             'tenancy': dataset.tenancy,
-            'version': dataset.version,
-            'files': dataset.files
+            'versions': dataset.versions
         }
 
+    # TODO fetch latest dataset version
+    # TODO fetch dataset with all versions
     def fetch_dataset(self, dataset_id, is_enabled=True, tenancies=[]):
         try: 
             res = repository.fetch(dataset_id, is_enabled, tenancies)
@@ -159,6 +164,7 @@ class DatasetService:
         with open('app/resources/available_filters.json') as categories:
             return json.load(categories)
     
+    # TODO search by version
     def search_datasets(self, query_params, tenancies=[]):
         try: 
             res = repository.search(query_params, tenancies)
@@ -170,3 +176,25 @@ class DatasetService:
         except Exception as e:
             logging.error(e)
             raise e
+
+    def create_data_file(self, file, dataset_id: UUID, user_id: UUID):
+        try:
+            user = user_service.fetch_by_id(user_id)
+            # dataset = self.fetch_dataset(dataset_id, tenancies=user.tenancies)
+            # TODO use self.fetch_by_id when versions are fixed
+            dataset = repository.fetch(dataset_id, True, user.tenancies)
+
+            # TODO fetch latest not published version
+            dataset.files.append(DataFiles(name=file['name'],
+                                            size_bytes=file['size_bytes'],
+                                            extension=file['extension'],
+                                            format=file['format'],
+                                            storage_file_name=file['storage_file_name'],
+                                            storage_path=file['storage_path'],
+                                            author_id=user_id))
+            
+            repository.upsert(dataset)
+        except Exception as e:
+            logging.error(e)
+            raise e
+

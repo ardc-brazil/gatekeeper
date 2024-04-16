@@ -141,7 +141,7 @@ class DatasetsEnableController(Resource):
 @namespace.doc(security=['api_key', 'api_secret', 'user_id'])
 class DatasetsListController(Resource):
 
-    # method_decorators = [authenticate, authorize]
+    method_decorators = [authenticate, authorize]
     
     # GET /api/v1/datasets
     @namespace.doc('Search datasets')
