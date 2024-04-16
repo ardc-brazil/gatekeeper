@@ -2,13 +2,11 @@ from flask import Flask
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask
-from casbin.persist.adapters import FileAdapter
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from app.controllers.interceptors.authorization_container import AuthorizationContainer
 from postgresql_watcher import PostgresqlWatcher
-import os
 
 db = SQLAlchemy()
 
