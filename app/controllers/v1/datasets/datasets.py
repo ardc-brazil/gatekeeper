@@ -101,6 +101,7 @@ class DatasetsController(Resource):
     @namespace.param('is_enabled', 'Flag to filter enabled datasets. Default is true')
     @namespace.param('latest_version', 'Flag to filter latest version of the dataset. Default is false')
     @namespace.param('version_design_state', 'Design state to be used in conjunction with "latest_version" param. Default is "DRAFT"')
+    @namespace.param('version_is_enabled', 'Flag to filter enabled/disabled versions. Default is true')
     @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
     @parse_tenancy_header
     @parse_user_header
@@ -111,7 +112,8 @@ class DatasetsController(Resource):
                                         user_id=g.user_id,
                                         tenancies=g.tenancies,
                                         latest_version=request.args.get('latest_version'),
-                                        version_design_state=request.args.get('version_design_state', None))
+                                        version_design_state=request.args.get('version_design_state', None),
+                                        version_is_enabled=request.args.get('version_is_enabled', True))
         if (dataset is not None):
             return dataset
         else:

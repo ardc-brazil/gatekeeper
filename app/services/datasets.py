@@ -65,13 +65,14 @@ class DatasetService:
         
         return tenancies
 
-    def fetch_dataset(self, dataset_id, is_enabled=True, user_id=None, tenancies=[], latest_version=False, version_design_state=None):
+    def fetch_dataset(self, dataset_id, is_enabled=True, user_id=None, tenancies=[], latest_version=False, version_design_state=None, version_is_enabled=True):
         try:
             dataset = repository.fetch(dataset_id=dataset_id, 
-                                    is_enabled=is_enabled, 
-                                    tenancies=self._determine_tenancies(user_id, tenancies), 
-                                    latest_version=latest_version,
-                                    version_design_state=version_design_state)
+                                       is_enabled=is_enabled, 
+                                       tenancies=self._determine_tenancies(user_id, tenancies), 
+                                       latest_version=latest_version,
+                                       version_design_state=version_design_state,
+                                       version_is_enabled=version_is_enabled)
             
             if dataset is not None:
                 return self._adapt_dataset(dataset)
@@ -229,7 +230,6 @@ class DatasetService:
         except Exception as e:
             logging.error(e)
             raise e
-        
     
     def fetch_available_filters(self):
         with open('app/resources/available_filters.json') as categories:
@@ -267,4 +267,3 @@ class DatasetService:
         except Exception as e:
             logging.error(e)
             raise e
-

@@ -3,7 +3,7 @@ from app import db
 from sqlalchemy import and_, or_, cast, desc, func, String
 
 class DatasetRepository:
-    def fetch(self, dataset_id, is_enabled=True, tenancies=[], latest_version=False, version_design_state=None):
+    def fetch(self, dataset_id, is_enabled=True, tenancies=[], latest_version=False, version_design_state=None, version_is_enabled=True):
         query = db.session.query(Datasets)
         query = query.filter(Datasets.id == dataset_id)
 
@@ -25,9 +25,12 @@ class DatasetRepository:
                 .join(DatasetVersions, and_(
                     Datasets.id == DatasetVersions.dataset_id,
                     DatasetVersions.created_at == subquery.c.max_created_at,
-                    DatasetVersions.design_state == version_design_state if version_design_state else True
+                    DatasetVersions.design_state == version_design_state if version_design_state else True,
+                    DatasetVersions.is_enabled == version_is_enabled,
                 ))
             )
+        elif version_is_enabled:
+            query = query.filter(Datasets.versions.any(DatasetVersions.is_enabled == version_is_enabled))
         
         return query.first()
     
