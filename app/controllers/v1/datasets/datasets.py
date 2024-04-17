@@ -29,7 +29,8 @@ dataset_version_model = namespace.model('DatasetVersion', {
     'files': fields.List(fields.Nested(data_file_model), required=False, description='List of data files contained in version'),
     'updated_at': fields.String(required=True, description='Dataset version updated at datetime'),
     'created_at': fields.String(required=True, description='Dataset version created at datetime'),
-    'created_by': fields.String(required=True, description='Dataset version author id')
+    'created_by': fields.String(required=True, description='Dataset version author id'),
+    'is_enabled': fields.Boolean(required=True, description='Dataset version status'),
 })
 
 dataset_model = namespace.model('Dataset', {
@@ -214,21 +215,40 @@ class DatasetsVersionController(Resource):
 
     method_decorators = [authenticate, authorize]
 
-# @namespace.route('/<string:dataset_id>/files')
-# @namespace.param('dataset_id', 'The dataset identifier')
-# @namespace.response(500, 'Internal Server Error')
-# @namespace.doc(security=['api_key', 'api_secret', 'user_id'])
-# class DatasetsBatchFilesControlles(Resource):
+    # DELETE /api/v1/datasets/:dataset_id/versions/:version
+    @namespace.doc("Disable a Dataset Version")
+    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+    @parse_tenancy_header
+    @parse_user_header
+    def delete(self, dataset_id, version):
+        '''Disable a specific dataset version'''
+        service.disable_dataset_version(dataset_id=dataset_id, 
+                                        user_id=g.user_id,
+                                        version_name=version, 
+                                        tenancies=g.tenancies)
+        return {}, 200
 
-#     method_decorators = [authenticate, authorize]
+@namespace.route('/<string:dataset_id>/versions/<string:version>/enable')
+@namespace.param('dataset_id', 'The dataset identifier')
+@namespace.param('version', 'The version name')
+@namespace.response(404, 'Dataset or version not found')
+@namespace.response(500, 'Internal Server error')
+@namespace.doc(security=['api_key', 'api_secret', 'user_id'])
+class DatasetsVersionEnableController(Resource):
 
-#     # POST /api/v1/datasets/:dataset_id/files
-#     @namespace.doc("Create dataset file")
-#     @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
-#     @parse_tenancy_header
-#     def post(self, dataset_id):
-#         '''Create dataset files'''
-#         payload = request.get_json()
-#         service.create_files(dataset_id, payload, g.tenancies)
-#         return {}, 201
+    method_decorators = [authenticate, authorize]
+
+    # PUT /api/v1/datasets/:dataset_id/versions/:version/enable
+    @namespace.doc("Enable a Dataset Version")
+    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+    @parse_tenancy_header
+    @parse_user_header
+    def put(self, dataset_id, version):
+        '''Enable a specific dataset version'''
+        service.enable_dataset_version(dataset_id=dataset_id, 
+                                        user_id=g.user_id,
+                                        version_name=version, 
+                                        tenancies=g.tenancies)
+        return {}, 200
+
 

@@ -190,13 +190,51 @@ class DatasetService:
             logging.error(e)
             raise e
         
-    # TODO enable/disable dataset versions
+    def enable_dataset_version(self, dataset_id, user_id, version_name, tenancies=[]):
+        try: 
+            dataset = repository.fetch(dataset_id=dataset_id, 
+                                       tenancies=self._determine_tenancies(user_id, tenancies))
+
+            if dataset is None:
+                raise NotFound(f'Dataset {dataset_id} not found')
+            
+            version = version_repository.fetch_version_by_name(dataset_id, version_name)
+
+            if version is None:
+                raise NotFound(f'Version {version_name} not found for Dataset {dataset_id}')
+            
+            version.is_enabled = True
+
+            version_repository.upsert(version)
+        except Exception as e:
+            logging.error(e)
+            raise e
+
+    def disable_dataset_version(self, dataset_id, user_id, version_name, tenancies=[]):
+        try: 
+            dataset = repository.fetch(dataset_id=dataset_id, 
+                                       tenancies=self._determine_tenancies(user_id, tenancies))
+
+            if dataset is None:
+                raise NotFound(f'Dataset {dataset_id} not found')
+            
+            version = version_repository.fetch_version_by_name(dataset_id, version_name)
+
+            if version is None:
+                raise NotFound(f'Version {version_name} not found for Dataset {dataset_id}')
+            
+            version.is_enabled = False
+
+            version_repository.upsert(version)
+        except Exception as e:
+            logging.error(e)
+            raise e
+        
     
     def fetch_available_filters(self):
         with open('app/resources/available_filters.json') as categories:
             return json.load(categories)
     
-    # TODO search by version
     def search_datasets(self, query_params, user_id, tenancies=[]):
         try:
             res = repository.search(query_params=query_params, 

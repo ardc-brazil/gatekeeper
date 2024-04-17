@@ -16,3 +16,7 @@ class DatasetVersionRepository:
         db.session.refresh(dataset_version)
         return dataset_version
     
+    def fetch_version_by_name(self, dataset_id, version_name):
+        return db.session.query(DatasetVersions) \
+            .filter_by(dataset_id=dataset_id, name=version_name) \
+            .first()
