@@ -2,6 +2,7 @@ import logging
 from uuid import UUID
 from app.models.tus import TusResult
 from app.services.datasets import DatasetService
+import os
 
 dataset_service = DatasetService()
 
@@ -15,7 +16,8 @@ class TusService:
             'name': file_metadata['filename'],
             'size_bytes': file_upload['Size'],
             'format': file_metadata['filetype'],
-            'storage_file_name': file_upload['ID'],
+            'extension': os.path.splitext(file_metadata['filename'])[1][1:].lower(),
+            'storage_file_name': storage['Key'],
             'storage_path': storage['Bucket'] + "/" + storage['Key'],
             'author_id': user_id
         }
