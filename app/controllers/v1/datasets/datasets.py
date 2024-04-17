@@ -19,7 +19,17 @@ data_file_model = namespace.model('DataFile', {
     'storage_path': fields.String(required=False, description='File path in storage'),
     'updated_at': fields.String(required=True, description='Data file updated at datetime'),
     'created_at': fields.String(required=True, description='Data file created at datetime'),
-    'author_id': fields.String(required=True, description="Data file author id")
+    'created_by': fields.String(required=True, description='Data file author id')
+})
+
+dataset_version_model = namespace.model('DatasetVersion', {
+    'id': fields.String(readonly=True, required=True, description='Dataset Version ID'),
+    'name': fields.String(readonly=True, required=True, description='Dataset version name'),
+    'design_state': fields.String(readonly=True, required=True, description='The actual state of design'),
+    'files': fields.List(fields.Nested(data_file_model), required=False, description='List of data files contained in version'),
+    'updated_at': fields.String(required=True, description='Dataset version updated at datetime'),
+    'created_at': fields.String(required=True, description='Dataset version created at datetime'),
+    'created_by': fields.String(required=True, description='Dataset version author id')
 })
 
 dataset_model = namespace.model('Dataset', {
@@ -30,8 +40,7 @@ dataset_model = namespace.model('Dataset', {
     'updated_at': fields.String(required=True, description='Dataset updated at datetime'),
     'created_at': fields.String(required=True, description='Dataset created at datetime'),
     'tenancy': fields.String(required=False, description='Dataset tenancy'),
-    'version': fields.String(required=False, description='Dataset current version'),
-    'files': fields.List(fields.Nested(data_file_model), required=False, description="Dataset data files")
+    'versions': fields.List(fields.Nested(dataset_version_model), required=False, description='Dataset current version'),
 })
 
 data_file_create_request_model = namespace.model('DataFileCreateRequest', {
@@ -89,11 +98,19 @@ class DatasetsController(Resource):
     @namespace.doc("Get a Dataset")
     @namespace.marshal_with(dataset_model)
     @namespace.param('is_enabled', 'Flag to filter enabled datasets. Default is true')
+    @namespace.param('latest_version', 'Flag to filter latest version of the dataset. Default is false')
+    @namespace.param('version_design_state', 'Design state to be used in conjunction with "latest_version" param. Default is "DRAFT"')
     @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
     @parse_tenancy_header
+    @parse_user_header
     def get(self, dataset_id):
         '''Fetch a specific dataset'''
-        dataset = service.fetch_dataset(dataset_id, request.args.get('is_enabled'), g.tenancies)
+        dataset = service.fetch_dataset(dataset_id=dataset_id, 
+                                        is_enabled=request.args.get('is_enabled'),
+                                        user_id=g.user_id,
+                                        tenancies=g.tenancies,
+                                        latest_version=request.args.get('latest_version'),
+                                        version_design_state=request.args.get('version_design_state', None))
         if (dataset is not None):
             return dataset
         else:
@@ -152,9 +169,11 @@ class DatasetsListController(Resource):
     @namespace.param('date_to', 'Dataset date to, YYYY-MM-DD')
     @namespace.param('full_text', 'Dataset full text')
     @namespace.param('include_disabled', 'True to include disabled Datasets')
+    @namespace.param('version', 'A specific dataset version')
     @namespace.marshal_with(datasets_list_model)
-    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+    @namespace.param('  X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
     @parse_tenancy_header
+    @parse_user_header
     def get(self):
         '''Fetch all datasets'''
         query_params = {
@@ -164,10 +183,13 @@ class DatasetsListController(Resource):
             'date_from': request.args.get('date_from'),
             'date_to': request.args.get('date_to'),
             'full_text': request.args.get('full_text'),
-            'include_disabled': request.args.get('include_disabled', False)
+            'include_disabled': request.args.get('include_disabled', False),
+            'version': request.args.get('version'),
         }
 
-        datasets = service.search_datasets(query_params, g.tenancies)
+        datasets = service.search_datasets(query_params, 
+                                           g.user_id,
+                                           g.tenancies)
         payload =  {
             'content': datasets,
             'size': len(datasets)
