@@ -178,7 +178,7 @@ class DatasetsListController(Resource):
     @namespace.param('include_disabled', 'True to include disabled Datasets')
     @namespace.param('version', 'A specific dataset version')
     @namespace.marshal_with(datasets_list_model)
-    @namespace.param('  X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
+    @namespace.param('X-Datamap-Tenancies', 'List of user tenancies. Separated by comma', 'header')
     @parse_tenancy_header
     @parse_user_header
     def get(self):
