@@ -122,11 +122,15 @@ class DatasetsController(Resource):
     # PUT /api/v1/datasets/:dataset_id
     @namespace.doc("Update a Dataset")
     @namespace.expect(dataset_create_request_model, validate=True)
+    @parse_tenancy_header
     @parse_user_header
     def put(self, dataset_id):
         '''Update a specific dataset'''
         payload = request.get_json()
-        service.update_dataset(dataset_id, payload, g.user_id)
+        service.update_dataset(dataset_id=dataset_id, 
+                               request_body=payload, 
+                               user_id=g.user_id,
+                               tenancies=g.tenancies)
         return {}, 200
     
     # DELETE /api/v1/datasets/:dataset_id

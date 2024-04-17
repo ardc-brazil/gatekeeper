@@ -3,7 +3,7 @@ from uuid import UUID
 from app.models.datasets import Datasets, DatasetVersions, DataFiles, DesignState
 from app.repositories.dataset_versions import DatasetVersionRepository
 from app.repositories.datasets import DatasetRepository
-from werkzeug.exceptions import NotFound
+from werkzeug.exceptions import NotFound, BadRequest
 import json
 
 from app.services.users import UsersService
@@ -82,23 +82,10 @@ class DatasetService:
             logging.error(e)
             raise e
 
-    def _get_latest_dataset_version(self, dataset):
-        if dataset.versions:
-            latest_version = sorted(dataset.versions, key=lambda x: x.created_at, reverse=True)[0]
-            return latest_version
-        else:
-            return None
-
-    def _bump_dataset_version(self, dataset):
-        latest_version = self._get_latest_dataset_version(dataset)
-        if (latest_version is None):
-            latest_version = 0
-
-        return int(latest_version) + 1
-
-    def update_dataset(self, dataset_id, request_body, user_id):
+    def update_dataset(self, dataset_id, request_body, user_id, tenancies=[]):
         try: 
-            dataset = repository.fetch(dataset_id)
+            dataset = repository.fetch(dataset_id=dataset_id,
+                                       tenancies=self._determine_tenancies(user_id, tenancies))
 
             if dataset is None:
                 raise NotFound(f'Dataset {dataset_id} not found')
@@ -107,23 +94,15 @@ class DatasetService:
             dataset.data = request_body['data']
             dataset.tenancy = request_body['tenancy']
             dataset.owner_id = user_id
-            
-            # create new version
-            new_version = self._bump_dataset_version(dataset)
-            dataset.versions = DatasetVersions(name=str(new_version),
-                                               author_id=user_id)
-            
-            # attach files
-            if 'files' in request_body:
-                for file in request_body['files']:
-                    dataset.files.append(DataFiles(name=file['name'],
-                                                   size_bytes=file['size_bytes'],
-                                                   extension=file['extension'],
-                                                   format=file['format'],
-                                                   storage_file_name=file['storage_file_name'],
-                                                   storage_path=file['storage_path'],
-                                                   author_id=user_id))
 
+            # check if new version is needed and create it
+            draft_version = next((v for v in dataset.versions if v.design_state == DesignState.DRAFT and v.is_enabled), None)
+
+            if draft_version is None:
+                new_version_name = str(int(dataset.versions[-1].name) + 1) if dataset.versions else '1'
+                new_version = DatasetVersions(name=new_version_name, design_state=DesignState.DRAFT, created_by=user_id)
+                dataset.versions.append(new_version)
+            
             repository.upsert(dataset)
         except Exception as e:
             logging.error(e)
@@ -194,7 +173,8 @@ class DatasetService:
     def enable_dataset_version(self, dataset_id, user_id, version_name, tenancies=[]):
         try: 
             dataset = repository.fetch(dataset_id=dataset_id, 
-                                       tenancies=self._determine_tenancies(user_id, tenancies))
+                                       tenancies=self._determine_tenancies(user_id, tenancies),
+                                       version_is_enabled=False)
 
             if dataset is None:
                 raise NotFound(f'Dataset {dataset_id} not found')
@@ -219,11 +199,14 @@ class DatasetService:
             if dataset is None:
                 raise NotFound(f'Dataset {dataset_id} not found')
             
+            if len(dataset.versions) <= 1:
+                raise BadRequest('Cannot disable the only version of the dataset')
+
             version = version_repository.fetch_version_by_name(dataset_id, version_name)
 
             if version is None:
                 raise NotFound(f'Version {version_name} not found for Dataset {dataset_id}')
-            
+
             version.is_enabled = False
 
             version_repository.upsert(version)
