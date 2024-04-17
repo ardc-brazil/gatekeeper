@@ -1,6 +1,7 @@
 import logging
 from uuid import UUID
 from app.models.datasets import Datasets, DatasetVersions, DataFiles, DesignState
+from app.repositories.dataset_versions import DatasetVersionRepository
 from app.repositories.datasets import DatasetRepository
 from werkzeug.exceptions import NotFound
 import json
@@ -8,9 +9,37 @@ import json
 from app.services.users import UsersService
 
 repository = DatasetRepository()
+version_repository = DatasetVersionRepository()
 user_service = UsersService()
 
 class DatasetService:
+    def _adapt_file(self, file):
+        return {
+            'id': file.id,
+            'name': file.name,
+            'size_bytes': file.size_bytes,
+            'extension': file.extension,
+            'format': file.format,
+            'storage_file_name': file.storage_file_name,
+            'storage_path': file.storage_path,
+            'created_at': file.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': file.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'created_by': file.created_by,
+        }
+    
+    def _adapt_version(self, version):
+        return {
+            'id': version.id,
+            'name': version.name,
+            'description': version.description,
+            'created_at': version.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': version.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'created_by': version.created_by,
+            'is_enabled': version.is_enabled,
+            'design_state': version.design_state.name,
+            'files': [self._adapt_file(file) for file in version.files]
+        }
+
     def _adapt_dataset(self, dataset):
         return {
             'id': dataset.id, 
@@ -20,19 +49,33 @@ class DatasetService:
             'created_at': dataset.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': dataset.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
             'tenancy': dataset.tenancy,
-            'versions': dataset.versions
+            'versions': [self._adapt_version(version) for version in dataset.versions],
         }
+    
+    def _determine_tenancies(self, user_id, tenancies=[]):
+        user = user_service.fetch_by_id(user_id)
+        user_tenancies = user.get('tenancies', [])
 
-    # TODO fetch latest dataset version
-    # TODO fetch dataset with all versions
-    def fetch_dataset(self, dataset_id, is_enabled=True, tenancies=[]):
-        try: 
-            res = repository.fetch(dataset_id, is_enabled, tenancies)
+        if not tenancies:
+            tenancies = user_tenancies
 
-            if res is not None:
-                datasets = self._adapt_dataset(res)
-                return datasets
+        if not set(tenancies).issubset(set(user_tenancies)):
+            logging.warn(f'user {user_id} trying to query with unauthorized tenancy: {tenancies}')
+            raise NotFound()
+        
+        return tenancies
+
+    def fetch_dataset(self, dataset_id, is_enabled=True, user_id=None, tenancies=[], latest_version=False, version_design_state=None):
+        try:
+            dataset = repository.fetch(dataset_id=dataset_id, 
+                                    is_enabled=is_enabled, 
+                                    tenancies=self._determine_tenancies(user_id, tenancies), 
+                                    latest_version=latest_version,
+                                    version_design_state=version_design_state)
             
+            if dataset is not None:
+                return self._adapt_dataset(dataset)
+
             return None
         except Exception as e:
             logging.error(e)
@@ -98,17 +141,6 @@ class DatasetService:
                                                     design_state=DesignState.DRAFT,
                                                     created_by=user_id))
             
-            # # attach files
-            # if 'files' in request_body:
-            #     for file in request_body['files']:
-            #         dataset.files.append(DataFiles(name=file['name'],
-            #                                        size_bytes=file['size_bytes'],
-            #                                        extension=file['extension'],
-            #                                        format=file['format'],
-            #                                        storage_file_name=file['storage_file_name'],
-            #                                        storage_path=file['storage_path'],
-            #                                        author_id=user_id))
-
             created = repository.upsert(dataset)
             return {
                 'dataset': {
@@ -165,9 +197,10 @@ class DatasetService:
             return json.load(categories)
     
     # TODO search by version
-    def search_datasets(self, query_params, tenancies=[]):
-        try: 
-            res = repository.search(query_params, tenancies)
+    def search_datasets(self, query_params, user_id, tenancies=[]):
+        try:
+            res = repository.search(query_params=query_params, 
+                                    tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies))
             if res is not None:
                 datasets = [self._adapt_dataset(dataset) for dataset in res]
                 return datasets
@@ -180,20 +213,19 @@ class DatasetService:
     def create_data_file(self, file, dataset_id: UUID, user_id: UUID):
         try:
             user = user_service.fetch_by_id(user_id)
-            # dataset = self.fetch_dataset(dataset_id, tenancies=user.tenancies)
-            # TODO use self.fetch_by_id when versions are fixed
-            dataset = repository.fetch(dataset_id, True, user.tenancies)
+            # check user has access (tenancy) in this dataset
+            dataset = self.fetch_dataset(dataset_id, tenancies=user['tenancies'])
+            version = version_repository.fetch_draft_version(dataset['id'])
 
-            # TODO fetch latest not published version
-            dataset.files.append(DataFiles(name=file['name'],
+            version.files.append(DataFiles(name=file['name'],
                                             size_bytes=file['size_bytes'],
                                             extension=file['extension'],
                                             format=file['format'],
                                             storage_file_name=file['storage_file_name'],
                                             storage_path=file['storage_path'],
-                                            author_id=user_id))
+                                            created_by=user_id))
             
-            repository.upsert(dataset)
+            version_repository.upsert(version)
         except Exception as e:
             logging.error(e)
             raise e
