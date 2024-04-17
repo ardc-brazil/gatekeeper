@@ -1,9 +1,9 @@
-from app.models.datasets import Datasets
+from app.models.datasets import DatasetVersions, Datasets, DesignState
 from app import db
-from sqlalchemy import and_, or_, cast, String
+from sqlalchemy import and_, or_, cast, desc, func, String
 
 class DatasetRepository:
-    def fetch(self, dataset_id, is_enabled=True, tenancies=[]):
+    def fetch(self, dataset_id, is_enabled=True, tenancies=[], latest_version=False, version_design_state=None):
         query = db.session.query(Datasets)
         query = query.filter(Datasets.id == dataset_id)
 
@@ -11,6 +11,28 @@ class DatasetRepository:
             query = query.filter(Datasets.is_enabled == is_enabled)
 
         query = query.filter(Datasets.tenancy.in_(tenancies))
+
+        # if latest_version:
+        #     # Datasets.versions.any(DatasetVersions.name == query_params['version'])
+        #     query = query.filter(Datasets.versions.any(DatasetVersions.design_state == version_design_state))\
+        #         .order_by(desc(DatasetVersions.created_at)) \
+
+        if latest_version:
+            subquery = (
+                db.session.query(DatasetVersions.dataset_id, func.max(DatasetVersions.created_at).label('max_created_at'))
+                .group_by(DatasetVersions.dataset_id)
+                .subquery()
+            )
+            
+            query = (
+                query
+                .join(subquery, subquery.c.dataset_id == Datasets.id)
+                .join(DatasetVersions, and_(
+                    Datasets.id == DatasetVersions.dataset_id,
+                    DatasetVersions.created_at == subquery.c.max_created_at,
+                    DatasetVersions.design_state == version_design_state if version_design_state else True
+                ))
+            )
         
         return query.first()
     
@@ -54,7 +76,10 @@ class DatasetRepository:
         if query_params['full_text']:
             search_term = f'%{query_params["full_text"]}%'
             query = query.filter(or_(cast(Datasets.data, String).ilike(search_term), Datasets.name.ilike(search_term)))
-    
+
+        if query_params['version']:
+            query = query.filter(Datasets.versions.any(DatasetVersions.name == query_params['version']))
+
         query = query.filter(Datasets.tenancy.in_(tenancies))
         
         return query.all()
