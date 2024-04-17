@@ -12,11 +12,6 @@ class DatasetRepository:
 
         query = query.filter(Datasets.tenancy.in_(tenancies))
 
-        # if latest_version:
-        #     # Datasets.versions.any(DatasetVersions.name == query_params['version'])
-        #     query = query.filter(Datasets.versions.any(DatasetVersions.design_state == version_design_state))\
-        #         .order_by(desc(DatasetVersions.created_at)) \
-
         if latest_version:
             subquery = (
                 db.session.query(DatasetVersions.dataset_id, func.max(DatasetVersions.created_at).label('max_created_at'))
