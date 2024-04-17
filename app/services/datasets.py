@@ -233,9 +233,8 @@ class DatasetService:
 
     def create_data_file(self, file, dataset_id: UUID, user_id: UUID):
         try:
-            user = user_service.fetch_by_id(user_id)
-            # check user has access (tenancy) in this dataset
-            dataset = self.fetch_dataset(dataset_id, tenancies=user['tenancies'])
+            dataset = self.fetch_dataset(dataset_id=dataset_id, 
+                                         user_id=user_id)
             version = version_repository.fetch_draft_version(dataset['id'])
 
             version.files.append(DataFiles(name=file['name'],
