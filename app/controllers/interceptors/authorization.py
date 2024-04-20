@@ -10,6 +10,9 @@ auth_service = AuthService()
 
 
 def __get_user_from_request(request) -> UUID:
+    if request.headers.get("X-User-Id") is None:
+        return None
+    
     return UUID(request.headers.get("X-User-Id"))
 
 
