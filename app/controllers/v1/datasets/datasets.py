@@ -82,11 +82,14 @@ dataset_model = namespace.model(
         "versions": fields.List(
             fields.Nested(dataset_version_model),
             required=False,
-            description="Dataset current version",
+            description="Dataset all versions",
         ),
         "design_state": fields.String(
             readonly=True, required=True, description="The actual state of design"
         ),
+        "current_version": fields.Nested(dataset_version_model,
+        required=False,
+        description="Dataset current version"),
     },
 )
 

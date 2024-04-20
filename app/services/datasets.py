@@ -42,6 +42,7 @@ class DatasetService:
         }
 
     def _adapt_dataset(self, dataset):
+        current_version = self._get_current_dataset_version(dataset.versions)
         return {
             "id": dataset.id,
             "name": dataset.name,
@@ -52,7 +53,15 @@ class DatasetService:
             "tenancy": dataset.tenancy,
             "design_state": dataset.design_state.name if not dataset.design_state is None else "",
             "versions": [self._adapt_version(version) for version in dataset.versions],
+            "current_version": self._adapt_version(current_version) if not current_version is None else None,
         }
+    
+    def _get_current_dataset_version(self, versions):
+        '''Get current version from the most recent by created_at and if the design_state is PUBLISHED or DRAFT'''
+        versions = sorted(versions, key=lambda version: version.created_at, reverse=True)
+        for version in versions:
+            if version.design_state == DesignState.PUBLISHED or version.design_state == DesignState.DRAFT:
+                return version
 
     def _determine_tenancies(self, user_id, tenancies=[]):
         user = user_service.fetch_by_id(user_id)
