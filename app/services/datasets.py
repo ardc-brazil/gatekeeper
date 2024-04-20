@@ -37,7 +37,9 @@ class DatasetService:
             "updated_at": version.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
             "created_by": version.created_by,
             "is_enabled": version.is_enabled,
-            "design_state": version.design_state.name if not version.design_state is None else "",
+            "design_state": version.design_state.name
+            if version.design_state is not None
+            else "",
             "files": [self._adapt_file(file) for file in version.files],
         }
 
@@ -51,16 +53,25 @@ class DatasetService:
             "created_at": dataset.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             "updated_at": dataset.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
             "tenancy": dataset.tenancy,
-            "design_state": dataset.design_state.name if not dataset.design_state is None else "",
+            "design_state": dataset.design_state.name
+            if dataset.design_state is not None
+            else "",
             "versions": [self._adapt_version(version) for version in dataset.versions],
-            "current_version": self._adapt_version(current_version) if not current_version is None else None,
+            "current_version": self._adapt_version(current_version)
+            if current_version is not None
+            else None,
         }
-    
+
     def _get_current_dataset_version(self, versions):
-        '''Get current version from the most recent by created_at and if the design_state is PUBLISHED or DRAFT'''
-        versions = sorted(versions, key=lambda version: version.created_at, reverse=True)
+        """Get current version from the most recent by created_at and if the design_state is PUBLISHED or DRAFT"""
+        versions = sorted(
+            versions, key=lambda version: version.created_at, reverse=True
+        )
         for version in versions:
-            if version.design_state == DesignState.PUBLISHED or version.design_state == DesignState.DRAFT:
+            if (
+                version.design_state == DesignState.PUBLISHED
+                or version.design_state == DesignState.DRAFT
+            ):
                 return version
 
     def _determine_tenancies(self, user_id, tenancies=[]):
