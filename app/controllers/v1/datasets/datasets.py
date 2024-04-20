@@ -84,6 +84,9 @@ dataset_model = namespace.model(
             required=False,
             description="Dataset current version",
         ),
+        "design_state": fields.String(
+            readonly=True, required=True, description="The actual state of design"
+        ),
     },
 )
 
@@ -318,7 +321,6 @@ class DatasetsListController(Resource):
         payload = request.get_json()
         return service.create_dataset(payload, g.user_id), 201
 
-
 @namespace.route("/<string:dataset_id>/versions/<string:version>")
 @namespace.param("dataset_id", "The dataset identifier")
 @namespace.param("version", "The version name")
@@ -343,6 +345,29 @@ class DatasetsVersionController(Resource):
         )
         return {}, 200
 
+@namespace.route("/<string:dataset_id>/versions/<string:version>/publish")
+@namespace.param("dataset_id", "The dataset identifier")
+@namespace.param("version", "The version name")
+@namespace.doc(security=["api_key", "api_secret", "user_id"])
+class DatasetsPublishVersionController(Resource): 
+    method_decorators = [authenticate, authorize]
+
+    # PUT /api/v1/datasets/:dataset_id/versions/:version/publish
+    @namespace.doc("Publish a Dataset Version")
+    @namespace.param(
+        "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
+    )
+    @parse_tenancy_header
+    @parse_user_header
+    def put(self, dataset_id, version):
+        """Publish a specific dataset version"""
+        service.publish_dataset_version(
+            dataset_id=dataset_id,
+            user_id=g.user_id,
+            version_name=version,
+            tenancies=g.tenancies,
+        )
+        return {}, 200
 
 @namespace.route("/<string:dataset_id>/versions/<string:version>/enable")
 @namespace.param("dataset_id", "The dataset identifier")
