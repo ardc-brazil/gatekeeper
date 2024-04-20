@@ -1,10 +1,8 @@
-import logging
-from functools import wraps
 from casbin import Enforcer
 
 
 class AuthorizationContainer:
-    '''A singleton instance for casbin enforcer'''
+    """A singleton instance for casbin enforcer"""
 
     _instance = None
 
@@ -26,6 +24,6 @@ class AuthorizationContainer:
         self.enforcer = enforcer
         self._owner_loader = None
         self.user_name_headers = None
-    
+
     def getEnforcer(self) -> Enforcer:
         return self.enforcer
