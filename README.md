@@ -10,19 +10,11 @@ Backend for DataAmazon.
 ## Environment Setup
 
 **Use Makefile targets to make your life easier!**
-0. Environment variable setup.
-Set the env file path before start docker containers
-
-```sh
-export ENV_FILE_PATH=~/workspace/gatekeeper/dev.env
-```
-
-You have to change the path to the `dev.env` correcly based on the local environment.
 
 1. Start docker containers
 
 ```sh
-make docker-run
+make ENV={env} docker-run
 ```
 
 2. Access pgAdmin in your browser at <http://localhost:5050> or <http://localhost/pgadmin> to use PgAdmin to connect to
@@ -34,7 +26,7 @@ the PostgreSQL database
 3. Create a virtual environment and activate it
 
 ```sh
-make python-env
+make ENV={env} python-env
 ```
 
 4. Install project dependencies
@@ -43,25 +35,25 @@ make python-env
 > `brew install openssl`
 
 ```sh
-make python-pip-install
+make ENV={env} python-pip-install
 ```
 
 5. Run database migrations
 
 ```sh
-make db-migration
+make ENV={env} db-migration
 ```
 
 6. Start the application by using any of the following
 
 ```sh
-make python-run
+make ENV={env} python-run
 ```
 
 7. If you need to delete the docker containers
 
 ```sh
-make docker-down
+make ENV={env} docker-down
 ```
 
 Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker 
@@ -77,9 +69,12 @@ To create new migrations, follow the steps below.
 
 1. Map your new table in a new file in `models/{your_new_model}.py`
 2. Import your model in `app/__init__.py`, before the migrate config
-3. Run `flask db migrate -m "<comment>"`
-4. Check the generated file under `migrations/versions/<generated_file>.py`
-5. Run `flask db upgrade`
+3. Run `make ENV={env} db-create-migration "{COMMENT}"`
+4. Check the generated file under `migrations/versions/<generated_file>.py` and see if any fix is needed.
+5. Run `make ENV={env} db-upgrade`
+6. Check the database, if there's any problem, run `make ENV={env} db-downgrade`
+
+> **WARNING**: Sometimes a new migration tries to delete the `casbin_rule` table. This is not intended and should be investigated. As of now, check the migration file to see if the upgrade and downgrade has a create and/or delete table for `cabin_rule`. If, so, just delete this statement from the files (from both upgrade and downgrade).
 
 ### Deploying
 
@@ -100,32 +95,25 @@ python3 -m venv venv
 . venv/bin/activate
 
 # Install libraries
-make python-pip-install
+make ENV={env} python-pip-install
 
 # Run db migrations
-DB_HOST=localhost:5432 DB_USER=gk_admin DB_PASSWORD='{db_password}' DB_PORT=5432 DB_NAME=gatekeeper_db CASBIN_DATABASE_URL='postgresql://gk_admin:{db_password}@localhost:5432/gatekeeper_db' flask db upgrade
+make ENV={env} db-upgrade
 
 # Deactivate python virtual env
 deactivate
 
-# Stop backend containers
-docker-compose -f docker-compose-infrastructure.yaml down
-
-# Rebuild the image (to make sure)
-docker-compose -f docker-compose-infrastructure.yaml build
-
-# Start backend
-docker-compose -f docker-compose-infrastructure.yaml up -d
-
-# TODO Fix Makefile to deploy in new infra and work in local env simultaneously
 # Refresh and deploy the last docker image.
-# make docker-deployment
+make docker-deployment
 ```
 
 ### Accessing the application in prod
 
-* For the application: `curl -X GET http://ec2-34-194-118-180.compute-1.amazonaws.com/api/`
-* For pgAdmin: Access `http://ec2-34-194-118-180.compute-1.amazonaws.com/pgadmin` in the browser.
+* Frontend: `https://datamap.pcs.usp.br/`
+* Backend: `https://datamap.pcs.usp.br/api/v1/docs`
+* pgAdmin: `http://datamap.pcs.usp.br/pgadmin`
+* MIN.io: `https://datamap.pcs.usp.br/minio/ui/`
+* TUSd: `https://datamap.pcs.usp.br/files/`
 
 # First Setup for Local Development
 
@@ -133,7 +121,7 @@ docker-compose -f docker-compose-infrastructure.yaml up -d
 
 1. For the first client, the easiest way is to remove the `authorize` interceptor from the client creation endpoint
 2. Create with `curl -X POST http://localhost:9092/api/v1/clients -H 'Content-Type: application/json' -d '{"name": "DataAmazon Local Client", "secret": "{secret}"}'`
-3. Test with `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:9092/api/datasets/v1`
+3. Test with `curl -X GET -H "X-Api-Key: {generated-api-key}" -H "X-Api-Secret: {defined-api-secret}" localhost:9092/api/v1/datasets`
 
 ## Dataset import
 

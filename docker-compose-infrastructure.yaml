@@ -17,6 +17,7 @@ services:
     image: minio/minio:RELEASE.2024-03-21T23-13-43Z
     command: server /storage --console-address ":9001"
     container_name: datamap_min_io
+    restart: always
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -36,11 +37,13 @@ services:
   tusd:
     image: tusproject/tusd:v2.4
     container_name: datamap_tusd
+    restart: always
     ports: 
       - "1080:1080"
     env_file:
       - ${ENV_FILE_PATH}
-    command: -port 1080 -s3-bucket datamap -s3-endpoint http://minio:9000 -cors-allow-headers X-User-Id
+    entrypoint: /bin/sh -c
+    command: ["tusd -port 1080 -s3-bucket datamap -s3-endpoint $${TUS_S3_ENDPOINT} -hooks-http $${TUS_HOOK_API} -cors-allow-headers X-User-Token,X-User-Id"]
     depends_on: 
       - minio
     networks:

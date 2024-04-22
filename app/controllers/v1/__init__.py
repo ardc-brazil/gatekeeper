@@ -6,6 +6,7 @@ from app.controllers.v1.datasets.datasets_filters import namespace as datasets_f
 from app.controllers.v1.infrastructure.infrastructure import namespace as healthcheck_ns
 from app.controllers.v1.users.users import namespace as users_ns
 from app.controllers.v1.tenancies.tenancies import namespace as tenancies_ns
+from app.controllers.v1.tus.tus import namespace as tus_ns
 
 api = Blueprint('apiv1', __name__, url_prefix='/api/v1')
 
@@ -41,4 +42,5 @@ api_extension.add_namespace(datasets_filters_ns)
 api_extension.add_namespace(clients_ns)
 api_extension.add_namespace(users_ns)
 api_extension.add_namespace(tenancies_ns)
+api_extension.add_namespace(tus_ns)
 api_extension.add_namespace(healthcheck_ns)
