@@ -145,6 +145,14 @@ make docker-deployment
 INSERT INTO public.casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', '{used_id}', 'admin', NULL, NULL, NULL, NULL);
 ```
 
+### Linter and Formatting
+
+This projects uses [Ruff](https://github.com/astral-sh/ruff) to manage code style, linter and formatting.
+
+* To check code style problems: `ruff check`
+* To auto-fix some problems: `ruff check --fix`
+* To format files: `ruff format`
+
 ### Issues
 
 1. If you have the psycopg_2 problem, run `brew install postgresql`
