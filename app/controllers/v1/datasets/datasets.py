@@ -3,11 +3,19 @@ from app.controllers.interceptors.authentication import authenticate
 from app.controllers.interceptors.authorization import authorize
 from app.controllers.interceptors.tenancy_parser import parse_tenancy_header
 from app.controllers.interceptors.user_parser import parse_user_header
+from app.repositories.dataset_versions import DatasetVersionRepository
+from app.repositories.datasets import DatasetRepository
 from app.services.datasets import DatasetService
 from flask_restx import Namespace, Resource, fields
 from werkzeug.exceptions import NotFound
 
-service = DatasetService()
+from app.services.users import UsersService
+
+repository = DatasetRepository()
+version_repository = DatasetVersionRepository()
+user_service = UsersService()
+
+service = DatasetService(repository, version_repository, user_service)
 namespace = Namespace("datasets", "Dataset operations")
 
 data_file_model = namespace.model(
