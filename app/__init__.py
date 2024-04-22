@@ -20,7 +20,6 @@ def create_app():
     enforcer = SyncedEnforcer("app/resources/casbin_model.conf", casbin_adapter)
     enforcer.enable_auto_build_role_links(True)
     enforcer.start_auto_load_policy(5)  # reload policy every 5 seconds
-    enforcer.set_watcher
     watcher = PostgresqlWatcher(
         host=app.config["DB_HOST"],
         user=app.config["DB_USER"],

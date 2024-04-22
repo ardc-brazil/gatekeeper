@@ -37,11 +37,14 @@ class DatasetService:
             "updated_at": version.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
             "created_by": version.created_by,
             "is_enabled": version.is_enabled,
-            "design_state": version.design_state.name,
+            "design_state": version.design_state.name
+            if version.design_state is not None
+            else "",
             "files": [self._adapt_file(file) for file in version.files],
         }
 
     def _adapt_dataset(self, dataset):
+        current_version = self._get_current_dataset_version(dataset.versions)
         return {
             "id": dataset.id,
             "name": dataset.name,
@@ -50,8 +53,26 @@ class DatasetService:
             "created_at": dataset.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             "updated_at": dataset.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
             "tenancy": dataset.tenancy,
+            "design_state": dataset.design_state.name
+            if dataset.design_state is not None
+            else "",
             "versions": [self._adapt_version(version) for version in dataset.versions],
+            "current_version": self._adapt_version(current_version)
+            if current_version is not None
+            else None,
         }
+
+    def _get_current_dataset_version(self, versions):
+        """Get current version from the most recent by created_at and if the design_state is PUBLISHED or DRAFT"""
+        versions = sorted(
+            versions, key=lambda version: version.created_at, reverse=True
+        )
+        for version in versions:
+            if (
+                version.design_state == DesignState.PUBLISHED
+                or version.design_state == DesignState.DRAFT
+            ):
+                return version
 
     def _determine_tenancies(self, user_id, tenancies=[]):
         user = user_service.fetch_by_id(user_id)
@@ -296,6 +317,33 @@ class DatasetService:
             )
 
             version_repository.upsert(version)
+        except Exception as e:
+            logging.error(e)
+            raise e
+
+    def publish_dataset_version(self, dataset_id, user_id, version_name, tenancies=[]):
+        try:
+            dataset = repository.fetch(
+                dataset_id=dataset_id,
+                tenancies=self._determine_tenancies(user_id, tenancies),
+            )
+
+            if dataset is None:
+                raise NotFound(f"Dataset {dataset_id} not found")
+
+            version = version_repository.fetch_version_by_name(dataset_id, version_name)
+
+            if version is None:
+                raise NotFound(
+                    f"Version {version_name} not found for Dataset {dataset_id}"
+                )
+
+            version.design_state = DesignState.PUBLISHED
+            version_repository.upsert(version)
+
+            if dataset.design_state == DesignState.DRAFT:
+                dataset.design_state = DesignState.PUBLISHED
+                repository.upsert(dataset)
         except Exception as e:
             logging.error(e)
             raise e
