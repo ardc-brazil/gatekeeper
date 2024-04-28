@@ -10,15 +10,13 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        "Flask>=2.0.0",
-        "Flask-SQLAlchemy>=3.0.0",
         "psycopg2-binary>=2.9.1",
         "SQLAlchemy>=1.4.23",
     ],
     classifiers=[
         "Development Status :: 1 - Beta",
         "Environment :: Web Environment",
-        "Framework :: Flask",
+        "Framework :: FastAPI",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
