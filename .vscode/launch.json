@@ -2,32 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Flask",
+            "name": "Python Debugger: FastAPI",
             "type": "debugpy",
             "request": "launch",
-            "module": "flask",
-            "envFile": "${workspaceFolder}/local.env",
-            "env": {
-                "FLASK_DEBUG": "1",
-                "FLASK_ENV": "development"
-            },
-            "args": [
-                "run",
-                "-h", "localhost",
-                "-p", "9092",
-                "--no-debugger",
-                "--no-reload"
-            ]
-        },
-        {
-            "name": "Python: Current File",
-            "type": "python",
-            "request": "launch",
-            // "program": "${file}",
-            "program": "${workspaceFolder}/app.py",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "envFile": "${workspaceFolder}/local.env"
+            "program": "app/main.py",
+            "console": "integratedTerminal"
         }
     ]
 }

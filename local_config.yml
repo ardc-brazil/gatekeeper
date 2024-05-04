@@ -1,0 +1,2 @@
+db:
+  url: postgresql://gk_admin:WYnAG9!qzhfx7hDatJcs@localhost:5432/gatekeeper_db
