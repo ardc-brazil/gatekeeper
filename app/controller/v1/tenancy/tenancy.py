@@ -1,11 +1,11 @@
 from typing import Union
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Response
 
 from app.model.tenancy import Tenancy
 from app.container import Container
-from controllers.interceptor.authentication import fastapi_authenticate
-from controllers.interceptor.authorization import fastapi_authorize
-from app.controllers.v1.tenancy.resource import TenancyCreateRequest, TenancyGetResponse, TenancyUpdateRequest
+from controller.interceptor.authentication import authenticate
+from controller.interceptor.authorization import authorize
+from controller.v1.tenancy.resource import TenancyCreateRequest, TenancyGetResponse, TenancyUpdateRequest
 from app.service.tenancy import TenancyService
 
 from dependency_injector.wiring import inject, Provide
@@ -13,7 +13,7 @@ from dependency_injector.wiring import inject, Provide
 router = APIRouter(
     prefix="/tenancies",
     tags=["tenancies"],
-    dependencies=[Depends(fastapi_authenticate), Depends(fastapi_authorize)],
+    dependencies=[Depends(authenticate), Depends(authorize)],
     responses={404: {"description": "Not found"}},
 )
 

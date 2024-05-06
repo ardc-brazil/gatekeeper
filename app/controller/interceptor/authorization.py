@@ -1,52 +1,20 @@
 import json
 from uuid import UUID
 from fastapi import Depends, HTTPException, Request
-from flask import make_response, request, jsonify, g
+from flask import make_response, request, g
 from functools import wraps
 
 from dependency_injector.wiring import inject, Provide
 
 from app.container import Container
-from controllers.interceptor.user_parser import fastapi_parse_user_header
+from controller.interceptor.user_parser import parse_user_header
 from exception.UnauthorizedException import UnauthorizedException
 from model.tus import TusResult
 from service.auth import AuthService
 
-# auth_service = AuthService(None)
-
-
-def __get_user_from_request(request) -> UUID:
-    if request.headers.get("X-User-Id") is None:
-        return None
-
-    return UUID(request.headers.get("X-User-Id"))
-
-
-def authorize(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        user_id = __get_user_from_request(request)
-        resource = request.path
-        action = request.method
-
-        try:
-            pass
-            # auth_service.is_user_authorized(user_id, resource, action)
-        except UnauthorizedException as e:
-            if str(e) == "missing_information":
-                return make_response(jsonify({"message": "Unauthorized"}), 401)
-            elif str(e) == "not_authorized":
-                return make_response(jsonify({"message": "Forbidden"}), 403)
-            else:
-                return make_response(jsonify({"message": "Forbidden"}), 403)
-
-        return f(*args, **kwargs)
-
-    return decorated
-
 @inject
-async def fastapi_authorize(request: Request, 
-                            user_id: UUID = Depends(fastapi_parse_user_header),
+async def authorize(request: Request, 
+                            user_id: UUID = Depends(parse_user_header),
                             auth_service: AuthService = Depends(Provide[Container.auth_service])):
     resource = request.url.path
     action = request.method

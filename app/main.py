@@ -8,10 +8,11 @@ import uvicorn
 # from flask_sqlalchemy import SQLAlchemy
 from fastapi import FastAPI
 
+from exception.UnauthorizedException import UnauthorizedException
 from exception.NotFoundException import NotFoundException
 from exception.ConflictException import ConflictException
-from controller.interceptor.exception_handler import conflict_exception_handler, not_found_exception_handler
-from app.container import Container
+from controller.interceptor.exception_handler import conflict_exception_handler, not_found_exception_handler, unauthorized_exception_handler
+from container import Container
 
 # from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 # from casbin import SyncedEnforcer
@@ -67,6 +68,7 @@ app.include_router(tenancies_router, prefix="/v1")
 
 app.add_exception_handler(ConflictException, conflict_exception_handler)
 app.add_exception_handler(NotFoundException, not_found_exception_handler)
+app.add_exception_handler(UnauthorizedException, unauthorized_exception_handler)
 
 # Migrate(app, db)
 

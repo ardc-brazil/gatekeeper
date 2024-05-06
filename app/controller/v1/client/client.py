@@ -2,7 +2,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Response
 from dependency_injector.wiring import inject, Provide
 from container import Container
-from controller.interceptor.authentication import fastapi_authenticate
+from controller.interceptor.authentication import authenticate
 from controller.v1.client.resource import ClientCreateRequest, ClientCreateResponse, ClientGetResponse, ClientUpdateRequest
 from service.client import ClientService
 from model.client import Client
@@ -14,7 +14,7 @@ router = APIRouter(
 )
 
 # GET /clients/{key}
-@router.get("/{key}", dependencies=[Depends(fastapi_authenticate)])
+@router.get("/{key}", dependencies=[Depends(authenticate)])
 @inject
 async def get_by_key(
     key: UUID,
