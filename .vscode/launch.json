@@ -5,7 +5,8 @@
             "name": "Python Debugger: FastAPI",
             "type": "debugpy",
             "request": "launch",
-            "program": "app/main.py",
+            "module": "uvicorn",
+            "args": ["app.main:app", "--port", "9092", "--reload"],
             "console": "integratedTerminal"
         }
     ]
