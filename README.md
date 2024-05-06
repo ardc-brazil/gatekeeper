@@ -41,7 +41,7 @@ make ENV={env} python-pip-install
 5. Run database migrations
 
 ```sh
-make ENV={env} db-migration
+make ENV={env} db-upgrade
 ```
 
 6. Start the application by using any of the following
@@ -59,9 +59,30 @@ make ENV={env} docker-down
 Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker 
 volume to persistently storage data.
 
-### Running tests
+### Unit tests
 
-Run `pytest`. This will execute all unit tests within `./tests` with the prefix `test_*.py`.
+We are using [unittest](https://docs.python.org/3/library/unittest.html). See examples at https://docs.python.org/3/library/unittest.html
+
+To run all tests from command line, use:
+
+```sh
+python -m unittest discover -p "*_test.py"
+```
+
+An example is [app/services/datasets_test.py](./app/services/datasets_test.py)
+
+To generage the code coverage reports, use:
+```sh
+# Run the tests and generage the .coverage file
+coverage run -m unittest discover -p "*_test.py"
+
+# Print the coverage report on console
+coverage report
+
+# Generate the coverage report in html
+coverage html
+```
+
 
 ### Creating new migrations
 

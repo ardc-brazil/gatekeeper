@@ -1,10 +1,18 @@
 import logging
 from uuid import UUID
 from app.models.tus import TusResult
+from app.repositories.dataset_versions import DatasetVersionRepository
+from app.repositories.datasets import DatasetRepository
 from app.services.datasets import DatasetService
 import os
 
-dataset_service = DatasetService()
+from app.services.users import UsersService
+
+repository = DatasetRepository()
+version_repository = DatasetVersionRepository()
+user_service = UsersService()
+
+dataset_service = DatasetService(repository, version_repository, user_service)
 
 
 class TusService:
