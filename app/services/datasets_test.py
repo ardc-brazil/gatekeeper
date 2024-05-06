@@ -8,8 +8,6 @@ from werkzeug.exceptions import NotFound
 
 
 class Test_Datasets(unittest.TestCase):
-    def test_enable_datasetA(self):
-        assert 1 == 1
 
     def test_enable_dataset(self):
         # given
