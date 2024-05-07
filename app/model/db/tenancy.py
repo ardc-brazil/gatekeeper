@@ -1,5 +1,5 @@
 from sqlalchemy.sql import func
-from database import Base
+from app.database import Base
 from sqlalchemy import Column, String, Boolean, DateTime
 
 class Tenancy(Base):

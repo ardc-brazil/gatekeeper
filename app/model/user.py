@@ -1,68 +1,24 @@
-import sqlalchemy
-from app import db
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import Index
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
-
-user_provider_association = db.Table(
-    "user_provider",
-    db.Column(
-        "user_id", UUID(as_uuid=True), db.ForeignKey("users.id"), primary_key=True
-    ),
-    db.Column(
-        "provider_id", db.Integer, db.ForeignKey("providers.id"), primary_key=True
-    ),
-)
-
-user_tenancy_association = db.Table(
-    "users_tenancies",
-    db.Column(
-        "user_id", UUID(as_uuid=True), db.ForeignKey("users.id"), primary_key=True
-    ),
-    db.Column(
-        "tenancy", db.String(256), db.ForeignKey("tenancies.name"), primary_key=True
-    ),
-)
+from dataclasses import dataclass
 
 
-class User(db.Model):
-    __tablename__ = "users"
-    id = db.Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        server_default=sqlalchemy.text("gen_random_uuid()"),
-    )
-    name = db.Column(db.String(256), nullable=False)
-    email = db.Column(db.String(256), nullable=True)
-    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
-    created_at = db.Column(
-        db.DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-    updated_at = db.Column(
-        db.DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
+@dataclass
+class UserProvider:
+    name: str
+    reference: str
 
-    providers = relationship(
-        "Providers", secondary=user_provider_association, backref="users"
-    )
-    tenancies = relationship(
-        "Tenancies", secondary=user_tenancy_association, backref="users"
-    )
+@dataclass
+class User:
+    id: str
+    name: str
+    email: str
+    is_enabled: bool
+    created_at: str
+    updated_at: str
+    providers: list[UserProvider]
+    tenancies: list[str]
+    roles: list[str]
 
-    __table_args__ = (Index("idx_users_email", email, unique=True),)
-
-
-class Provider(db.Model):
-    __tablename__ = "providers"
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(256), nullable=False)
-    reference = db.Column(db.String(256), nullable=True)
-
-    __table_args__ = (
-        Index("idx_providers_reference", name, unique=False),
-        Index("idx_providers_name", name, unique=False),
-    )
+@dataclass
+class UserQuery:
+    email: str | None = None
+    is_enabled: bool | None = True

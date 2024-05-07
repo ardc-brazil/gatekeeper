@@ -7,22 +7,20 @@ from functools import wraps
 from dependency_injector.wiring import inject, Provide
 
 from app.container import Container
-from controller.interceptor.user_parser import parse_user_header
-from exception.UnauthorizedException import UnauthorizedException
-from model.tus import TusResult
-from service.auth import AuthService
+from app.controller.interceptor.user_parser import parse_user_header
+from app.exception.UnauthorizedException import UnauthorizedException
+from app.model.tus import TusResult
+from app.service.auth import AuthService
 
 @inject
 async def authorize(request: Request, 
-                            user_id: UUID = Depends(parse_user_header),
-                            auth_service: AuthService = Depends(Provide[Container.auth_service])):
+                    user_id: UUID = Depends(parse_user_header),
+                    auth_service: AuthService = Depends(Provide[Container.auth_service])):
     resource = request.url.path
     action = request.method
 
     try:
-        # TODO solve this issue, the enforcer is not available
-        # auth_service.is_user_authorized(user_id, resource, action)
-        pass
+        auth_service.is_user_authorized(user_id, resource, action)
     except UnauthorizedException as e:
         if str(e) == "missing_information":
             raise HTTPException(status_code=401, detail="Unauthorized")

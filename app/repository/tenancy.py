@@ -1,4 +1,4 @@
-from exception.ConflictException import ConflictException
+from app.exception.ConflictException import ConflictException
 from sqlalchemy.exc import IntegrityError
 from app.model.db.tenancy import Tenancy
 from contextlib import AbstractContextManager

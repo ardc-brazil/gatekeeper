@@ -3,9 +3,9 @@ from fastapi import APIRouter, Depends, Response
 
 from app.model.tenancy import Tenancy
 from app.container import Container
-from controller.interceptor.authentication import authenticate
-from controller.interceptor.authorization import authorize
-from controller.v1.tenancy.resource import TenancyCreateRequest, TenancyGetResponse, TenancyUpdateRequest
+from app.controller.interceptor.authentication import authenticate
+from app.controller.interceptor.authorization import authorize
+from app.controller.v1.tenancy.resource import TenancyCreateRequest, TenancyGetResponse, TenancyUpdateRequest
 from app.service.tenancy import TenancyService
 
 from dependency_injector.wiring import inject, Provide

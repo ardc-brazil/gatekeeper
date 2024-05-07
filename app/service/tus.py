@@ -8,6 +8,9 @@ dataset_service = DatasetService()
 
 
 class TusService:
+    def __init__(self, dataset_service: DatasetService):
+        self._dataset_service = dataset_service
+
     def handle_post_finish(self, payload: dict, user_id: UUID) -> TusResult:
         file_upload = payload["Event"]["Upload"]
         file_metadata = file_upload["MetaData"]
@@ -23,7 +26,7 @@ class TusService:
             "author_id": user_id,
         }
 
-        dataset_service.create_data_file(file, dataset_id, user_id)
+        self._dataset_service.create_data_file(file, dataset_id, user_id)
 
         return TusResult(status_code=200, body_msg="")
 

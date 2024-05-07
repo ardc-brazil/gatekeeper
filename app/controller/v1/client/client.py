@@ -1,11 +1,10 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, Response
 from dependency_injector.wiring import inject, Provide
-from container import Container
-from controller.interceptor.authentication import authenticate
-from controller.v1.client.resource import ClientCreateRequest, ClientCreateResponse, ClientGetResponse, ClientUpdateRequest
-from service.client import ClientService
-from model.client import Client
+from app.container import Container
+from app.controller.interceptor.authentication import authenticate
+from app.controller.v1.client.resource import ClientCreateRequest, ClientCreateResponse, ClientGetResponse, ClientUpdateRequest
+from app.service.client import ClientService
 
 router = APIRouter(
     prefix="/clients",
@@ -36,7 +35,7 @@ async def update_by_key(
     payload: ClientUpdateRequest,
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> None:
-    service.update(key, payload.name, payload.secret)
+    service.update(key=key, name=payload.name, secret=payload.secret)
     return {}
 
 # POST /clients

@@ -5,9 +5,9 @@ from uuid import UUID
 
 @dataclass
 class Client:
-    key: UUID = None
     name: str
     secret: str
+    key: UUID = None
     is_enabled: bool = None
     created_at: datetime = None
     updated_at: datetime = None

@@ -3,7 +3,7 @@ from typing import List
 from app.model.db.tenancy import Tenancy as DBModel
 from app.model.tenancy import Tenancy
 from app.repository.tenancy import TenancyRepository
-from exception.NotFoundException import NotFoundException
+from app.exception.NotFoundException import NotFoundException
 
 
 class TenancyService:

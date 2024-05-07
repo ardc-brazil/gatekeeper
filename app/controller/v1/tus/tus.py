@@ -1,38 +1,23 @@
-# import json
-# from flask_restx import Namespace, Resource
-# from flask import request, g
+# from uuid import UUID
+# from fastapi import APIRouter, Depends, Request
+# from controller.interceptor.user_parser import parse_user_header
+# from container import Container
+# from service.tus import TusService
+# from dependency_injector.wiring import inject, Provide
 
-# from app.controllers.interceptors.authorization import authorize_tus
-# from app.models.tus import TusResult
-# from app.services.tus import TusService
+# router = APIRouter(
+#     prefix="/tus",
+#     tags=["tus"],
+#     responses={404: {"description": "Not found"}},
+# )
 
-# namespace = Namespace("tus", "Tus operations")
-# service = TusService()
-
-
-# @namespace.route("/hooks")
-# class TusController(Resource):
-#     method_decorators = [authorize_tus]
-
-#     def _adapt(self, res: TusResult):
-#         if res.status_code == 200:
-#             return {}, 200
-#         result = {
-#             "HTTPResponse": {
-#                 "StatusCode": res.status_code,
-#                 "Body": json.dumps({"message": res.body_msg}),
-#                 "Header": {"Content-Type": "application/json"},
-#             }
-#         }
-
-#         if res.reject_upload is not None:
-#             result["RejectUpload"] = res.reject_upload
-
-#         return result, res.status_code
-
-#     @namespace.doc("Handle TUS web hooks")
-#     def post(self):
-#         """Receive TUS HTTP hooks"""
-#         res = service.handle(request.get_json(), g.user_id)
-
-#         return self._adapt(res)
+# # POST /hooks
+# @router.post("/hooks")
+# @inject
+# async def post(
+#     request: Request,
+#     user_id: UUID = Depends(parse_user_header),
+#     service: TusService = Depends(Provide[Container.tus_service]),
+# ) -> FileCreateResponse:
+#     key = service.handle(name=payload.name, secret=payload.secret)
+#     return FileCreateResponse(key=key)

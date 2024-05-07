@@ -1,18 +1,21 @@
 import logging
 from uuid import UUID
 import jwt
-from controller.interceptor.authorization_container import AuthorizationContainer
-from exception.UnauthorizedException import UnauthorizedException
+from app.exception.UnauthorizedException import UnauthorizedException
 from app.service.client import ClientService
 from app.service.secret import check_password
 from flask import current_app as app
+from casbin import SyncedEnforcer
 
 # client_service = ClientService()
 
 
 class AuthService:
-    def __init__(self, client_service: ClientService) -> None:
+    def __init__(self, 
+                 client_service: ClientService, 
+                 casbin_enforcer: SyncedEnforcer) -> None:
         self._client_service = client_service
+        self._casbin_enforcer = casbin_enforcer
 
     def is_client_authorized(self, api_key: str, salted_api_secret: str):
         if api_key is None or salted_api_secret is None:
@@ -24,7 +27,7 @@ class AuthService:
             logging.info(f"api_key {api_key} not found")
             raise UnauthorizedException("wrong_credentials")
 
-        if not check_password(salted_api_secret, client["secret"]):
+        if not check_password(salted_api_secret, client.secret):
             logging.warn(f"incorrect api_secret {salted_api_secret}")
             raise UnauthorizedException("wrong_credentials")
 
@@ -47,15 +50,11 @@ class AuthService:
             logging.error(f"failed to validate jwt. {e}")
             raise e
 
-    def is_user_authorized(self, user_id: UUID, resource: str, action: str):
+    def is_user_authorized(self, user_id: UUID, resource: str, action: str) -> None:
         if user_id is None or resource is None or action is None:
             raise UnauthorizedException("missing_information")
 
-        if (
-            not AuthorizationContainer.instance()
-            .getEnforcer()
-            .enforce(str(user_id), resource, action)
-        ):
+        if not self._casbin_enforcer.enforce(str(user_id), resource, action):
             logging.info(
                 "User %s is not authorized to %s %s", user_id, action, resource
             )

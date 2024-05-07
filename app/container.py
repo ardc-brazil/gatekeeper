@@ -2,31 +2,34 @@ import logging
 from dependency_injector import containers, providers
 from minio import Minio
 import os
+from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
+from casbin import SyncedEnforcer
 
-from repository.tenancy import TenancyRepository
-from service.tenancy import TenancyService
-from service.auth import AuthService
-from database import Database
-from repository.client import ClientRepository
-from service.client import ClientService
+from app.repository.user import UserRepository
+# from service.dataset import DatasetService
+from app.service.user import UserService
+# from service.tus import TusService
+from app.repository.tenancy import TenancyRepository
+from app.service.tenancy import TenancyService
+from app.service.auth import AuthService
+from app.database import Database
+from app.repository.client import ClientRepository
+from app.service.client import ClientService
 
 logger = logging.getLogger("uvicorn")
 
 
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
-        modules=["controllers.v1.clients.clients",
+        modules=["app.controller.v1.client.client",
                 #  "app.controllers.v1.datasets.datasets",
-                #  "app.controllers.v1.users.users",
-                 "controllers.v1.tenancies.tenancies",
+                 "app.controller.v1.user.user",
+                 "app.controller.v1.tenancy.tenancy",
                 #  "app.controllers.v1.tus.tus",
                  ]
     )
 
     env_name = os.getenv("ENV", "local")
-    import os
-    print(os.getcwd())
-    # TODO fix this path
     config_file = f"./{env_name}_config.yml"
     logger.info(f"Using config file: {config_file}")
     config = providers.Configuration(yaml_files=[config_file])
@@ -43,11 +46,6 @@ class Container(containers.DeclarativeContainer):
         repository=client_repository,
     )
 
-    auth_service = providers.Factory(
-        AuthService,
-        client_service=client_service,
-    )
-
     tenancy_repository = providers.Factory(
         TenancyRepository,
         session_factory=db.provided.session,
@@ -58,3 +56,36 @@ class Container(containers.DeclarativeContainer):
         repository=tenancy_repository,
     )
 
+    casbin_adapter = providers.Singleton(CasbinSQLAlchemyAdapter, db.provided.get_engine.call())
+    casbin_enforcer = providers.Singleton(
+        SyncedEnforcer,
+        config.casbin.model_file,
+        casbin_adapter,
+    )
+
+    user_repository = providers.Factory(
+        UserRepository,
+        session_factory=db.provided.session,
+    )
+
+    user_service = providers.Factory(
+        UserService,
+        repository=user_repository,
+        tenancy_repository=tenancy_repository,
+        casbin_enforcer=casbin_enforcer,
+    )
+
+    auth_service = providers.Factory(
+        AuthService,
+        client_service=client_service,
+        casbin_enforcer=casbin_enforcer,
+    )
+
+    # dataset_service = providers.Factory(
+    #     DatasetService,
+    # )
+
+    # tus_service = providers.Factory(
+    #     TusService,
+    #     dataset_service=dataset_service,
+    # )

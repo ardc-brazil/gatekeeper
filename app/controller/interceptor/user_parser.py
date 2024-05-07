@@ -1,7 +1,7 @@
 from uuid import UUID
 from fastapi import Depends
 from fastapi.security import APIKeyHeader
-from exception.UnauthorizedException import UnauthorizedException
+from app.exception.UnauthorizedException import UnauthorizedException
 
 user_id = APIKeyHeader(name="X-User-Id", auto_error=False, scheme_name="X-User-Id") # APIKeyHeader(name="X-User-Id", auto_error=False, scheme_name="X-User-Id")
 

@@ -38,3 +38,6 @@ class Database:
             raise
         finally:
             session.close()
+    
+    def get_engine(self):
+        return self._engine

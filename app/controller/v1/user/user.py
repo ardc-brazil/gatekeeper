@@ -1,290 +1,194 @@
-# from app.controllers.interceptors.authentication import authenticate
-# from app.controllers.interceptors.authorization import authorize
-# from app.controllers.utils.method_decorator import decorate_per_method
-# from app.services.users import UsersService
-# from flask_restx import Namespace, Resource, fields
-# from werkzeug.exceptions import NotFound
-# from flask import request
+from typing import Union
+from uuid import UUID
+from fastapi import APIRouter, Depends
 
-# service = UsersService()
-# namespace = Namespace("users", "Users operations")
+from app.container import Container
+from app.controller.v1.user.resource import UserEnforceRequest, UserEnforceResponse, UserProviderAddRequest, UserCreateRequest, UserGetResponse, UserProvider, UserTenanciesRequest, UserUpdateRequest
+from app.model.user import User, UserQuery
+from app.service.user import UserService
+from dependency_injector.wiring import inject, Provide
 
-# provider_model = namespace.model(
-#     "Provider",
-#     {
-#         "name": fields.String(required=True, description="Provider name"),
-#         "reference": fields.String(required=True, description="Provider reference"),
-#     },
-# )
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+)
 
-# user_model = namespace.model(
-#     "User",
-#     {
-#         "id": fields.String(readonly=True, required=True, description="User id"),
-#         "name": fields.String(required=True, description="User name"),
-#         "email": fields.String(required=False, description="User email"),
-#         "roles": fields.List(fields.String, required=False, description="User roles"),
-#         "providers": fields.List(
-#             fields.Nested(provider_model), required=False, description="User providers"
-#         ),
-#         "tenancies": fields.List(
-#             fields.String, required=False, description="User tenancies"
-#         ),
-#         "is_enabled": fields.Boolean(required=True, description="Is user enabled?"),
-#         "created_at": fields.DateTime(required=True, description="User creation date"),
-#         "updated_at": fields.DateTime(
-#             required=True, description="User last update date"
-#         ),
-#     },
-# )
+def _adapt_get_response(user: User) -> UserGetResponse:
+    return UserGetResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        roles=user.roles,
+        is_enabled=user.is_enabled,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        providers=[UserProvider(name=provider.name, reference=provider.reference) for provider in user.providers],
+        tenancies=user.tenancies,
+    )
+    
 
-# user_create_response_model = namespace.model(
-#     "UserCreateResponse",
-#     {"id": fields.String(readonly=True, required=True, description="User id")},
-# )
+# GET /users
+@router.get("/")
+@inject
+async def search(
+    email: str = None,
+    is_enabled: Union[bool, None] = True,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> list[UserGetResponse]:
+    query = UserQuery(email=email, is_enabled=is_enabled)
+    users = service.search(query)
+    return [_adapt_get_response(user) for user in users]
 
-# user_create_request_model = namespace.model(
-#     "UserCreateRequest",
-#     {
-#         "name": fields.String(required=True, description="User name"),
-#         "email": fields.String(required=False, description="User email"),
-#         "providers": fields.List(
-#             fields.Nested(provider_model), required=False, description="User providers"
-#         ),
-#         "roles": fields.List(fields.String, required=False, description="User roles"),
-#     },
-# )
+# GET /users/{id}
+@router.get("/{id}")
+@inject
+async def get(
+    id: UUID,
+    is_enabled: Union[bool, None] = True,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> UserGetResponse:
+    user: User = service.fetch_by_id(id=id, is_enabled=is_enabled)
+    return _adapt_get_response(user)
 
-# user_role_add_model = namespace.model(
-#     "UserRoleAdd",
-#     {"roles": fields.List(fields.String, required=True, description="User roles")},
-# )
+# POST /users
+@router.post("/")
+@inject
+async def create(
+    payload: UserCreateRequest,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> UUID:
+    return service.create(User(name=payload.name, 
+                               email=payload.email, 
+                               providers=payload.providers, 
+                               roles=payload.roles, 
+                               tenancies=payload.tenancies))
 
-# user_provider_add_model = namespace.model(
-#     "UserProviderAdd",
-#     {
-#         "provider": fields.String(required=True, description="User provider"),
-#         "reference": fields.String(
-#             required=True, description="User provider reference"
-#         ),
-#     },
-# )
+# PUT /users/{id}
+@router.put("/{id}")
+@inject
+async def update(
+    id: UUID,
+    payload: UserUpdateRequest,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> UserGetResponse:
+    user: User = service.update(id=id, name=payload.name, email=payload.email)
+    return _adapt_get_response(user)
 
-# user_enforce_model = namespace.model(
-#     "UserEnforceModel",
-#     {
-#         "user_id": fields.String(required=True, description="User id"),
-#         "resource": fields.String(required=True, description="resource"),
-#         "action": fields.String(required=True, description="action"),
-#     },
-# )
+# DELETE /users/{id}
+@router.delete("/{id}")
+@inject
+async def delete(
+    id: UUID,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.disable(id=id)
+    return {}
 
-# user_tenancy_request_model = namespace.model(
-#     "UserTenancyModel",
-#     {
-#         "tenancies": fields.List(
-#             fields.String, required=True, description="User tenancies"
-#         )
-#     },
-# )
+# PUT /users/{id}/enable
+@router.put("/{id}/enable")
+@inject
+async def enable(
+    id: UUID,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.enable(id=id)
+    return {}
 
+# PUT /users/{id}/roles
+@router.put("/{id}/roles")
+@inject
+async def add_roles(
+    id: UUID,
+    roles: list[str],
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.add_roles(id=id, roles=roles)
+    return {}
 
-# @namespace.route("/<string:id>")
-# @namespace.param("id", "The user id")
-# @namespace.response(404, "User not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersController(Resource):
-#     method_decorators = [authenticate, authorize]
+# DELETE /users/{id}/roles
+@router.delete("/{id}/roles")
+@inject
+async def remove_roles(
+    id: UUID,
+    roles: list[str],
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.remove_roles(id=id, roles=roles)
+    return {}
 
-#     @namespace.doc("Get a User")
-#     @namespace.marshal_with(user_model)
-#     @namespace.param("is_enabled", "Flag to filter enabled users. Default is true")
-#     def get(self, id):
-#         """Fetch a specific user"""
-#         user = service.fetch_by_id(id, request.args.get("is_enabled"))
-#         if user is not None:
-#             return user, 200
-#         else:
-#             raise NotFound()
+# PUT /users/{id}/providers
+@router.put("/{id}/providers")
+@inject
+async def add_provider(
+    id: UUID,
+    payload: UserProviderAddRequest,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.add_provider(id=id, provider=payload.provider, reference=payload.reference)
+    return {}
 
-#     @namespace.doc("Update a User")
-#     def put(self, id):
-#         """Update a specific user"""
-#         payload = request.get_json()
-#         service.update(id, payload)
-#         return {}, 200
+# DELETE /users/{id}/providers
+@router.delete("/{id}/providers")
+@inject
+async def remove_provider(
+    id: UUID,
+    provider: str,
+    reference: str,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.remove_provider(id=id, provider_name=provider, reference=reference)
+    return {}
 
-#     @namespace.doc("Disable a User")
-#     def delete(self, id):
-#         """Disable a specific user"""
-#         service.disable(id)
-#         return {}, 200
+# GET /users/providers/{provider}/references/{reference}
+@router.get("/providers/{provider}/references/{reference}")
+@inject
+async def get_by_provider_reference(
+    provider: str,
+    reference: str,
+    is_enabled: Union[bool, None] = True,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> UserGetResponse:
+    user: User = service.fetch_by_provider(provider_name=provider, reference=reference, is_enabled=is_enabled)
+    return _adapt_get_response(user)
 
+# POST /users/{id}/tenancies
+@router.post("/{id}/tenancies")
+@inject
+async def add_tenancy(
+    id: UUID,
+    payload: UserTenanciesRequest,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.add_tenancies(id=id, tenancies=payload.tenancies)
+    return {}
 
-# @namespace.route("/")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersListController(Resource):
-#     method_decorators = [authenticate, decorate_per_method(["get"], authorize)]
+# DELETE /users/{id}/tenancies
+@router.delete("/{id}/tenancies")
+@inject
+async def remove_tenancy(
+    id: UUID,
+    payload: UserTenanciesRequest,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.remove_tenancies(id=id, tenancies=payload.tenancies)
+    return {}
 
-#     @namespace.doc("Search users")
-#     @namespace.param("email", "User email")
-#     @namespace.param("is_enabled", "Flag to filter enabled users. Default is true")
-#     @namespace.marshal_list_with(user_model)
-#     def get(self):
-#         """Fetch all users"""
-#         query_params = {
-#             "email": request.args.get("email"),
-#             "is_enabled": request.args.get("is_enabled"),
-#         }
-#         return service.search(query_params), 200
+# POST /users/{id}/enforce
+@router.post("/{id}/enforce")
+@inject
+async def enforce(
+    id: UUID,
+    payload: UserEnforceRequest,
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> UserEnforceResponse:
+    is_authorized: bool = service.enforce(id=id, resource=payload.resource, action=payload.action)
+    return UserEnforceResponse(is_authorized=is_authorized)
 
-#     @namespace.marshal_with(user_create_response_model)
-#     @namespace.expect(user_create_request_model, validate=True)
-#     def post(self):
-#         """Create a user"""
-#         payload = request.get_json()
-#         return {"id": service.create(payload)}, 201
-
-
-# @namespace.route("/<string:id>/enable")
-# @namespace.param("id", "The user id")
-# @namespace.response(404, "User not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersEnableController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     @namespace.doc("Enable a User")
-#     def put(self, id):
-#         """Enable a specific user"""
-#         service.enable(id)
-#         return {}, 200
-
-
-# @namespace.route("/<string:id>/roles")
-# @namespace.param("id", "The user id")
-# @namespace.response(404, "User not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersRolesController(Resource):
-#     method_decorators = [authorize]
-
-#     @namespace.doc("Add roles to a User")
-#     @namespace.expect(user_role_add_model, validate=True)
-#     def put(self, id):
-#         """Add roles to a specific user"""
-#         payload = request.get_json()
-#         service.add_roles(id, payload["roles"])
-#         return {}, 200
-
-#     @namespace.doc("Remove roles from a User")
-#     @namespace.expect(user_role_add_model, validate=True)
-#     def delete(self, id):
-#         """Remove roles from a specific user"""
-#         payload = request.get_json()
-#         service.remove_roles(id, payload["roles"])
-#         return {}, 200
-
-
-# @namespace.route("/<string:id>/providers")
-# @namespace.param("id", "The user id")
-# @namespace.response(404, "User not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersProvidersController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     @namespace.doc("Add provider to a User")
-#     @namespace.expect(user_provider_add_model, validate=True)
-#     def put(self, id):
-#         """Add provider to a specific user"""
-#         payload = request.get_json()
-#         service.add_provider(id, payload["provider"], payload["reference"])
-#         return {}, 200
-
-#     @namespace.doc("Remove provider from a User")
-#     @namespace.expect(user_provider_add_model, validate=True)
-#     def delete(self, id):
-#         """Remove provider from a specific user"""
-#         payload = request.get_json()
-#         service.remove_provider(id, payload["provider"], payload["reference"])
-#         return {}, 200
-
-
-# @namespace.route("/providers/<string:provider_name>/<string:reference>")
-# @namespace.param("provider_name", "The provider name")
-# @namespace.param("reference", "The provider reference")
-# @namespace.response(404, "User not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret"])
-# class UsersGetByProviderController(Resource):
-#     method_decorators = [authenticate]
-
-#     @namespace.doc("Get a User by provider")
-#     @namespace.marshal_with(user_model)
-#     def get(self, provider_name, reference):
-#         """Fetch a specific user by provider"""
-#         user = service.fetch_by_provider(provider_name, reference)
-#         if user is not None:
-#             return user, 200
-#         else:
-#             raise NotFound()
-
-
-# @namespace.route("/<string:id>/tenancy")
-# @namespace.param("id", "The user id")
-# @namespace.response(404, "User not found")
-# @namespace.response(500, "Internal Server Error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersTenanciesController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     @namespace.doc("Add user to a tenancy")
-#     @namespace.expect(user_tenancy_request_model, validate=True)
-#     def post(self, id):
-#         """Add tenancy to users"""
-#         payload = request.get_json()
-#         service.add_tenancies(id, payload["tenancies"])
-#         return {}, 200
-
-#     @namespace.doc("Remove Tenancy from a User")
-#     @namespace.expect(user_tenancy_request_model, validate=True)
-#     def delete(self, id):
-#         """Remove tenancies from a specific user"""
-#         payload = request.get_json()
-#         service.remove_tenancies(id, payload["tenancies"])
-#         return {}, 200
-
-
-# @namespace.route("/<string:id>/enforce")
-# @namespace.param("id", "The user id")
-# @namespace.response(404, "User not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersEnforceController(Resource):
-#     method_decorators = [authenticate]
-
-#     @namespace.doc("Check users permissions")
-#     @namespace.expect(user_enforce_model, validate=True)
-#     def post(self, id):
-#         """Get user enforce"""
-#         payload = request.get_json()
-#         enforce = service.enforce(
-#             payload["user_id"], payload["resource"], payload["action"]
-#         )
-#         return enforce, 200
-
-
-# @namespace.route("/force-policy-reload")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class UsersForcePolicyReloadController(Resource):
-#     method_decorators = [authenticate]
-
-#     @namespace.doc("Force policy reload")
-#     def get(self):
-#         """Load policy"""
-#         service.load_policy()
-#         return {}, 200
+# POST /force-policy-reload
+@router.post("/force-policy-reload")
+@inject
+async def force_policy_reload(
+    service: UserService = Depends(Provide[Container.user_service]),
+) -> None:
+    service.load_policy()
+    return {}

@@ -3,16 +3,16 @@ import logging
 from typing import List
 from uuid import UUID
 from app.exception.NotFoundException import NotFoundException
-from model.db.client import Client as DBModel
-from model.client import Client
-from repository.client import ClientRepository
-from service.secret import hash_password
+from app.model.db.client import Client as DBModel
+from app.model.client import Client
+from app.repository.client import ClientRepository
+from app.service.secret import hash_password
 
 class ClientService:
     def __init__(self, repository: ClientRepository) -> None:
         self._repository: ClientRepository = repository
     
-    def __adapt_client(self, client) -> Client:
+    def __adapt_client(self, client: DBModel) -> Client:
         return Client(
             key=client.key,
             name=client.name,
