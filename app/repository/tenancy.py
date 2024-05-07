@@ -7,12 +7,18 @@ from typing import Callable, List
 
 
 class TenancyRepository:
-    def __init__(self, session_factory: Callable[..., AbstractContextManager[Session]]) -> None:
+    def __init__(
+        self, session_factory: Callable[..., AbstractContextManager[Session]]
+    ) -> None:
         self._session_factory = session_factory
 
     def fetch(self, tenancy: str, is_enabled: bool = True) -> Tenancy:
         with self._session_factory() as session:
-            return session.query(Tenancy).filter_by(name=tenancy, is_enabled=is_enabled).first()
+            return (
+                session.query(Tenancy)
+                .filter_by(name=tenancy, is_enabled=is_enabled)
+                .first()
+            )
 
     def fetch_all(self, is_enabled: bool = None) -> List[Tenancy]:
         with self._session_factory() as session:

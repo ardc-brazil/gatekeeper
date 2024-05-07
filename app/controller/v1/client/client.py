@@ -3,7 +3,12 @@ from fastapi import APIRouter, Depends, Response
 from dependency_injector.wiring import inject, Provide
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
-from app.controller.v1.client.resource import ClientCreateRequest, ClientCreateResponse, ClientGetResponse, ClientUpdateRequest
+from app.controller.v1.client.resource import (
+    ClientCreateRequest,
+    ClientCreateResponse,
+    ClientGetResponse,
+    ClientUpdateRequest,
+)
 from app.service.client import ClientService
 
 router = APIRouter(
@@ -11,6 +16,7 @@ router = APIRouter(
     tags=["clients"],
     responses={404: {"description": "Not found"}},
 )
+
 
 # GET /clients/{key}
 @router.get("/{key}", dependencies=[Depends(authenticate)])
@@ -22,10 +28,13 @@ async def get_by_key(
 ) -> ClientGetResponse:
     client = service.fetch(key)
     if client is not None:
-        return ClientGetResponse(key=client["key"], name=client["name"], is_enabled=client["is_enabled"])
+        return ClientGetResponse(
+            key=client["key"], name=client["name"], is_enabled=client["is_enabled"]
+        )
     else:
         response.status_code = 404
         return response
+
 
 # PUT /clients/{key}
 @router.put("/{key}")
@@ -38,6 +47,7 @@ async def update_by_key(
     service.update(key=key, name=payload.name, secret=payload.secret)
     return {}
 
+
 # POST /clients
 @router.post("/", status_code=201)
 @inject
@@ -47,6 +57,7 @@ async def create(
 ) -> ClientCreateResponse:
     key = service.create(name=payload.name, secret=payload.secret)
     return ClientCreateResponse(key=key)
+
 
 # DELETE /clients/{key}
 @router.delete("/{key}", status_code=204)
@@ -58,6 +69,7 @@ async def delete(
     service.disable(key)
     return {}
 
+
 # GET /clients
 @router.get("/")
 @inject
@@ -65,7 +77,13 @@ async def get_all(
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> list[ClientGetResponse]:
     clients = service.fetch_all()
-    return [ClientGetResponse(key=client["key"], name=client["name"], is_enabled=client["is_enabled"]) for client in clients]
+    return [
+        ClientGetResponse(
+            key=client["key"], name=client["name"], is_enabled=client["is_enabled"]
+        )
+        for client in clients
+    ]
+
 
 # POST /clients/{key}/enable
 @router.post("/{key}/enable")

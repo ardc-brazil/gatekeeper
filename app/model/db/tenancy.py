@@ -2,6 +2,7 @@ from sqlalchemy.sql import func
 from app.database import Base
 from sqlalchemy import Column, String, Boolean, DateTime
 
+
 class Tenancy(Base):
     __tablename__ = "tenancies"
     name = Column(String(256), primary_key=True)

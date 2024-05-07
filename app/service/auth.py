@@ -11,9 +11,9 @@ from casbin import SyncedEnforcer
 
 
 class AuthService:
-    def __init__(self, 
-                 client_service: ClientService, 
-                 casbin_enforcer: SyncedEnforcer) -> None:
+    def __init__(
+        self, client_service: ClientService, casbin_enforcer: SyncedEnforcer
+    ) -> None:
         self._client_service = client_service
         self._casbin_enforcer = casbin_enforcer
 

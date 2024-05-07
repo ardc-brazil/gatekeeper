@@ -34,7 +34,9 @@ class TenancyService:
             res: DBModel = self._repository.fetch_all(is_enabled)
             if res is None:
                 return []
-            tenancies: List[Tenancy] = [self.__adapt_tenancy(tenancy) for tenancy in res]
+            tenancies: List[Tenancy] = [
+                self.__adapt_tenancy(tenancy) for tenancy in res
+            ]
             return tenancies
         except Exception as e:
             logging.error(e)
@@ -50,9 +52,9 @@ class TenancyService:
 
     def update(self, old_name: str, updated_tenancy: Tenancy) -> None:
         old_tenancy: DBModel = self._repository.fetch(old_name)
-        if old_tenancy is None: 
+        if old_tenancy is None:
             raise NotFoundException(f"not_found: {old_name}")
-        
+
         old_tenancy.name = updated_tenancy.name
         old_tenancy.is_enabled = updated_tenancy.is_enabled
         self._repository.upsert(old_tenancy)

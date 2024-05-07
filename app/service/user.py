@@ -10,9 +10,12 @@ from casbin import SyncedEnforcer
 
 
 class UserService:
-    def __init__(self, repository: UserRepository, 
-                 tenancy_repository: TenancyRepository,
-                 casbin_enforcer: SyncedEnforcer) -> None:
+    def __init__(
+        self,
+        repository: UserRepository,
+        tenancy_repository: TenancyRepository,
+        casbin_enforcer: SyncedEnforcer,
+    ) -> None:
         self._repository: UserRepository = repository
         self._tenancy_repository: TenancyRepository = tenancy_repository
         self._casbin_enforcer: SyncedEnforcer = casbin_enforcer
@@ -24,7 +27,10 @@ class UserService:
             email=user.email,
             roles=user.roles,
             is_enabled=user.is_enabled,
-            providers=[UserProvider(name=provider.name, reference=provider.reference) for provider in user.providers],
+            providers=[
+                UserProvider(name=provider.name, reference=provider.reference)
+                for provider in user.providers
+            ],
             tenancies=[tenancy.name for tenancy in user.tenancies],
             created_at=user.created_at,
             updated_at=user.updated_at,
@@ -44,8 +50,12 @@ class UserService:
         user.roles = self._casbin_enforcer.get_roles_for_user(str(user.id))
         return self.__adapt_user(user)
 
-    def fetch_by_provider(self, provider_name: str, reference: str, is_enabled: bool = True) -> User:
-        user: UserDBModel = self._repository.fetch_by_provider(provider_name, reference, is_enabled)
+    def fetch_by_provider(
+        self, provider_name: str, reference: str, is_enabled: bool = True
+    ) -> User:
+        user: UserDBModel = self._repository.fetch_by_provider(
+            provider_name, reference, is_enabled
+        )
         if user is None:
             raise NotFoundException(f"not_found: {provider_name} {reference}")
         user.roles = self._casbin_enforcer.get_roles_for_user(str(user.id))
@@ -56,18 +66,11 @@ class UserService:
 
         for provider in user.providers:
             user.providers.append(
-                ProviderDBModel(
-                    name=provider.name, reference=provider.reference
-                )
+                ProviderDBModel(name=provider.name, reference=provider.reference)
             )
-        
+
         for tenancy in user.tenancies:
-            user.tenancies.append(
-                TenancyDBModel(
-                    name=tenancy,
-                    is_enabled=True
-                )
-            )
+            user.tenancies.append(TenancyDBModel(name=tenancy, is_enabled=True))
 
         user_id = self._repository.upsert(user).id
 
@@ -133,7 +136,9 @@ class UserService:
         users: list[User] = []
 
         for db_user in self._repository.search(query_params):
-            db_user.roles = self._casbin_enforcer.get_implicit_roles_for_user(str(db_user.id))
+            db_user.roles = self._casbin_enforcer.get_implicit_roles_for_user(
+                str(db_user.id)
+            )
             users.append(self.__adapt_user(user=db_user))
 
         return users

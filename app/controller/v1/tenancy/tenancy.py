@@ -5,7 +5,11 @@ from app.model.tenancy import Tenancy
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
 from app.controller.interceptor.authorization import authorize
-from app.controller.v1.tenancy.resource import TenancyCreateRequest, TenancyGetResponse, TenancyUpdateRequest
+from app.controller.v1.tenancy.resource import (
+    TenancyCreateRequest,
+    TenancyGetResponse,
+    TenancyUpdateRequest,
+)
 from app.service.tenancy import TenancyService
 
 from dependency_injector.wiring import inject, Provide
@@ -17,6 +21,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
 # GET /tenancies
 @router.get("/")
 @inject
@@ -24,7 +29,10 @@ async def get_all(
     service: TenancyService = Depends(Provide[Container.tenancy_service]),
 ) -> list[TenancyGetResponse]:
     tenancies = service.fetch_all()
-    return [TenancyGetResponse(name=tenancy.name, is_enabled=tenancy.is_enabled) for tenancy in tenancies]
+    return [
+        TenancyGetResponse(name=tenancy.name, is_enabled=tenancy.is_enabled)
+        for tenancy in tenancies
+    ]
 
 
 # GET /tenancies/{name}
@@ -43,6 +51,7 @@ async def get_by_name(
         response.status_code = 404
         return response
 
+
 # PUT /tenancies/{name}
 @router.put("/{name:path}")
 @inject
@@ -54,6 +63,7 @@ async def update_by_name(
     service.update(name, Tenancy(payload.name, payload.is_enabled))
     return {}
 
+
 # POST /tenancies
 @router.post("/", status_code=201)
 @inject
@@ -64,6 +74,7 @@ async def create(
     service.create(Tenancy(payload.name, payload.is_enabled))
     return {}
 
+
 # DELETE /tenancies/{name}
 @router.delete("/{name:path}", status_code=204)
 @inject
@@ -73,6 +84,7 @@ async def delete(
 ) -> None:
     service.disable(name)
     return {}
+
 
 # POST /tenancies/{name}/enable
 @router.post("/{name:path}/enable")

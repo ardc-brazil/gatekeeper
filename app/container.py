@@ -1,13 +1,14 @@
 import logging
 from dependency_injector import containers, providers
-from minio import Minio
 import os
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
 
 from app.repository.user import UserRepository
+
 # from service.dataset import DatasetService
 from app.service.user import UserService
+
 # from service.tus import TusService
 from app.repository.tenancy import TenancyRepository
 from app.service.tenancy import TenancyService
@@ -21,12 +22,13 @@ logger = logging.getLogger("uvicorn")
 
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
-        modules=["app.controller.v1.client.client",
-                #  "app.controllers.v1.datasets.datasets",
-                 "app.controller.v1.user.user",
-                 "app.controller.v1.tenancy.tenancy",
-                #  "app.controllers.v1.tus.tus",
-                 ]
+        modules=[
+            "app.controller.v1.client.client",
+            #  "app.controllers.v1.datasets.datasets",
+            "app.controller.v1.user.user",
+            "app.controller.v1.tenancy.tenancy",
+            #  "app.controllers.v1.tus.tus",
+        ]
     )
 
     env_name = os.getenv("ENV", "local")
@@ -40,7 +42,7 @@ class Container(containers.DeclarativeContainer):
         ClientRepository,
         session_factory=db.provided.session,
     )
-    
+
     client_service = providers.Factory(
         ClientService,
         repository=client_repository,
@@ -56,7 +58,9 @@ class Container(containers.DeclarativeContainer):
         repository=tenancy_repository,
     )
 
-    casbin_adapter = providers.Singleton(CasbinSQLAlchemyAdapter, db.provided.get_engine.call())
+    casbin_adapter = providers.Singleton(
+        CasbinSQLAlchemyAdapter, db.provided.get_engine.call()
+    )
     casbin_enforcer = providers.Singleton(
         SyncedEnforcer,
         config.casbin.model_file,

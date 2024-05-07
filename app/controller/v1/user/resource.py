@@ -2,9 +2,11 @@ from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
 
+
 class UserProvider(BaseModel):
     name: str = Field(..., description="Provider name")
     reference: str = Field(..., description="Provider reference")
+
 
 class UserGetResponse(BaseModel):
     id: UUID = Field(..., description="User id")
@@ -17,9 +19,11 @@ class UserGetResponse(BaseModel):
     providers: list[UserProvider] = Field(..., description="User providers")
     tenancies: list[str] = Field(..., description="User tenancies")
 
+
 class UserUpdateRequest(BaseModel):
     name: str = Field(..., description="User name")
     email: str = Field(..., description="User email")
+
 
 class UserCreateRequest(BaseModel):
     name: str = Field(..., description="User name")
@@ -28,16 +32,20 @@ class UserCreateRequest(BaseModel):
     roles: list[str] = Field([], description="User roles")
     tenancies: list[str] = Field(..., description="User tenancies")
 
+
 class UserProviderAddRequest(BaseModel):
     name: str = Field(..., description="Provider name")
     reference: str = Field(..., description="Provider reference")
 
+
 class UserTenanciesRequest(BaseModel):
     tenancies: list[str] = Field([], description="Tenancies name")
+
 
 class UserEnforceRequest(BaseModel):
     resource: str = Field(..., description="Resource name")
     action: str = Field(..., description="Action name")
+
 
 class UserEnforceResponse(BaseModel):
     allow: bool = Field(..., description="Allow access")

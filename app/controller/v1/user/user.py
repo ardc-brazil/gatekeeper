@@ -3,7 +3,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.container import Container
-from app.controller.v1.user.resource import UserEnforceRequest, UserEnforceResponse, UserProviderAddRequest, UserCreateRequest, UserGetResponse, UserProvider, UserTenanciesRequest, UserUpdateRequest
+from app.controller.v1.user.resource import (
+    UserEnforceRequest,
+    UserEnforceResponse,
+    UserProviderAddRequest,
+    UserCreateRequest,
+    UserGetResponse,
+    UserProvider,
+    UserTenanciesRequest,
+    UserUpdateRequest,
+)
 from app.model.user import User, UserQuery
 from app.service.user import UserService
 from dependency_injector.wiring import inject, Provide
@@ -12,6 +21,7 @@ router = APIRouter(
     prefix="/users",
     tags=["users"],
 )
+
 
 def _adapt_get_response(user: User) -> UserGetResponse:
     return UserGetResponse(
@@ -22,10 +32,13 @@ def _adapt_get_response(user: User) -> UserGetResponse:
         is_enabled=user.is_enabled,
         created_at=user.created_at,
         updated_at=user.updated_at,
-        providers=[UserProvider(name=provider.name, reference=provider.reference) for provider in user.providers],
+        providers=[
+            UserProvider(name=provider.name, reference=provider.reference)
+            for provider in user.providers
+        ],
         tenancies=user.tenancies,
     )
-    
+
 
 # GET /users
 @router.get("/")
@@ -39,6 +52,7 @@ async def search(
     users = service.search(query)
     return [_adapt_get_response(user) for user in users]
 
+
 # GET /users/{id}
 @router.get("/{id}")
 @inject
@@ -50,6 +64,7 @@ async def get(
     user: User = service.fetch_by_id(id=id, is_enabled=is_enabled)
     return _adapt_get_response(user)
 
+
 # POST /users
 @router.post("/")
 @inject
@@ -57,11 +72,16 @@ async def create(
     payload: UserCreateRequest,
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> UUID:
-    return service.create(User(name=payload.name, 
-                               email=payload.email, 
-                               providers=payload.providers, 
-                               roles=payload.roles, 
-                               tenancies=payload.tenancies))
+    return service.create(
+        User(
+            name=payload.name,
+            email=payload.email,
+            providers=payload.providers,
+            roles=payload.roles,
+            tenancies=payload.tenancies,
+        )
+    )
+
 
 # PUT /users/{id}
 @router.put("/{id}")
@@ -74,6 +94,7 @@ async def update(
     user: User = service.update(id=id, name=payload.name, email=payload.email)
     return _adapt_get_response(user)
 
+
 # DELETE /users/{id}
 @router.delete("/{id}")
 @inject
@@ -84,6 +105,7 @@ async def delete(
     service.disable(id=id)
     return {}
 
+
 # PUT /users/{id}/enable
 @router.put("/{id}/enable")
 @inject
@@ -93,6 +115,7 @@ async def enable(
 ) -> None:
     service.enable(id=id)
     return {}
+
 
 # PUT /users/{id}/roles
 @router.put("/{id}/roles")
@@ -105,6 +128,7 @@ async def add_roles(
     service.add_roles(id=id, roles=roles)
     return {}
 
+
 # DELETE /users/{id}/roles
 @router.delete("/{id}/roles")
 @inject
@@ -116,6 +140,7 @@ async def remove_roles(
     service.remove_roles(id=id, roles=roles)
     return {}
 
+
 # PUT /users/{id}/providers
 @router.put("/{id}/providers")
 @inject
@@ -126,6 +151,7 @@ async def add_provider(
 ) -> None:
     service.add_provider(id=id, provider=payload.provider, reference=payload.reference)
     return {}
+
 
 # DELETE /users/{id}/providers
 @router.delete("/{id}/providers")
@@ -139,6 +165,7 @@ async def remove_provider(
     service.remove_provider(id=id, provider_name=provider, reference=reference)
     return {}
 
+
 # GET /users/providers/{provider}/references/{reference}
 @router.get("/providers/{provider}/references/{reference}")
 @inject
@@ -148,8 +175,11 @@ async def get_by_provider_reference(
     is_enabled: Union[bool, None] = True,
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> UserGetResponse:
-    user: User = service.fetch_by_provider(provider_name=provider, reference=reference, is_enabled=is_enabled)
+    user: User = service.fetch_by_provider(
+        provider_name=provider, reference=reference, is_enabled=is_enabled
+    )
     return _adapt_get_response(user)
+
 
 # POST /users/{id}/tenancies
 @router.post("/{id}/tenancies")
@@ -162,6 +192,7 @@ async def add_tenancy(
     service.add_tenancies(id=id, tenancies=payload.tenancies)
     return {}
 
+
 # DELETE /users/{id}/tenancies
 @router.delete("/{id}/tenancies")
 @inject
@@ -173,6 +204,7 @@ async def remove_tenancy(
     service.remove_tenancies(id=id, tenancies=payload.tenancies)
     return {}
 
+
 # POST /users/{id}/enforce
 @router.post("/{id}/enforce")
 @inject
@@ -181,8 +213,11 @@ async def enforce(
     payload: UserEnforceRequest,
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> UserEnforceResponse:
-    is_authorized: bool = service.enforce(id=id, resource=payload.resource, action=payload.action)
+    is_authorized: bool = service.enforce(
+        id=id, resource=payload.resource, action=payload.action
+    )
     return UserEnforceResponse(is_authorized=is_authorized)
+
 
 # POST /force-policy-reload
 @router.post("/force-policy-reload")

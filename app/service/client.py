@@ -8,10 +8,11 @@ from app.model.client import Client
 from app.repository.client import ClientRepository
 from app.service.secret import hash_password
 
+
 class ClientService:
     def __init__(self, repository: ClientRepository) -> None:
         self._repository: ClientRepository = repository
-    
+
     def __adapt_client(self, client: DBModel) -> Client:
         return Client(
             key=client.key,
@@ -37,7 +38,7 @@ class ClientService:
             res: DBModel = self._repository.fetch_all()
             if res is None:
                 return []
-            
+
             return [self.__adapt_client(client) for client in res]
         except Exception as e:
             logging.error(e)
@@ -57,7 +58,9 @@ class ClientService:
             logging.error(e)
             raise e
 
-    def update(self, key: UUID, name: str | None = None, secret: str | None = None) -> None:
+    def update(
+        self, key: UUID, name: str | None = None, secret: str | None = None
+    ) -> None:
         try:
             client: DBModel = self._repository.fetch(key)
             if client is None:
@@ -67,7 +70,7 @@ class ClientService:
                 client.name = name
             if secret is not None:
                 client.secret = hash_password(secret)
-            
+
             self._repository.upsert(client)
             self.fetch.cache_clear()
         except Exception as e:

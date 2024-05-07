@@ -1,4 +1,3 @@
-
 from contextlib import contextmanager, AbstractContextManager
 from typing import Callable
 import logging
@@ -13,7 +12,6 @@ Base = declarative_base()
 
 
 class Database:
-
     def __init__(self, db_url: str) -> None:
         self._engine = create_engine(db_url, echo=True)
         self._session_factory = orm.scoped_session(
@@ -38,6 +36,6 @@ class Database:
             raise
         finally:
             session.close()
-    
+
     def get_engine(self):
         return self._engine

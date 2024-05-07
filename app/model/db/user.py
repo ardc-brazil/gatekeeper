@@ -9,23 +9,15 @@ from sqlalchemy import Column, String, Boolean, DateTime, Table, ForeignKey, Int
 user_provider_association = Table(
     "user_provider",
     Base.metadata,
-    Column(
-        "user_id", UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True
-    ),
-    Column(
-        "provider_id", Integer, ForeignKey("providers.id"), primary_key=True
-    ),
+    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True),
+    Column("provider_id", Integer, ForeignKey("providers.id"), primary_key=True),
 )
 
 user_tenancy_association = Table(
     "users_tenancies",
     Base.metadata,
-    Column(
-        "user_id", UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True
-    ),
-    Column(
-        "tenancy", String(256), ForeignKey("tenancies.name"), primary_key=True
-    ),
+    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True),
+    Column("tenancy", String(256), ForeignKey("tenancies.name"), primary_key=True),
 )
 
 
@@ -50,7 +42,10 @@ class User(Base):
     )
 
     providers = relationship(
-        "Provider", lazy="subquery", secondary=user_provider_association, backref="users"
+        "Provider",
+        lazy="subquery",
+        secondary=user_provider_association,
+        backref="users",
     )
     tenancies = relationship(
         "Tenancy", lazy="subquery", secondary=user_tenancy_association, backref="users"
