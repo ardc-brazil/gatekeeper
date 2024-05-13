@@ -1,5 +1,6 @@
 import logging
 from uuid import UUID
+from app.model.dataset import DataFile
 from app.model.tus import TusResult
 from app.service.dataset import DatasetService
 import os
@@ -13,17 +14,19 @@ class TusService:
         file_metadata = file_upload["MetaData"]
         storage = file_upload["Storage"]
         dataset_id = UUID(file_metadata["dataset_id"])
-        file = {
-            "name": file_metadata["filename"],
-            "size_bytes": file_upload["Size"],
-            "format": file_metadata["filetype"],
-            "extension": os.path.splitext(file_metadata["filename"])[1][1:].lower(),
-            "storage_file_name": storage["Key"],
-            "storage_path": storage["Bucket"] + "/" + storage["Key"],
-            "author_id": user_id,
-        }
+        file = DataFile(
+            name=file_metadata["filename"],
+            size_bytes=file_upload["Size"],
+            format=file_metadata["filetype"],
+            extension=os.path.splitext(file_metadata["filename"])[1][1:].lower(),
+            storage_file_name=storage["Key"],
+            storage_path=storage["Bucket"] + "/" + storage["Key"],
+            author_id=user_id,
+        )
 
-        self._dataset_service.create_data_file(file, dataset_id, user_id)
+        self._dataset_service.create_data_file(file=file, 
+                                               dataset_id=dataset_id, 
+                                               user_id=user_id)
 
         return TusResult(status_code=200, body_msg="")
 
