@@ -1,23 +1,46 @@
-# from uuid import UUID
-# from fastapi import APIRouter, Depends, Request
-# from controller.interceptor.user_parser import parse_user_header
-# from container import Container
-# from service.tus import TusService
-# from dependency_injector.wiring import inject, Provide
+import json
+from uuid import UUID
+from fastapi import APIRouter, Depends, Response
 
-# router = APIRouter(
-#     prefix="/tus",
-#     tags=["tus"],
-#     responses={404: {"description": "Not found"}},
-# )
+from app.container import Container
+from app.controller.interceptor.authorization import authorize_tus
+from dependency_injector.wiring import inject, Provide
 
-# # POST /hooks
-# @router.post("/hooks")
-# @inject
-# async def post(
-#     request: Request,
-#     user_id: UUID = Depends(parse_user_header),
-#     service: TusService = Depends(Provide[Container.tus_service]),
-# ) -> FileCreateResponse:
-#     key = service.handle(name=payload.name, secret=payload.secret)
-#     return FileCreateResponse(key=key)
+from app.controller.interceptor.user_parser import parse_user_header
+from app.model.tus import TusResult
+from app.service.tus import TusService
+
+router = APIRouter(
+    prefix="/tus",
+    tags=["tus"],
+    dependencies=[Depends(authorize_tus)]
+)
+
+def _adapt(res: TusResult) -> dict:
+    if res.status_code == 200:
+        return {}, 200
+    result = {
+        "HTTPResponse": {
+            "StatusCode": res.status_code,
+            "Body": json.dumps({"message": res.body_msg}),
+            "Header": {"Content-Type": "application/json"},
+        }
+    }
+
+    if res.reject_upload is not None:
+        result["RejectUpload"] = res.reject_upload
+
+    return result
+
+@router.post("/hooks")
+@inject
+async def post(
+    payload: dict,
+    response: Response,
+    user_id: UUID = Depends(parse_user_header),
+    service: TusService = Depends(Provide[Container.tus_service]),
+) -> dict:
+    res = service.handle(payload=payload, user_id=user_id)
+    response.status_code = res.status_code
+    response.body = _adapt(res)
+    return response

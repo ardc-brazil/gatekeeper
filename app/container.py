@@ -8,11 +8,10 @@ from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.user import UserRepository
 
-# from service.dataset import DatasetService
 from app.service.dataset import DatasetService
+from app.service.tus import TusService
 from app.service.user import UserService
 
-# from service.tus import TusService
 from app.repository.tenancy import TenancyRepository
 from app.service.tenancy import TenancyService
 from app.service.auth import AuthService
@@ -106,7 +105,7 @@ class Container(containers.DeclarativeContainer):
         user_service=user_service,
     )
 
-    # tus_service = providers.Factory(
-    #     TusService,
-    #     dataset_service=dataset_service,
-    # )
+    tus_service = providers.Factory(
+        TusService,
+        dataset_service=dataset_service,
+    )

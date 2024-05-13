@@ -4,9 +4,6 @@ from app.model.tus import TusResult
 from app.service.dataset import DatasetService
 import os
 
-dataset_service = DatasetService()
-
-
 class TusService:
     def __init__(self, dataset_service: DatasetService):
         self._dataset_service = dataset_service

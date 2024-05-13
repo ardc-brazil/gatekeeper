@@ -22,6 +22,7 @@ from app.controller.v1.tenancy.tenancy import router as tenancies_router
 from app.controller.v1.user.user import router as user_router
 from app.controller.v1.dataset.dataset_filter import router as dataset_filter_router
 from app.controller.v1.dataset.dataset import router as dataset_router
+from app.controller.v1.tus.tus import router as tus_router
 
 container = Container()
 
@@ -51,6 +52,7 @@ app.include_router(tenancies_router, prefix="/v1")
 app.include_router(user_router, prefix="/v1")
 app.include_router(client_router, prefix="/v1")
 app.include_router(infrastructure_router, prefix="/v1")
+app.include_router(tus_router, prefix="/v1")
 
 app.add_exception_handler(ConflictException, conflict_exception_handler)
 app.add_exception_handler(NotFoundException, not_found_exception_handler)
