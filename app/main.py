@@ -1,11 +1,14 @@
 import uvicorn
 from fastapi import FastAPI
 
-from app.exception.UnauthorizedException import UnauthorizedException
-from app.exception.NotFoundException import NotFoundException
-from app.exception.ConflictException import ConflictException
+from app.exception.unauthorized import UnauthorizedException
+from app.exception.not_found import NotFoundException
+from app.exception.conflict import ConflictException
+from app.exception.illegal_state import IllegalStateException
 from app.controller.interceptor.exception_handler import (
     conflict_exception_handler,
+    generic_exception_handler,
+    illegal_state_exception_handler,
     not_found_exception_handler,
     unauthorized_exception_handler,
 )
@@ -17,6 +20,8 @@ from app.controller.v1.infrastructure.infrastructure import (
 )
 from app.controller.v1.tenancy.tenancy import router as tenancies_router
 from app.controller.v1.user.user import router as user_router
+from app.controller.v1.dataset.dataset_filter import router as dataset_filter_router
+from app.controller.v1.dataset.dataset import router as dataset_router
 
 container = Container()
 
@@ -40,33 +45,22 @@ app = FastAPI(
 app.container = container
 
 # API routes
-app.include_router(client_router, prefix="/v1")
-app.include_router(infrastructure_router, prefix="/v1")
+app.include_router(dataset_router, prefix="/v1")
+app.include_router(dataset_filter_router, prefix="/v1")
 app.include_router(tenancies_router, prefix="/v1")
 app.include_router(user_router, prefix="/v1")
+app.include_router(client_router, prefix="/v1")
+app.include_router(infrastructure_router, prefix="/v1")
 
 app.add_exception_handler(ConflictException, conflict_exception_handler)
 app.add_exception_handler(NotFoundException, not_found_exception_handler)
 app.add_exception_handler(UnauthorizedException, unauthorized_exception_handler)
+app.add_exception_handler(IllegalStateException, illegal_state_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 # Migrate(app, db)
 
 # db.init_app(app)
-
-# remove trailing slash in the api
-# app.url_map.strict_slashes = False
-
-# from app.controllers.v1 import api
-
-# app.register_blueprint(api)
-
-############################################################
-# To create a new version of the API, follow this pattern
-############################################################
-# from app.controllers.v2 import api
-# app.register_blueprint(api)
-
-# return app
 
 
 if __name__ == "__main__":

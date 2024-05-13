@@ -7,7 +7,7 @@ from sqlalchemy.sql.expression import true
 from typing import Callable
 from contextlib import AbstractContextManager
 from sqlalchemy.orm import Session
-from app.exception.ConflictException import ConflictException
+from app.exception.conflict import ConflictException
 from sqlalchemy.exc import IntegrityError
 
 

@@ -8,7 +8,7 @@ from dependency_injector.wiring import inject, Provide
 
 from app.container import Container
 from app.controller.interceptor.user_parser import parse_user_header
-from app.exception.UnauthorizedException import UnauthorizedException
+from app.exception.unauthorized import UnauthorizedException
 from app.model.tus import TusResult
 from app.service.auth import AuthService
 
@@ -23,7 +23,7 @@ async def authorize(
     action = request.method
 
     try:
-        auth_service.is_user_authorized(user_id, resource, action)
+        auth_service.authorize_user(user_id, resource, action)
     except UnauthorizedException as e:
         if str(e) == "missing_information":
             raise HTTPException(status_code=401, detail="Unauthorized")

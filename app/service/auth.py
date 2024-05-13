@@ -1,13 +1,11 @@
 import logging
 from uuid import UUID
 import jwt
-from app.exception.UnauthorizedException import UnauthorizedException
+from app.exception.unauthorized import UnauthorizedException
 from app.service.client import ClientService
 from app.service.secret import check_password
 from flask import current_app as app
 from casbin import SyncedEnforcer
-
-# client_service = ClientService()
 
 
 class AuthService:
@@ -17,7 +15,7 @@ class AuthService:
         self._client_service = client_service
         self._casbin_enforcer = casbin_enforcer
 
-    def is_client_authorized(self, api_key: str, salted_api_secret: str):
+    def authorize_client(self, api_key: str, salted_api_secret: str) -> None:
         if api_key is None or salted_api_secret is None:
             raise UnauthorizedException("missing_information")
 
@@ -27,7 +25,7 @@ class AuthService:
             logging.info(f"api_key {api_key} not found")
             raise UnauthorizedException("wrong_credentials")
 
-        if not check_password(salted_api_secret, client.secret):
+        if not check_password(password=salted_api_secret, hashed_password=client.secret):
             logging.warn(f"incorrect api_secret {salted_api_secret}")
             raise UnauthorizedException("wrong_credentials")
 
@@ -38,7 +36,9 @@ class AuthService:
 
         try:
             return jwt.decode(
-                user_token, app.config["USER_TOKEN_SECRET"], algorithms=["HS256"]
+                jwt=user_token, 
+                key=app.config["USER_TOKEN_SECRET"], 
+                algorithms=["HS256"]
             )
         except jwt.ExpiredSignatureError:
             logging.warn(f"expired jwt: {user_token}")
@@ -50,7 +50,7 @@ class AuthService:
             logging.error(f"failed to validate jwt. {e}")
             raise e
 
-    def is_user_authorized(self, user_id: UUID, resource: str, action: str) -> None:
+    def authorize_user(self, user_id: UUID, resource: str, action: str) -> None:
         if user_id is None or resource is None or action is None:
             raise UnauthorizedException("missing_information")
 

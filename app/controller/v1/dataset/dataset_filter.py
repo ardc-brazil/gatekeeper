@@ -1,40 +1,22 @@
-# from app.controllers.interceptors.authentication import authenticate
-# from app.controllers.interceptors.authorization import authorize
-# from app.services.datasets import DatasetService
-# from flask_restx import Namespace, Resource, fields
+from fastapi import APIRouter, Depends
+from app.container import Container
+from dependency_injector.wiring import inject, Provide
 
-# service = DatasetService()
-# namespace = Namespace("datasets", "Dataset operations")
+from app.controller.interceptor.authentication import authenticate
+from app.controller.interceptor.authorization import authorize
+from app.service.dataset import DatasetService
 
-# dataset_filter_options_model = namespace.model(
-#     "DatasetFilterOptions",
-#     {
-#         "id": fields.String(required=True, description="Options ID"),
-#         "label": fields.String(required=True, description="Options label"),
-#         "value": fields.String(required=True, description="Options value"),
-#         "type": fields.String(required=False, description="Options type"),
-#     },
-# )
+router = APIRouter(
+    prefix="/datasets",
+    tags=["datasets"],
+    dependencies=[Depends(authenticate), Depends(authorize)],
+    responses={404: {"description": "Not found"}},
+)
 
-# dataset_filter_model = namespace.model(
-#     "DatasetFilter",
-#     {
-#         "id": fields.String(readonly=True, required=True, description="Filter ID"),
-#         "options": fields.List(fields.Nested(dataset_filter_options_model)),
-#         "selection": fields.String(required=True, description="Filter selection"),
-#         "title": fields.String(required=True, description="Filter title"),
-#     },
-# )
-
-
-# @namespace.route("/filters")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class DatasetsFilterController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     @namespace.doc("Get a Dataset filter")
-#     @namespace.marshal_list_with(dataset_filter_model)
-#     def get(self):
-#         """Fetch dataset available filters"""
-#         return service.fetch_available_filters(), 200
+# GET /filters
+@router.get("/filters")
+@inject
+async def get_filters(
+    service: DatasetService = Depends(Provide[Container.dataset_service])
+):
+    return service.fetch_available_filters()

@@ -1,8 +1,7 @@
 from functools import lru_cache
-import logging
 from typing import List
 from uuid import UUID
-from app.exception.NotFoundException import NotFoundException
+from app.exception.not_found import NotFoundException
 from app.model.db.client import Client as DBModel
 from app.model.client import Client
 from app.repository.client import ClientRepository
@@ -23,80 +22,56 @@ class ClientService:
 
     @lru_cache
     def fetch(self, api_key: UUID) -> Client | None:
-        try:
-            res: DBModel = self._repository.fetch(api_key)
-            if res is None:
-                return None
-            client: Client = self.__adapt_client(res)
-            return client
-        except Exception as e:
-            logging.error(e)
-            raise e
-
+        res: DBModel = self._repository.fetch(api_key=api_key)
+        if res is None:
+            return None
+        client: Client = self.__adapt_client(client=res)
+        return client
+        
     def fetch_all(self) -> List[Client]:
-        try:
-            res: DBModel = self._repository.fetch_all()
-            if res is None:
-                return []
+        res: DBModel = self._repository.fetch_all()
+        if res is None:
+            return []
 
-            return [self.__adapt_client(client) for client in res]
-        except Exception as e:
-            logging.error(e)
-            raise e
+        return [self.__adapt_client(client=client) for client in res]
 
     def create(self, name: str, secret: str) -> UUID:
-        try:
-            client = Client(
-                name=name,
-                secret=hash_password(secret),
-                is_enabled=True,
-            )
-            created_key = self._repository.upsert(client).key
-            self.fetch.cache_clear()
-            return created_key
-        except Exception as e:
-            logging.error(e)
-            raise e
+        client = Client(
+            name=name,
+            secret=hash_password(password=secret),
+            is_enabled=True,
+        )
+        created_key = self._repository.upsert(client=client).key
+        self.fetch.cache_clear()
+        return created_key
 
     def update(
         self, key: UUID, name: str | None = None, secret: str | None = None
     ) -> None:
-        try:
-            client: DBModel = self._repository.fetch(key)
-            if client is None:
-                raise NotFoundException(f"not_found: {key}")
+        client: DBModel = self._repository.fetch(api_key=key)
+        if client is None:
+            raise NotFoundException(f"not_found: {key}")
 
-            if name is not None:
-                client.name = name
-            if secret is not None:
-                client.secret = hash_password(secret)
+        if name is not None:
+            client.name = name
+        if secret is not None:
+            client.secret = hash_password(password=secret)
 
-            self._repository.upsert(client)
-            self.fetch.cache_clear()
-        except Exception as e:
-            logging.error(e)
-            raise e
+        self._repository.upsert(client=client)
+        self.fetch.cache_clear()
 
     def disable(self, key: UUID) -> None:
-        try:
-            client: DBModel = self._repository.fetch(key)
-            if client is None:
-                raise NotFoundException(f"not_found: {key}")
-            client.is_enabled = False
-            self._repository.upsert(client)
-            self.fetch.cache_clear()
-        except Exception as e:
-            logging.error(e)
-            raise e
+        client: DBModel = self._repository.fetch(api_key=key)
+        if client is None:
+            raise NotFoundException(f"not_found: {key}")
+        client.is_enabled = False
+        self._repository.upsert(client=client)
+        self.fetch.cache_clear()
 
     def enable(self, key: UUID) -> None:
-        try:
-            client: DBModel = self._repository.fetch(key, False)
-            if client is None:
-                raise NotFoundException(f"not_found: {key}")
-            client.is_enabled = True
-            self._repository.upsert(client)
-            self.fetch.cache_clear()
-        except Exception as e:
-            logging.error(e)
-            raise e
+        client: DBModel = self._repository.fetch(api_key=key, is_enabled=False)
+        if client is None:
+            raise NotFoundException(f"not_found: {key}")
+        client.is_enabled = True
+        self._repository.upsert(client=client)
+        self.fetch.cache_clear()

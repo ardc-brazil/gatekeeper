@@ -4,9 +4,12 @@ import os
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
 
+from app.repository.dataset import DatasetRepository
+from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.user import UserRepository
 
 # from service.dataset import DatasetService
+from app.service.dataset import DatasetService
 from app.service.user import UserService
 
 # from service.tus import TusService
@@ -24,10 +27,11 @@ class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
         modules=[
             "app.controller.v1.client.client",
-            #  "app.controllers.v1.datasets.datasets",
+            "app.controller.v1.dataset.dataset",
+            "app.controller.v1.dataset.dataset_filter",
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
-            #  "app.controllers.v1.tus.tus",
+            #  "app.controller.v1.tus.tus",
         ]
     )
 
@@ -85,9 +89,22 @@ class Container(containers.DeclarativeContainer):
         casbin_enforcer=casbin_enforcer,
     )
 
-    # dataset_service = providers.Factory(
-    #     DatasetService,
-    # )
+    dataset_repository = providers.Factory(
+        DatasetRepository,
+        session_factory=db.provided.session,
+    )
+
+    dataset_version_repository = providers.Factory(
+        DatasetVersionRepository,
+        session_factory=db.provided.session,
+    )
+
+    dataset_service = providers.Factory(
+        DatasetService,
+        repository=dataset_repository,
+        version_repository=dataset_version_repository,
+        user_service=user_service,
+    )
 
     # tus_service = providers.Factory(
     #     TusService,

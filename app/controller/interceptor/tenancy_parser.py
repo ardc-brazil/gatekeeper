@@ -1,16 +1,12 @@
-from functools import wraps
-from flask import request, g
+from fastapi import Depends
+from fastapi.security import APIKeyHeader
 
+tenancies = APIKeyHeader(
+    name="X-Datamap-Tenancies", auto_error=False, scheme_name="X-Datamap-Tenancies"
+)
 
-def parse_tenancy_header(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        tenancies = request.headers.get("X-Datamap-Tenancies")
-        g.tenancies = []
-
-        if tenancies:
-            g.tenancies.extend(tenancy.strip() for tenancy in tenancies.split(";"))
-
-        return f(*args, **kwargs)
-
-    return decorated
+async def parse_tenancy_header(tenancies: str = Depends(tenancies)) -> list[str]:
+    if not tenancies:
+        return []
+    
+    return [tenancy.strip() for tenancy in tenancies.split(";")]

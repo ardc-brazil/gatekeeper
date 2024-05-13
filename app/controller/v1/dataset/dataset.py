@@ -1,402 +1,225 @@
-# from flask import request, g
-# from app.controllers.interceptors.authentication import authenticate
-# from app.controllers.interceptors.authorization import authorize
-# from app.controllers.interceptors.tenancy_parser import parse_tenancy_header
-# from app.controllers.interceptors.user_parser import parse_user_header
-# from app.services.datasets import DatasetService
-# from flask_restx import Namespace, Resource, fields
-# from werkzeug.exceptions import NotFound
+from datetime import datetime
+from uuid import UUID
+from fastapi import APIRouter, Depends, Response
+from app.container import Container
+from dependency_injector.wiring import inject, Provide
 
-# service = DatasetService()
-# namespace = Namespace("datasets", "Dataset operations")
+from app.controller.interceptor.authentication import authenticate
+from app.controller.interceptor.authorization import authorize
+from app.controller.interceptor.tenancy_parser import parse_tenancy_header
+from app.controller.interceptor.user_parser import parse_user_header
+from app.controller.v1.dataset.resource import DataFileResponse, DatasetCreateResponse, DatasetGetResponse, DatasetUpdateRequest, DatasetVersionResponse
+from app.model.dataset import DataFile, Dataset, DatasetQuery, DatasetVersion, DesignState
+from app.service.dataset import DatasetService
 
-# data_file_model = namespace.model(
-#     "DataFile",
-#     {
-#         "name": fields.String(required=True, description="Data file name"),
-#         "size_bytes": fields.Integer(required=True, description="File size in bytes"),
-#         "extension": fields.String(required=False, description="File extension"),
-#         "format": fields.String(required=False, description="File format"),
-#         "storage_file_name": fields.String(
-#             required=False, description="File name in storage"
-#         ),
-#         "storage_path": fields.String(
-#             required=False, description="File path in storage"
-#         ),
-#         "updated_at": fields.String(
-#             required=True, description="Data file updated at datetime"
-#         ),
-#         "created_at": fields.String(
-#             required=True, description="Data file created at datetime"
-#         ),
-#         "created_by": fields.String(required=True, description="Data file author id"),
-#     },
-# )
+router = APIRouter(
+    prefix="/datasets",
+    tags=["datasets"],
+    dependencies=[Depends(authenticate), Depends(authorize)],
+    responses={404: {"description": "Not found"}},
+)
 
-# dataset_version_model = namespace.model(
-#     "DatasetVersion",
-#     {
-#         "id": fields.String(
-#             readonly=True, required=True, description="Dataset Version ID"
-#         ),
-#         "name": fields.String(
-#             readonly=True, required=True, description="Dataset version name"
-#         ),
-#         "design_state": fields.String(
-#             readonly=True, required=True, description="The actual state of design"
-#         ),
-#         "files": fields.List(
-#             fields.Nested(data_file_model),
-#             required=False,
-#             description="List of data files contained in version",
-#         ),
-#         "updated_at": fields.String(
-#             required=True, description="Dataset version updated at datetime"
-#         ),
-#         "created_at": fields.String(
-#             required=True, description="Dataset version created at datetime"
-#         ),
-#         "created_by": fields.String(
-#             required=True, description="Dataset version author id"
-#         ),
-#         "is_enabled": fields.Boolean(
-#             required=True, description="Dataset version status"
-#         ),
-#     },
-# )
+def _adapt_data_file(file: DataFile) -> DataFileResponse:
+    return DataFileResponse(
+        id=file.id,
+        name=file.name,
+        size_bytes=file.size_bytes,
+        extension=file.extension,
+        format=file.format,
+        storage_file_name=file.storage_file_name,
+        storage_path=file.storage_path,
+        updated_at=file.updated_at,
+        created_at=file.created_at,
+        created_by=file.created_by,
+    )
 
-# dataset_model = namespace.model(
-#     "Dataset",
-#     {
-#         "id": fields.String(readonly=True, required=True, description="Dataset ID"),
-#         "name": fields.Raw(required=True, description="Dataset name"),
-#         "data": fields.String(required=False, description="Dataset information"),
-#         "is_enabled": fields.Boolean(required=True, description="Dataset status"),
-#         "updated_at": fields.String(
-#             required=True, description="Dataset updated at datetime"
-#         ),
-#         "created_at": fields.String(
-#             required=True, description="Dataset created at datetime"
-#         ),
-#         "tenancy": fields.String(required=False, description="Dataset tenancy"),
-#         "versions": fields.List(
-#             fields.Nested(dataset_version_model),
-#             required=False,
-#             description="Dataset all versions",
-#         ),
-#         "design_state": fields.String(
-#             readonly=True, required=True, description="The actual state of design"
-#         ),
-#         "current_version": fields.Nested(
-#             dataset_version_model, required=False, description="Dataset current version"
-#         ),
-#     },
-# )
+def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
+    return DatasetVersionResponse(
+        id=version.id,
+        name=version.name,
+        design_state=version.design_state.name,
+        is_enabled=version.is_enabled,
+        files=[_adapt_data_file(file) for file in version.files],
+    )
 
-# data_file_create_request_model = namespace.model(
-#     "DataFileCreateRequest",
-#     {
-#         "name": fields.String(required=True, description="Data file name"),
-#         "size_bytes": fields.Integer(required=True, description="File size in bytes"),
-#         "extension": fields.String(required=False, description="File extension"),
-#         "format": fields.String(required=False, description="File format"),
-#         "storage_file_name": fields.String(
-#             required=False, description="File name in storage"
-#         ),
-#         "storage_path": fields.String(
-#             required=False, description="File path in storage"
-#         ),
-#     },
-# )
+def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
+    return DatasetGetResponse(
+        id=dataset.id,
+        name=dataset.name,
+        data=dataset.data,
+        tenancy=dataset.tenancy,
+        is_enabled=dataset.is_enabled,
+        created_at=dataset.created_at,
+        updated_at=dataset.updated_at,
+        versions=[_adapt_dataset_version(version) for version in dataset.versions],
+        current_version=_adapt_dataset_version(dataset.current_version) if dataset.current_version is not None else None,
+    )
 
-# dataset_create_request_model = namespace.model(
-#     "DatasetCreateRequest",
-#     {
-#         "name": fields.String(required=True, description="Dataset name"),
-#         "data": fields.Raw(
-#             required=False, description="Dataset information in JSON format"
-#         ),
-#         "tenancy": fields.String(required=True, description="Dataset tenancy"),
-#     },
-# )
+# GET /datasets
+@router.get("/")
+@inject
+async def get_datasets(
+    categories: str = None,
+    level: str = None,
+    data_types: str = None,
+    date_from: datetime = None,
+    date_to: datetime = None,
+    full_text: str = None,
+    include_disabled: bool = False,
+    version: str = None,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> list[DatasetGetResponse]:
+    # check if categories exists, then split by comma
+    query = DatasetQuery(
+        categories=categories.split(",") if categories else [],
+        level=level,
+        data_types=data_types.split(",") if data_types else [],
+        date_from=date_from,
+        date_to=date_to,
+        full_text=full_text,
+        include_disabled=include_disabled,
+        version=version,
+    )
+    datasets: list[Dataset] = service.search_datasets(query=query, user_id=user_id, tenancies=tenancies)
+    return [_adapt_dataset(dataset) for dataset in datasets]
 
-# dataset_update_request_model = namespace.model(
-#     "DatasetUpdateRequest",
-#     {
-#         "name": fields.String(required=True, description="Dataset name"),
-#         "data": fields.Raw(
-#             required=False, description="Dataset information in JSON format"
-#         ),
-#         "tenancy": fields.String(required=True, description="Dataset tenancy"),
-#     },
-# )
+# GET /datasets/{id}
+@router.get("/{id}")
+@inject
+async def get_dataset(
+    id: str,
+    response: Response,
+    user_id: UUID = Depends(parse_user_header),
+    is_enabled: bool = True,
+    latest_version: bool = False,
+    version_design_state: DesignState = DesignState.DRAFT,
+    version_is_enabled: bool = True,
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> DatasetGetResponse:
+    dataset = service.fetch_dataset(
+        dataset_id=id,
+        is_enabled=is_enabled,
+        user_id=user_id,
+        tenancies=tenancies,
+        latest_version=latest_version,
+        version_design_state=version_design_state,
+        version_is_enabled=version_is_enabled,
+    )
 
-# datasets_list_model = namespace.model(
-#     "Datasets",
-#     {
-#         "content": fields.Nested(dataset_model, description="List of datasets"),
-#         "size": fields.Integer(required=False, description="Dataset information"),
-#     },
-# )
+    if dataset is not None:
+        return _adapt_dataset(dataset)
+    else:
+        response.status_code = 404
+        return response
 
-# dataset_create_nested_response_model = namespace.model(
-#     "DatasetCreateNested",
-#     {
-#         "id": fields.String(readonly=True, required=True, description="Dataset ID"),
-#         "design_state": fields.String(
-#             readonly=True, required=True, description="The actual state of design"
-#         ),
-#     },
-# )
+# PUT /datasets/{id}
+@router.put("/{id}")
+@inject
+async def update_dataset(
+    id: str,
+    dataset_request: DatasetUpdateRequest,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> None:
+    service.update_dataset(
+        dataset_id=id,
+        dataset=Dataset(id=id, name=dataset_request.name, data=dataset_request.data, tenancy=dataset_request.tenancy), 
+        user_id=user_id, 
+        tenancies=tenancies)
+    return {}
 
-# dataset_version_create_nested_response_model = namespace.model(
-#     "DatasetVersionNested",
-#     {
-#         "id": fields.String(
-#             readonly=True, required=True, description="Dataset Version ID"
-#         ),
-#         "name": fields.String(
-#             readonly=True, required=True, description="Dataset version name"
-#         ),
-#         "design_state": fields.String(
-#             readonly=True, required=True, description="The actual state of design"
-#         ),
-#     },
-# )
+# DELETE /datasets/{id}
+@router.delete("/{id}")
+@inject
+async def delete_dataset(
+    id: str,
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> None:
+    service.disable_dataset(dataset_id=id, tenancies=tenancies)
+    return {}
 
-# dataset_create_response_model = namespace.model(
-#     "DatasetCreate",
-#     {
-#         "dataset": fields.Nested(
-#             dataset_create_nested_response_model, description="Dataset response model"
-#         ),
-#         "version": fields.Nested(
-#             dataset_version_create_nested_response_model,
-#             description="Dataset version response model",
-#         ),
-#     },
-# )
+# POST /datasets
+@router.post("/", status_code=201)
+@inject
+async def create_dataset(
+    dataset_request: DatasetUpdateRequest,
+    user_id: UUID = Depends(parse_user_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> DatasetCreateResponse:
+    created = service.create_dataset(
+        dataset=Dataset(name=dataset_request.name, data=dataset_request.data, tenancy=dataset_request.tenancy),
+        user_id=user_id,
+    )
+    return DatasetCreateResponse(id=created.id, 
+                                 design_state=created.design_state.name, 
+                                 versions=[_adapt_dataset_version(version) for version in created.versions])
 
+# PUT /datasets/:dataset_id/enable
+@router.put("/{id}/enable")
+@inject
+async def enable_dataset(
+    id: str,
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> None:
+    service.enable_dataset(dataset_id=id, tenancies=tenancies)
+    return {}
 
-# @namespace.route("/<string:dataset_id>")
-# @namespace.param("dataset_id", "The dataset identifier")
-# @namespace.response(404, "Dataset not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class DatasetsController(Resource):
-#     method_decorators = [authenticate, authorize]
+# DELETE /datasets/:dataset_id/versions/:version
+@router.delete("/{dataset_id}/versions/{version_name}")
+@inject
+async def delete_dataset_version(
+    dataset_id: str,
+    version_name: str,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> None:
+    service.disable_dataset_version(
+        dataset_id=dataset_id,
+        user_id=user_id,
+        version_name=version_name,
+        tenancies=tenancies,
+    )
+    return {}
 
-#     # GET /api/v1/datasets/:dataset_id
-#     @namespace.doc("Get a Dataset")
-#     @namespace.marshal_with(dataset_model)
-#     @namespace.param("is_enabled", "Flag to filter enabled datasets. Default is true")
-#     @namespace.param(
-#         "latest_version",
-#         "Flag to filter latest version of the dataset. Default is false",
-#     )
-#     @namespace.param(
-#         "version_design_state",
-#         'Design state to be used in conjunction with "latest_version" param. Default is "DRAFT"',
-#     )
-#     @namespace.param(
-#         "version_is_enabled",
-#         "Flag to filter enabled/disabled versions. Default is true",
-#     )
-#     @namespace.param(
-#         "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
-#     )
-#     @parse_tenancy_header
-#     @parse_user_header
-#     def get(self, dataset_id):
-#         """Fetch a specific dataset"""
-#         dataset = service.fetch_dataset(
-#             dataset_id=dataset_id,
-#             is_enabled=request.args.get("is_enabled"),
-#             user_id=g.user_id,
-#             tenancies=g.tenancies,
-#             latest_version=request.args.get("latest_version"),
-#             version_design_state=request.args.get("version_design_state", None),
-#             version_is_enabled=request.args.get("version_is_enabled", True),
-#         )
-#         if dataset is not None:
-#             return dataset
-#         else:
-#             raise NotFound()
+# PUT /datasets/:dataset_id/versions/:version/publish
+@router.put("/{dataset_id}/versions/{version_name}/publish")
+@inject
+async def publish_dataset_version(
+    dataset_id: str,
+    version_name: str,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> None:
+    service.publish_dataset_version(
+        dataset_id=dataset_id,
+        user_id=user_id,
+        version_name=version_name,
+        tenancies=tenancies,
+    )
+    return {}
 
-#     # PUT /api/v1/datasets/:dataset_id
-#     @namespace.doc("Update a Dataset")
-#     @namespace.expect(dataset_create_request_model, validate=True)
-#     @parse_tenancy_header
-#     @parse_user_header
-#     def put(self, dataset_id):
-#         """Update a specific dataset"""
-#         payload = request.get_json()
-#         service.update_dataset(
-#             dataset_id=dataset_id,
-#             request_body=payload,
-#             user_id=g.user_id,
-#             tenancies=g.tenancies,
-#         )
-#         return {}, 200
-
-#     # DELETE /api/v1/datasets/:dataset_id
-#     @namespace.doc("Delete a Dataset")
-#     @namespace.param(
-#         "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
-#     )
-#     @parse_tenancy_header
-#     def delete(self, dataset_id):
-#         """Disable a specific dataset"""
-#         service.disable_dataset(dataset_id, g.tenancies)
-#         return {}, 200
-
-
-# @namespace.route("/<string:dataset_id>/enable")
-# @namespace.param("dataset_id", "The dataset identifier")
-# @namespace.response(404, "Dataset not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class DatasetsEnableController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     # PUT /api/v1/datasets/:dataset_id/enable
-#     @namespace.doc("Enable a Dataset")
-#     @namespace.param(
-#         "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
-#     )
-#     @parse_tenancy_header
-#     def put(self, dataset_id):
-#         """Enable a specific dataset"""
-#         service.enable_dataset(dataset_id, g.tenancies)
-#         return {}, 200
-
-
-# @namespace.route("/")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class DatasetsListController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     # GET /api/v1/datasets
-#     @namespace.doc("Search datasets")
-#     @namespace.param("categories", "Dataset categories, comma separated")
-#     @namespace.param("level", "Dataset level")
-#     @namespace.param("data_types", "Dataset data types, comma separated")
-#     @namespace.param("date_from", "Dataset date from, YYYY-MM-DD")
-#     @namespace.param("date_to", "Dataset date to, YYYY-MM-DD")
-#     @namespace.param("full_text", "Dataset full text")
-#     @namespace.param("include_disabled", "True to include disabled Datasets")
-#     @namespace.param("version", "A specific dataset version")
-#     @namespace.marshal_with(datasets_list_model)
-#     @namespace.param(
-#         "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
-#     )
-#     @parse_tenancy_header
-#     @parse_user_header
-#     def get(self):
-#         """Fetch all datasets"""
-#         query_params = {
-#             "categories": request.args.get("categories").split(",")
-#             if request.args.get("categories")
-#             else [],
-#             "level": request.args.get("level"),
-#             "data_types": request.args.get("data_types").split(",")
-#             if request.args.get("data_types")
-#             else [],
-#             "date_from": request.args.get("date_from"),
-#             "date_to": request.args.get("date_to"),
-#             "full_text": request.args.get("full_text"),
-#             "include_disabled": request.args.get("include_disabled", False),
-#             "version": request.args.get("version"),
-#         }
-
-#         datasets = service.search_datasets(query_params, g.user_id, g.tenancies)
-#         payload = {"content": datasets, "size": len(datasets)}
-
-#         return payload, 200
-
-#     # POST /api/v1/datasets
-#     @namespace.marshal_with(dataset_create_response_model)
-#     @namespace.expect(dataset_create_request_model, validate=True)
-#     @parse_user_header
-#     def post(self):
-#         """Create a new dataset"""
-#         payload = request.get_json()
-#         return service.create_dataset(payload, g.user_id), 201
-
-
-# @namespace.route("/<string:dataset_id>/versions/<string:version>")
-# @namespace.param("dataset_id", "The dataset identifier")
-# @namespace.param("version", "The version name")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class DatasetsVersionController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     # DELETE /api/v1/datasets/:dataset_id/versions/:version
-#     @namespace.doc("Disable a Dataset Version")
-#     @namespace.param(
-#         "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
-#     )
-#     @parse_tenancy_header
-#     @parse_user_header
-#     def delete(self, dataset_id, version):
-#         """Disable a specific dataset version"""
-#         service.disable_dataset_version(
-#             dataset_id=dataset_id,
-#             user_id=g.user_id,
-#             version_name=version,
-#             tenancies=g.tenancies,
-#         )
-#         return {}, 200
-
-
-# @namespace.route("/<string:dataset_id>/versions/<string:version>/publish")
-# @namespace.param("dataset_id", "The dataset identifier")
-# @namespace.param("version", "The version name")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class DatasetsPublishVersionController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     # PUT /api/v1/datasets/:dataset_id/versions/:version/publish
-#     @namespace.doc("Publish a Dataset Version")
-#     @namespace.param(
-#         "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
-#     )
-#     @parse_tenancy_header
-#     @parse_user_header
-#     def put(self, dataset_id, version):
-#         """Publish a specific dataset version"""
-#         service.publish_dataset_version(
-#             dataset_id=dataset_id,
-#             user_id=g.user_id,
-#             version_name=version,
-#             tenancies=g.tenancies,
-#         )
-#         return {}, 200
-
-
-# @namespace.route("/<string:dataset_id>/versions/<string:version>/enable")
-# @namespace.param("dataset_id", "The dataset identifier")
-# @namespace.param("version", "The version name")
-# @namespace.response(404, "Dataset or version not found")
-# @namespace.response(500, "Internal Server error")
-# @namespace.doc(security=["api_key", "api_secret", "user_id"])
-# class DatasetsVersionEnableController(Resource):
-#     method_decorators = [authenticate, authorize]
-
-#     # PUT /api/v1/datasets/:dataset_id/versions/:version/enable
-#     @namespace.doc("Enable a Dataset Version")
-#     @namespace.param(
-#         "X-Datamap-Tenancies", "List of user tenancies. Separated by comma", "header"
-#     )
-#     @parse_tenancy_header
-#     @parse_user_header
-#     def put(self, dataset_id, version):
-#         """Enable a specific dataset version"""
-#         service.enable_dataset_version(
-#             dataset_id=dataset_id,
-#             user_id=g.user_id,
-#             version_name=version,
-#             tenancies=g.tenancies,
-#         )
-#         return {}, 200
+# PUT /datasets/:dataset_id/versions/:version/enable
+@router.put("/{dataset_id}/versions/{version_name}/enable")
+@inject
+async def enable_dataset_version(
+    dataset_id: str,
+    version_name: str,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> None:
+    service.enable_dataset_version(
+        dataset_id=dataset_id,
+        user_id=user_id,
+        version_name=version_name,
+        tenancies=tenancies,
+    )
+    return {}
