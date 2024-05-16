@@ -13,10 +13,11 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
 # GET /filters
 @router.get("/filters")
 @inject
 async def get_filters(
-    service: DatasetService = Depends(Provide[Container.dataset_service])
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
 ):
     return service.fetch_available_filters()

@@ -24,14 +24,16 @@ class DatasetVersionRepository:
             )
 
     def upsert(self, dataset_version: DatasetVersion) -> DatasetVersion:
-        try: 
+        try:
             with self._session_factory() as session:
                 session.add(dataset_version)
                 session.commit()
                 session.refresh(dataset_version)
                 return dataset_version
         except IntegrityError:
-            raise ConflictException(f"dataset_version_already_exists: {dataset_version.id}")
+            raise ConflictException(
+                f"dataset_version_already_exists: {dataset_version.id}"
+            )
 
     def fetch_version_by_name(self, dataset_id, version_name) -> DatasetVersion:
         with self._session_factory() as session:

@@ -43,7 +43,9 @@ class UserService:
         return self.__adapt_user(user=user)
 
     def fetch_by_email(self, email: str, is_enabled: bool = True) -> User:
-        user: UserDBModel = self._repository.fetch_by_email(email=email, is_enabled=is_enabled)
+        user: UserDBModel = self._repository.fetch_by_email(
+            email=email, is_enabled=is_enabled
+        )
         if user is None:
             raise NotFoundException(f"not_found: {email}")
         user.roles = self._casbin_enforcer.get_roles_for_user(str(user.id))
@@ -53,8 +55,8 @@ class UserService:
         self, provider_name: str, reference: str, is_enabled: bool = True
     ) -> User:
         user: UserDBModel = self._repository.fetch_by_provider(
-            provider_name=provider_name, 
-            reference=reference, 
+            provider_name=provider_name,
+            reference=reference,
             is_enabled=is_enabled,
         )
         if user is None:

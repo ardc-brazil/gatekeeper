@@ -1,12 +1,9 @@
-from typing import Annotated
 from uuid import UUID
-from fastapi import Body, Depends, Request
+from fastapi import Depends, Request
 from fastapi.security import APIKeyHeader
 from app.exception.unauthorized import UnauthorizedException
 
-user_id = APIKeyHeader(
-    name="X-User-Id", auto_error=False, scheme_name="X-User-Id"
-)
+user_id = APIKeyHeader(name="X-User-Id", auto_error=False, scheme_name="X-User-Id")
 
 
 async def parse_user_header(request: Request, user_id: str = Depends(user_id)) -> UUID:
@@ -15,6 +12,7 @@ async def parse_user_header(request: Request, user_id: str = Depends(user_id)) -
 
     return UUID(user_id)
 
+
 async def parse_tus_user_id(request: Request) -> UUID:
     body = await request.json()
     user_id = body["Event"]["HTTPRequest"]["Header"]["X-User-Id"][0]
@@ -22,6 +20,7 @@ async def parse_tus_user_id(request: Request) -> UUID:
         raise UnauthorizedException(f"unauthorized: {user_id}")
 
     return UUID(user_id)
+
 
 async def parse_tus_user_token(request: Request) -> str:
     body = await request.json()

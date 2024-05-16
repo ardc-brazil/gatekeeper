@@ -5,6 +5,7 @@ from app.model.tus import TusResult
 from app.service.dataset import DatasetService
 import os
 
+
 class TusService:
     def __init__(self, dataset_service: DatasetService):
         self._dataset_service = dataset_service
@@ -24,9 +25,9 @@ class TusService:
             created_by=user_id,
         )
 
-        self._dataset_service.create_data_file(file=file, 
-                                               dataset_id=dataset_id, 
-                                               user_id=user_id)
+        self._dataset_service.create_data_file(
+            file=file, dataset_id=dataset_id, user_id=user_id
+        )
 
         return TusResult(status_code=200, body_msg="")
 

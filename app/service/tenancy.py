@@ -32,7 +32,7 @@ class TenancyService:
             self.__adapt_tenancy(tenancy=tenancy) for tenancy in res
         ]
         return tenancies
-        
+
     def create(self, tenancy: Tenancy) -> None:
         tenancy = DBModel(name=tenancy.name, is_enabled=tenancy.is_enabled)
         self._repository.upsert(tenancy)

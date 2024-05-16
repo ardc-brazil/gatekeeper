@@ -13,17 +13,21 @@ async def conflict_exception_handler(request: Request, exc: conflict):
     logger.info(f"Conflict exception: {exc}")
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+
 async def not_found_exception_handler(request: Request, exc: NotFoundException):
     logger.info(f"Not found exception: {exc}")
     return JSONResponse(status_code=404, content={"detail": str(exc)})
+
 
 async def unauthorized_exception_handler(request: Request, exc: UnauthorizedException):
     logger.info(f"Unauthorized exception: {exc}")
     return JSONResponse(status_code=401, content={"detail": str(exc)})
 
+
 async def illegal_state_exception_handler(request: Request, exc: IllegalStateException):
     logger.info(f"Unauthorized exception: {exc}")
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
 
 async def generic_exception_handler(request: Request, exc: Exception):
     logger.error(f"Generic exception: {exc}")

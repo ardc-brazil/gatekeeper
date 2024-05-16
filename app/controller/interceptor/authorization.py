@@ -2,12 +2,15 @@ import json
 from uuid import UUID
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
 
 from dependency_injector.wiring import inject, Provide
 
 from app.container import Container
-from app.controller.interceptor.user_parser import parse_tus_user_id, parse_tus_user_token, parse_user_header
+from app.controller.interceptor.user_parser import (
+    parse_tus_user_id,
+    parse_tus_user_token,
+    parse_user_header,
+)
 from app.exception.unauthorized import UnauthorizedException
 from app.model.tus import TusResult
 from app.service.auth import AuthService
@@ -22,7 +25,8 @@ async def authorize(
     resource = request.url.path
     action = request.method
 
-    auth_service.authorize_user(user_id, resource, action)    
+    auth_service.authorize_user(user_id, resource, action)
+
 
 def _adapt_tus_response(res: TusResult):
     return {
@@ -32,6 +36,7 @@ def _adapt_tus_response(res: TusResult):
             "Header": {"Content-Type": "application/json"},
         }
     }
+
 
 @inject
 async def authorize_tus(
@@ -48,6 +53,10 @@ async def authorize_tus(
         auth_service.validate_jwt_and_decode(user_token=user_token)
         auth_service.authorize_user(user_id=user_id, resource=resource, action=action)
     except UnauthorizedException as e:
-        return JSONResponse(content=_adapt_tus_response(TusResult(401, str(e), True)), status_code=401)
+        return JSONResponse(
+            content=_adapt_tus_response(TusResult(401, str(e), True)), status_code=401
+        )
     except Exception as e:
-        return JSONResponse(content=_adapt_tus_response(TusResult(500, str(e), True)), status_code=500)
+        return JSONResponse(
+            content=_adapt_tus_response(TusResult(500, str(e), True)), status_code=500
+        )

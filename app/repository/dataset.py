@@ -9,6 +9,7 @@ from typing import Callable
 from app.exception.conflict import ConflictException
 from sqlalchemy.exc import IntegrityError
 
+
 class DatasetRepository:
     def __init__(
         self, session_factory: Callable[..., AbstractContextManager[Session]]
@@ -19,7 +20,7 @@ class DatasetRepository:
         self,
         dataset_id: UUID,
         is_enabled: bool = True,
-        tenancies : list[str] =[],
+        tenancies: list[str] = [],
         latest_version: bool = False,
         version_design_state: DesignState = None,
         version_is_enabled: bool = True,
@@ -56,14 +57,16 @@ class DatasetRepository:
                 )
             elif version_is_enabled:
                 query = query.filter(
-                    Dataset.versions.any(DatasetVersion.is_enabled == version_is_enabled)
+                    Dataset.versions.any(
+                        DatasetVersion.is_enabled == version_is_enabled
+                    )
                 )
 
             return query.first()
 
     def upsert(self, dataset: Dataset) -> Dataset:
-        try: 
-            with self._session_factory() as session:    
+        try:
+            with self._session_factory() as session:
                 session.add(dataset)
                 session.commit()
                 session.refresh(dataset)
@@ -71,7 +74,9 @@ class DatasetRepository:
         except IntegrityError:
             raise ConflictException(f"dataset_already_exists: {dataset.id}")
 
-    def search(self, query_params: DatasetQuery, tenancies: list[str] = []) -> list[Dataset]:
+    def search(
+        self, query_params: DatasetQuery, tenancies: list[str] = []
+    ) -> list[Dataset]:
         with self._session_factory() as session:
             query = session.query(Dataset)
 
@@ -108,7 +113,7 @@ class DatasetRepository:
                 query = query.filter(Dataset.is_enabled == true())
 
             if query_params.full_text is not None:
-                search_term = f'%{query_params.full_text}%'
+                search_term = f"%{query_params.full_text}%"
                 query = query.filter(
                     or_(
                         cast(Dataset.data, String).ilike(search_term),

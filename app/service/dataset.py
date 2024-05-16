@@ -7,14 +7,27 @@ from app.exception.unauthorized import UnauthorizedException
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.user import UserService
-from app.model.dataset import Dataset, DatasetQuery, DatasetVersion, DataFile, DesignState
-from app.model.db.dataset import Dataset as DatasetDBModel, DatasetVersion as DatasetVersionDBModel, DataFile as DataFileDBModel
+from app.model.dataset import (
+    Dataset,
+    DatasetQuery,
+    DatasetVersion,
+    DataFile,
+    DesignState,
+)
+from app.model.db.dataset import (
+    Dataset as DatasetDBModel,
+    DatasetVersion as DatasetVersionDBModel,
+    DataFile as DataFileDBModel,
+)
+
 
 class DatasetService:
-    def __init__(self, 
-                 repository: DatasetRepository, 
-                 version_repository: DatasetVersionRepository, 
-                 user_service: UserService):
+    def __init__(
+        self,
+        repository: DatasetRepository,
+        version_repository: DatasetVersionRepository,
+        user_service: UserService,
+    ):
         self._repository = repository
         self._version_repository = version_repository
         self._user_service = user_service
@@ -57,11 +70,17 @@ class DatasetService:
             updated_at=dataset.updated_at,
             tenancy=dataset.tenancy,
             design_state=dataset.design_state,
-            versions=[self._adapt_version(version=version) for version in dataset.versions],
-            current_version=self._adapt_version(version=current_version) if current_version is not None else None,
+            versions=[
+                self._adapt_version(version=version) for version in dataset.versions
+            ],
+            current_version=self._adapt_version(version=current_version)
+            if current_version is not None
+            else None,
         )
 
-    def _get_current_dataset_version(self, versions: list[DatasetVersionDBModel]) -> DatasetVersionDBModel:
+    def _get_current_dataset_version(
+        self, versions: list[DatasetVersionDBModel]
+    ) -> DatasetVersionDBModel:
         """Get current version from the most recent by created_at and if the design_state is PUBLISHED or DRAFT"""
         versions = sorted(
             versions, key=lambda version: version.created_at, reverse=True
@@ -73,7 +92,9 @@ class DatasetService:
             ):
                 return version
 
-    def _determine_tenancies(self, user_id: UUID, tenancies: list[str] = []) -> list[str]:
+    def _determine_tenancies(
+        self, user_id: UUID, tenancies: list[str] = []
+    ) -> list[str]:
         user = self._user_service.fetch_by_id(id=user_id)
 
         if not tenancies:
@@ -108,14 +129,16 @@ class DatasetService:
 
         if dataset is None:
             return None
-        
+
         return self._adapt_dataset(dataset=dataset)
 
-    def update_dataset(self, 
-                       dataset_id: UUID, 
-                       dataset: Dataset,
-                       user_id: UUID, 
-                       tenancies: list[str] = []) -> None:
+    def update_dataset(
+        self,
+        dataset_id: UUID,
+        dataset: Dataset,
+        user_id: UUID,
+        tenancies: list[str] = [],
+    ) -> None:
         db_dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -173,7 +196,9 @@ class DatasetService:
         return self._adapt_dataset(dataset=created)
 
     def disable_dataset(self, dataset_id: UUID, tenancies: list[str] = []) -> None:
-        dataset: DatasetDBModel = self._repository.fetch(dataset_id=dataset_id, tenancies=tenancies)
+        dataset: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
 
         if dataset is None:
             raise NotFoundException(f"not_found: {dataset_id}")
@@ -181,7 +206,7 @@ class DatasetService:
         dataset.is_enabled = False
 
         self._repository.upsert(dataset=dataset)
-        
+
     def enable_dataset(self, dataset_id: UUID, tenancies: list[str] = []) -> None:
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id, is_enabled=False, tenancies=tenancies
@@ -191,10 +216,16 @@ class DatasetService:
             raise NotFoundException(f"not_found: {dataset_id}")
 
         dataset.is_enabled = True
-        
+
         self._repository.upsert(dataset=dataset)
-        
-    def enable_dataset_version(self, dataset_id: UUID, user_id: UUID, version_name: str, tenancies: list[str] = []) -> None:
+
+    def enable_dataset_version(
+        self,
+        dataset_id: UUID,
+        user_id: UUID,
+        version_name: str,
+        tenancies: list[str] = [],
+    ) -> None:
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -204,7 +235,9 @@ class DatasetService:
         if dataset is None:
             raise NotFoundException(f"not_found: {dataset_id}")
 
-        version : DatasetVersionDBModel = self._version_repository.fetch_version_by_name(dataset_id=dataset_id, version_name=version_name)
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
         if version is None:
             raise NotFoundException(
@@ -215,7 +248,13 @@ class DatasetService:
 
         self._version_repository.upsert(dataset_version=version)
 
-    def disable_dataset_version(self, dataset_id: UUID, user_id: UUID, version_name: str, tenancies: list[str] = []) -> None:
+    def disable_dataset_version(
+        self,
+        dataset_id: UUID,
+        user_id: UUID,
+        version_name: str,
+        tenancies: list[str] = [],
+    ) -> None:
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -227,10 +266,14 @@ class DatasetService:
         if len(dataset.versions) <= 1:
             raise IllegalStateException("dataset_has_only_one_version")
 
-        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(dataset_id=dataset_id, version_name=version_name)
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
         if version is None:
-            raise NotFoundException(f"not_found: {version_name} for dataset {dataset_id}")
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
 
         version.is_enabled = False
 
@@ -240,22 +283,26 @@ class DatasetService:
         with open("app/resources/available_filters.json") as categories:
             return json.load(categories)
 
-    def search_datasets(self, query: DatasetQuery, user_id: UUID, tenancies: list[str] = []) -> list[Dataset]:
+    def search_datasets(
+        self, query: DatasetQuery, user_id: UUID, tenancies: list[str] = []
+    ) -> list[Dataset]:
         res: list[DatasetDBModel] = self._repository.search(
             query_params=query,
-            tenancies=self._determine_tenancies(
-                user_id=user_id, tenancies=tenancies
-            ),
+            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
         )
 
         if res is None:
             return []
-        
+
         return [self._adapt_dataset(dataset=dataset) for dataset in res]
 
     def create_data_file(self, file: DataFile, dataset_id: UUID, user_id: UUID) -> None:
-        dataset: DatasetDBModel = self.fetch_dataset(dataset_id=dataset_id, user_id=user_id)
-        version: DatasetVersionDBModel = self._version_repository.fetch_draft_version(dataset_id=dataset.id)
+        dataset: DatasetDBModel = self.fetch_dataset(
+            dataset_id=dataset_id, user_id=user_id
+        )
+        version: DatasetVersionDBModel = self._version_repository.fetch_draft_version(
+            dataset_id=dataset.id
+        )
 
         version.files.append(
             DataFileDBModel(
@@ -270,8 +317,14 @@ class DatasetService:
         )
 
         self._version_repository.upsert(version)
-        
-    def publish_dataset_version(self, dataset_id: UUID, user_id: UUID, version_name: str, tenancies: list[str] = []) -> None:
+
+    def publish_dataset_version(
+        self,
+        dataset_id: UUID,
+        user_id: UUID,
+        version_name: str,
+        tenancies: list[str] = [],
+    ) -> None:
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
@@ -280,10 +333,14 @@ class DatasetService:
         if dataset is None:
             raise NotFoundException(f"not_found: {dataset_id}")
 
-        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(dataset_id=dataset_id, version_name=version_name)
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
         if version is None:
-            raise NotFoundException(f"not_found: {version_name} for dataset {dataset_id}")
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
 
         version.design_state = DesignState.PUBLISHED
         self._version_repository.upsert(dataset_version=version)

@@ -1,10 +1,20 @@
 import sqlalchemy
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy import Index, Enum, Column, String, Boolean, DateTime, ForeignKey, Integer
+from sqlalchemy import (
+    Index,
+    Enum,
+    Column,
+    String,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+)
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.model.dataset import DesignState
+
 
 class Dataset(Base):
     __tablename__ = "datasets"
@@ -54,9 +64,7 @@ class DatasetVersion(Base):
     )
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     is_enabled = Column(Boolean, nullable=False, default=True)
-    dataset_id = Column(
-        UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=True
-    )
+    dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=True)
     design_state = Column(Enum(DesignState), nullable=True)
 
     files = relationship("DataFile", lazy="subquery", backref="dataset_version")

@@ -8,8 +8,20 @@ from app.controller.interceptor.authentication import authenticate
 from app.controller.interceptor.authorization import authorize
 from app.controller.interceptor.tenancy_parser import parse_tenancy_header
 from app.controller.interceptor.user_parser import parse_user_header
-from app.controller.v1.dataset.resource import DataFileResponse, DatasetCreateResponse, DatasetGetResponse, DatasetUpdateRequest, DatasetVersionResponse
-from app.model.dataset import DataFile, Dataset, DatasetQuery, DatasetVersion, DesignState
+from app.controller.v1.dataset.resource import (
+    DataFileResponse,
+    DatasetCreateResponse,
+    DatasetGetResponse,
+    DatasetUpdateRequest,
+    DatasetVersionResponse,
+)
+from app.model.dataset import (
+    DataFile,
+    Dataset,
+    DatasetQuery,
+    DatasetVersion,
+    DesignState,
+)
 from app.service.dataset import DatasetService
 
 router = APIRouter(
@@ -18,6 +30,7 @@ router = APIRouter(
     dependencies=[Depends(authenticate), Depends(authorize)],
     responses={404: {"description": "Not found"}},
 )
+
 
 def _adapt_data_file(file: DataFile) -> DataFileResponse:
     return DataFileResponse(
@@ -33,6 +46,7 @@ def _adapt_data_file(file: DataFile) -> DataFileResponse:
         created_by=file.created_by,
     )
 
+
 def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
     return DatasetVersionResponse(
         id=version.id,
@@ -41,6 +55,7 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         is_enabled=version.is_enabled,
         files=[_adapt_data_file(file) for file in version.files],
     )
+
 
 def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
     return DatasetGetResponse(
@@ -52,8 +67,11 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         created_at=dataset.created_at,
         updated_at=dataset.updated_at,
         versions=[_adapt_dataset_version(version) for version in dataset.versions],
-        current_version=_adapt_dataset_version(dataset.current_version) if dataset.current_version is not None else None,
+        current_version=_adapt_dataset_version(dataset.current_version)
+        if dataset.current_version is not None
+        else None,
     )
+
 
 # GET /datasets
 @router.get("/")
@@ -82,8 +100,11 @@ async def get_datasets(
         include_disabled=include_disabled,
         version=version,
     )
-    datasets: list[Dataset] = service.search_datasets(query=query, user_id=user_id, tenancies=tenancies)
+    datasets: list[Dataset] = service.search_datasets(
+        query=query, user_id=user_id, tenancies=tenancies
+    )
     return [_adapt_dataset(dataset) for dataset in datasets]
+
 
 # GET /datasets/{id}
 @router.get("/{id}")
@@ -115,6 +136,7 @@ async def get_dataset(
         response.status_code = 404
         return response
 
+
 # PUT /datasets/{id}
 @router.put("/{id}")
 @inject
@@ -127,10 +149,17 @@ async def update_dataset(
 ) -> None:
     service.update_dataset(
         dataset_id=id,
-        dataset=Dataset(id=id, name=dataset_request.name, data=dataset_request.data, tenancy=dataset_request.tenancy), 
-        user_id=user_id, 
-        tenancies=tenancies)
+        dataset=Dataset(
+            id=id,
+            name=dataset_request.name,
+            data=dataset_request.data,
+            tenancy=dataset_request.tenancy,
+        ),
+        user_id=user_id,
+        tenancies=tenancies,
+    )
     return {}
+
 
 # DELETE /datasets/{id}
 @router.delete("/{id}")
@@ -143,6 +172,7 @@ async def delete_dataset(
     service.disable_dataset(dataset_id=id, tenancies=tenancies)
     return {}
 
+
 # POST /datasets
 @router.post("/", status_code=201)
 @inject
@@ -152,12 +182,19 @@ async def create_dataset(
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DatasetCreateResponse:
     created = service.create_dataset(
-        dataset=Dataset(name=dataset_request.name, data=dataset_request.data, tenancy=dataset_request.tenancy),
+        dataset=Dataset(
+            name=dataset_request.name,
+            data=dataset_request.data,
+            tenancy=dataset_request.tenancy,
+        ),
         user_id=user_id,
     )
-    return DatasetCreateResponse(id=created.id, 
-                                 design_state=created.design_state.name, 
-                                 versions=[_adapt_dataset_version(version) for version in created.versions])
+    return DatasetCreateResponse(
+        id=created.id,
+        design_state=created.design_state.name,
+        versions=[_adapt_dataset_version(version) for version in created.versions],
+    )
+
 
 # PUT /datasets/:dataset_id/enable
 @router.put("/{id}/enable")
@@ -169,6 +206,7 @@ async def enable_dataset(
 ) -> None:
     service.enable_dataset(dataset_id=id, tenancies=tenancies)
     return {}
+
 
 # DELETE /datasets/:dataset_id/versions/:version
 @router.delete("/{dataset_id}/versions/{version_name}")
@@ -188,6 +226,7 @@ async def delete_dataset_version(
     )
     return {}
 
+
 # PUT /datasets/:dataset_id/versions/:version/publish
 @router.put("/{dataset_id}/versions/{version_name}/publish")
 @inject
@@ -205,6 +244,7 @@ async def publish_dataset_version(
         tenancies=tenancies,
     )
     return {}
+
 
 # PUT /datasets/:dataset_id/versions/:version/enable
 @router.put("/{dataset_id}/versions/{version_name}/enable")

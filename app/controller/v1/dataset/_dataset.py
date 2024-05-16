@@ -1,11 +1,10 @@
-from flask import request, g
+from flask import g
 from app.controllers.interceptors.authentication import authenticate
 from app.controllers.interceptors.authorization import authorize
 from app.controllers.interceptors.tenancy_parser import parse_tenancy_header
 from app.controllers.interceptors.user_parser import parse_user_header
 from app.services.datasets import DatasetService
 from flask_restx import Namespace, Resource, fields
-from werkzeug.exceptions import NotFound
 
 service = DatasetService()
 namespace = Namespace("datasets", "Dataset operations")
@@ -176,8 +175,6 @@ dataset_create_response_model = namespace.model(
         ),
     },
 )
-
-
 
 
 @namespace.route("/<string:dataset_id>/versions/<string:version>/enable")

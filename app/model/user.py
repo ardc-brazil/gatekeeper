@@ -6,6 +6,7 @@ class UserProvider:
     name: str
     reference: str
 
+
 @dataclass
 class User:
     id: str
@@ -17,6 +18,7 @@ class User:
     providers: list[UserProvider]
     tenancies: list[str]
     roles: list[str]
+
 
 @dataclass
 class UserQuery:

@@ -1,12 +1,13 @@
-
 from dataclasses import dataclass, field
 from datetime import datetime
 import enum
 from uuid import UUID
 
+
 class DesignState(enum.Enum):
     DRAFT = "draft"
     PUBLISHED = "published"
+
 
 @dataclass
 class DataFile:
@@ -20,7 +21,8 @@ class DataFile:
     storage_file_name: str = None
     storage_path: str = None
     created_by: UUID = None
-    
+
+
 @dataclass
 class DatasetVersion:
     name: str
@@ -32,6 +34,7 @@ class DatasetVersion:
     created_by: UUID = None
     design_state: DesignState = None
     files: list[DataFile] = field(default_factory=lambda: [])
+
 
 @dataclass
 class Dataset:
@@ -46,6 +49,7 @@ class Dataset:
     current_version: DatasetVersion = None
     created_at: datetime = None
     updated_at: datetime = None
+
 
 @dataclass
 class DatasetQuery:

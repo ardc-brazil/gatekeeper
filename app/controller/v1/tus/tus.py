@@ -6,15 +6,12 @@ from app.container import Container
 from app.controller.interceptor.authorization import authorize_tus
 from dependency_injector.wiring import inject, Provide
 
-from app.controller.interceptor.user_parser import parse_tus_user_id, parse_user_header
+from app.controller.interceptor.user_parser import parse_tus_user_id
 from app.model.tus import TusResult
 from app.service.tus import TusService
 
-router = APIRouter(
-    prefix="/tus",
-    tags=["tus"],
-    dependencies=[Depends(authorize_tus)]
-)
+router = APIRouter(prefix="/tus", tags=["tus"], dependencies=[Depends(authorize_tus)])
+
 
 def _adapt(res: TusResult) -> dict:
     if res.status_code == 200:
@@ -31,6 +28,7 @@ def _adapt(res: TusResult) -> dict:
         result["RejectUpload"] = res.reject_upload
 
     return result
+
 
 @router.post("/hooks")
 @inject

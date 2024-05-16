@@ -27,7 +27,7 @@ class ClientService:
             return None
         client: Client = self.__adapt_client(client=res)
         return client
-        
+
     def fetch_all(self) -> List[Client]:
         res: DBModel = self._repository.fetch_all()
         if res is None:
