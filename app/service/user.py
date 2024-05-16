@@ -65,17 +65,17 @@ class UserService:
         return self.__adapt_user(user=user)
 
     def create(self, user: User) -> UUID:
-        user = UserDBModel(name=user.name, email=user.email)
+        dbUser = UserDBModel(name=user.name, email=user.email)
 
         for provider in user.providers:
-            user.providers.append(
+            dbUser.providers.append(
                 ProviderDBModel(name=provider.name, reference=provider.reference)
             )
 
-        for tenancy in user.tenancies:
-            user.tenancies.append(TenancyDBModel(name=tenancy, is_enabled=True))
+        for tenancy in dbUser.tenancies:
+            dbUser.tenancies.append(TenancyDBModel(name=tenancy, is_enabled=True))
 
-        user_id = self._repository.upsert(user=user).id
+        user_id = self._repository.upsert(user=dbUser).id
 
         for role in user.roles:
             self._casbin_enforcer.add_grouping_policy(str(user.id), role)

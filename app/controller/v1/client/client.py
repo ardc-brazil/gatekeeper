@@ -17,6 +17,19 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+# GET /clients
+@router.get("/")
+@inject
+async def get_all(
+    service: ClientService = Depends(Provide[Container.client_service]),
+) -> list[ClientGetResponse]:
+    clients = service.fetch_all()
+    return [
+        ClientGetResponse(
+            key=client["key"], name=client["name"], is_enabled=client["is_enabled"]
+        )
+        for client in clients
+    ]
 
 # GET /clients/{key}
 @router.get("/{key}", dependencies=[Depends(authenticate)])
@@ -68,22 +81,6 @@ async def delete(
 ) -> None:
     service.disable(key)
     return {}
-
-
-# GET /clients
-@router.get("/")
-@inject
-async def get_all(
-    service: ClientService = Depends(Provide[Container.client_service]),
-) -> list[ClientGetResponse]:
-    clients = service.fetch_all()
-    return [
-        ClientGetResponse(
-            key=client["key"], name=client["name"], is_enabled=client["is_enabled"]
-        )
-        for client in clients
-    ]
-
 
 # POST /clients/{key}/enable
 @router.post("/{key}/enable")
