@@ -10,7 +10,6 @@
         "-p",
         "*_test.py"
     ],
-    "python.testing.cwd": "app/",
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
 }
