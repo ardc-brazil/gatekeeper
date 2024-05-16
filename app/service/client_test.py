@@ -1,12 +1,11 @@
 import unittest
 from unittest.mock import Mock, patch
-from uuid import uuid4, UUID
+from uuid import uuid4
 from app.model.db.client import Client as DBModel
 from app.model.client import Client
 from app.repository.client import ClientRepository
 from app.exception.not_found import NotFoundException
 from app.service.client import ClientService
-from app.service.secret import hash_password
 
 
 class TestClientService(unittest.TestCase):
@@ -16,7 +15,9 @@ class TestClientService(unittest.TestCase):
 
     def test_fetch_success(self):
         api_key = uuid4()
-        db_client = DBModel(key=api_key, name="client1", is_enabled=True, secret="secret")
+        db_client = DBModel(
+            key=api_key, name="client1", is_enabled=True, secret="secret"
+        )
         self.repository.fetch.return_value = db_client
 
         client = self.client_service.fetch(api_key)
@@ -49,10 +50,12 @@ class TestClientService(unittest.TestCase):
         name = "new_client"
         secret = "secret"
         created_key = uuid4()
-        db_client = DBModel(key=created_key, name=name, is_enabled=True, secret="hashed_secret")
+        db_client = DBModel(
+            key=created_key, name=name, is_enabled=True, secret="hashed_secret"
+        )
         self.repository.upsert.return_value = db_client
 
-        with patch('app.service.client.hash_password') as mock_hash_password:
+        with patch("app.service.client.hash_password") as mock_hash_password:
             mock_hash_password.return_value = "hashed_secret"
             returned_key = self.client_service.create(name, secret)
 
@@ -60,13 +63,15 @@ class TestClientService(unittest.TestCase):
             client=Client(name=name, secret="hashed_secret", is_enabled=True)
         )
         self.assertEqual(returned_key, created_key)
-    
+
     def test_update_success(self):
         key = uuid4()
-        db_client = DBModel(key=key, name="old_client", is_enabled=True, secret="old_secret")
+        db_client = DBModel(
+            key=key, name="old_client", is_enabled=True, secret="old_secret"
+        )
         self.repository.fetch.return_value = db_client
 
-        with patch('app.service.client.hash_password') as mock_hash_password:
+        with patch("app.service.client.hash_password") as mock_hash_password:
             mock_hash_password.return_value = "hashed_secret"
             self.client_service.update(key, name="updated_client", secret="new_secret")
 
@@ -77,7 +82,9 @@ class TestClientService(unittest.TestCase):
     def test_update_not_found(self):
         self.repository.fetch.return_value = None
         with self.assertRaises(NotFoundException):
-            self.client_service.update(uuid4(), name="updated_client", secret="new_secret")
+            self.client_service.update(
+                uuid4(), name="updated_client", secret="new_secret"
+            )
 
     def test_disable_success(self):
         key = uuid4()
@@ -109,7 +116,9 @@ class TestClientService(unittest.TestCase):
 
     def test_cache_behavior(self):
         api_key = uuid4()
-        db_client = DBModel(key=api_key, name="client1", is_enabled=True, secret="secret")
+        db_client = DBModel(
+            key=api_key, name="client1", is_enabled=True, secret="secret"
+        )
         self.repository.fetch.return_value = db_client
 
         # First fetch, should call the repository
@@ -124,8 +133,10 @@ class TestClientService(unittest.TestCase):
         # Second fetch, should use the cache
         client2 = self.client_service.fetch(api_key)
         self.assertEqual(client2.name, "client1")
-        self.assertEqual(self.client_service.fetch.cache_info().hits, 1, "Cache should have 1 hit")
-        
+        self.assertEqual(
+            self.client_service.fetch.cache_info().hits, 1, "Cache should have 1 hit"
+        )
+
         # Invalidate cache by updating the client
         updated_name = "updated_client"
         db_client.name = updated_name
@@ -135,12 +146,21 @@ class TestClientService(unittest.TestCase):
         # Fetch again, should not use the cache due to invalidation
         client3 = self.client_service.fetch(api_key)
         self.assertEqual(client3.name, updated_name)
-        self.assertEqual(self.client_service.fetch.cache_info().misses, 1, "Cache should have 1 miss after invalidation")
+        self.assertEqual(
+            self.client_service.fetch.cache_info().misses,
+            1,
+            "Cache should have 1 miss after invalidation",
+        )
 
         # Fetch again, should use the cache
         client4 = self.client_service.fetch(api_key)
         self.assertEqual(client4.name, updated_name)
-        self.assertEqual(self.client_service.fetch.cache_info().hits, 1, "Cache should have 1 hit after invalidation")
+        self.assertEqual(
+            self.client_service.fetch.cache_info().hits,
+            1,
+            "Cache should have 1 hit after invalidation",
+        )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

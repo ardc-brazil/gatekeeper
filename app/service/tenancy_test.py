@@ -14,7 +14,9 @@ class TestTenancyService(unittest.TestCase):
 
     def test_fetch_success(self):
         name = "tenancy1"
-        db_tenancy = DBModel(name=name, is_enabled=True, created_at=None, updated_at=None)
+        db_tenancy = DBModel(
+            name=name, is_enabled=True, created_at=None, updated_at=None
+        )
         self.repository.fetch.return_value = db_tenancy
 
         tenancy = self.tenancy_service.fetch(name)
@@ -44,14 +46,20 @@ class TestTenancyService(unittest.TestCase):
         self.assertEqual(len(tenancies), 0)
 
     def test_create(self):
-        tenancy = Tenancy(name="new_tenancy", is_enabled=True, created_at=None, updated_at=None)
+        tenancy = Tenancy(
+            name="new_tenancy", is_enabled=True, created_at=None, updated_at=None
+        )
         self.tenancy_service.create(tenancy)
         self.repository.upsert.assert_called_once()
 
     def test_update_success(self):
         old_name = "old_tenancy"
-        updated_tenancy = Tenancy(name="updated_tenancy", is_enabled=True, created_at=None, updated_at=None)
-        db_tenancy = DBModel(name=old_name, is_enabled=True, created_at=None, updated_at=None)
+        updated_tenancy = Tenancy(
+            name="updated_tenancy", is_enabled=True, created_at=None, updated_at=None
+        )
+        db_tenancy = DBModel(
+            name=old_name, is_enabled=True, created_at=None, updated_at=None
+        )
         self.repository.fetch.return_value = db_tenancy
 
         self.tenancy_service.update(old_name, updated_tenancy)
@@ -62,11 +70,21 @@ class TestTenancyService(unittest.TestCase):
     def test_update_not_found(self):
         self.repository.fetch.return_value = None
         with self.assertRaises(NotFoundException):
-            self.tenancy_service.update("non_existent_tenancy", Tenancy(name="updated_tenancy", is_enabled=True, created_at=None, updated_at=None))
+            self.tenancy_service.update(
+                "non_existent_tenancy",
+                Tenancy(
+                    name="updated_tenancy",
+                    is_enabled=True,
+                    created_at=None,
+                    updated_at=None,
+                ),
+            )
 
     def test_disable_success(self):
         name = "tenancy1"
-        db_tenancy = DBModel(name=name, is_enabled=True, created_at=None, updated_at=None)
+        db_tenancy = DBModel(
+            name=name, is_enabled=True, created_at=None, updated_at=None
+        )
         self.repository.fetch.return_value = db_tenancy
 
         self.tenancy_service.disable(name)
@@ -80,7 +98,9 @@ class TestTenancyService(unittest.TestCase):
 
     def test_enable_success(self):
         name = "tenancy1"
-        db_tenancy = DBModel(name=name, is_enabled=False, created_at=None, updated_at=None)
+        db_tenancy = DBModel(
+            name=name, is_enabled=False, created_at=None, updated_at=None
+        )
         self.repository.fetch.return_value = db_tenancy
 
         self.tenancy_service.enable(name)
@@ -93,5 +113,5 @@ class TestTenancyService(unittest.TestCase):
             self.tenancy_service.enable("non_existent_tenancy")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
