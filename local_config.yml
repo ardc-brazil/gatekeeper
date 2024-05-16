@@ -3,3 +3,7 @@ db:
 
 casbin:
   model_file: app/resources/casbin_model.conf
+
+auth:
+  user:
+    token_secret: teste1234

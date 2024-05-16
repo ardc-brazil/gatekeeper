@@ -30,7 +30,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.dataset.dataset_filter",
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
-            #  "app.controller.v1.tus.tus",
+            "app.controller.v1.tus.tus",
         ]
     )
 
@@ -86,6 +86,7 @@ class Container(containers.DeclarativeContainer):
         AuthService,
         client_service=client_service,
         casbin_enforcer=casbin_enforcer,
+        user_token_secret=config.auth.user.token_secret,
     )
 
     dataset_repository = providers.Factory(

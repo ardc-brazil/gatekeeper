@@ -5,16 +5,16 @@ import enum
 from uuid import UUID
 
 class DesignState(enum.Enum):
-    DRAFT = "draft",
+    DRAFT = "draft"
     PUBLISHED = "published"
 
 @dataclass
 class DataFile:
-    id: UUID
     name: str
     size_bytes: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime = None
+    updated_at: datetime = None
+    id: UUID = None
     extension: str = None
     format: str = None
     storage_file_name: str = None
@@ -23,11 +23,11 @@ class DataFile:
     
 @dataclass
 class DatasetVersion:
-    id: UUID
     name: str
     is_enabled: bool
     created_at: datetime
     updated_at: datetime
+    id: UUID = None
     description: str = None
     created_by: UUID = None
     design_state: DesignState = None
@@ -35,9 +35,9 @@ class DatasetVersion:
 
 @dataclass
 class Dataset:
-    id: UUID
     name: str
     data: dict
+    id: UUID = None
     is_enabled: bool = None
     owner_id: UUID = None
     tenancy: str = None

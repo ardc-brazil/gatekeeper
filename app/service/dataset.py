@@ -258,7 +258,7 @@ class DatasetService:
         version: DatasetVersionDBModel = self._version_repository.fetch_draft_version(dataset_id=dataset.id)
 
         version.files.append(
-            DataFile(
+            DataFileDBModel(
                 name=file.name,
                 size_bytes=file.size_bytes,
                 extension=file.extension,

@@ -1,3 +1,4 @@
+from app.model.dataset import DesignState
 from app.model.db.dataset import DatasetVersion
 from sqlalchemy import desc
 from contextlib import AbstractContextManager
@@ -17,7 +18,7 @@ class DatasetVersionRepository:
         with self._session_factory() as session:
             return (
                 session.query(DatasetVersion)
-                .filter_by(dataset_id=dataset_id, design_state="DRAFT")
+                .filter_by(dataset_id=dataset_id, design_state=DesignState.DRAFT)
                 .order_by(desc(DatasetVersion.created_at))
                 .first()
             )

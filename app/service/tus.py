@@ -21,7 +21,7 @@ class TusService:
             extension=os.path.splitext(file_metadata["filename"])[1][1:].lower(),
             storage_file_name=storage["Key"],
             storage_path=storage["Bucket"] + "/" + storage["Key"],
-            author_id=user_id,
+            created_by=user_id,
         )
 
         self._dataset_service.create_data_file(file=file, 
