@@ -1,14 +1,7 @@
-from collections import namedtuple
-import json
 import unittest
-from uuid import UUID
 
-from fastapi import Request
-from app.controller.v1.dataset.resource import DatasetGetResponse
 from app.main import fastAPIApp
 from fastapi.testclient import TestClient
-from app.controller.interceptor.authorization import authorize
-from app.service.auth import AuthService
 
 # TODO: This was a tentative to mock the interceptor
 # async def mock_authorize( request: Request, user_id: UUID, auth_service: AuthService):

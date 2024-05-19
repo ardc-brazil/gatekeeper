@@ -1,8 +1,8 @@
 import unittest
-from unittest.mock import Mock, patch
-from uuid import UUID, uuid4
+from unittest.mock import Mock
+from uuid import uuid4
 from app.exception.not_found import NotFoundException
-from app.model.user import User, UserProvider, UserQuery
+from app.model.user import User, UserProvider
 from app.model.db.user import User as UserDBModel, Provider as ProviderDBModel
 from app.model.db.tenancy import Tenancy as TenancyDBModel
 from app.repository.tenancy import TenancyRepository
