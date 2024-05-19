@@ -28,6 +28,7 @@ class DatasetVersionResponse(BaseModel):
 class DatasetGetResponse(BaseModel):
     id: UUID = Field(..., title="Dataset ID")
     name: str = Field(..., title="Name")
+    # TODO: Maybe `data` should be a str to be compatible with old version
     data: dict = Field(..., title="Dataset information in JSON format")
     tenancy: str = Field(..., title="Tenancy")
     is_enabled: bool = Field(..., title="Is enabled")
@@ -37,6 +38,10 @@ class DatasetGetResponse(BaseModel):
     current_version: Optional[DatasetVersionResponse] = Field(
         None, title="Current version information"
     )
+
+class PagedDatasetGetResponse(BaseModel):
+    content: list[DatasetGetResponse] = Field(...,  title="List of data content")
+    size: int = Field(..., title="The size of the content")
 
 
 class DatasetUpdateRequest(BaseModel):

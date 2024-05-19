@@ -14,6 +14,7 @@ from app.controller.v1.dataset.resource import (
     DatasetGetResponse,
     DatasetUpdateRequest,
     DatasetVersionResponse,
+    PagedDatasetGetResponse,
 )
 from app.model.dataset import (
     DataFile,
@@ -88,7 +89,7 @@ async def get_datasets(
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
-) -> list[DatasetGetResponse]:
+) -> PagedDatasetGetResponse:
     # check if categories exists, then split by comma
     query = DatasetQuery(
         categories=categories.split(",") if categories else [],
@@ -103,7 +104,9 @@ async def get_datasets(
     datasets: list[Dataset] = service.search_datasets(
         query=query, user_id=user_id, tenancies=tenancies
     )
-    return [_adapt_dataset(dataset) for dataset in datasets]
+        
+    content = [_adapt_dataset(dataset) for dataset in datasets]
+    return  PagedDatasetGetResponse(content=content, size=len(content))
 
 
 # GET /datasets/{id}

@@ -35,7 +35,7 @@ db.create_database()
 # casbin_enforcer.enable_auto_build_role_links(True)
 # casbin_enforcer.start_auto_load_policy(5)  # reload policy every 5 seconds
 
-app = FastAPI(
+fastAPIApp = FastAPI(
     title="Gatekeeper API",
     description="Gatekeeper API is the main backend for DataMap",
     version="0.0.1",
@@ -43,22 +43,22 @@ app = FastAPI(
     root_path="/api",
 )
 
-app.container = container
+fastAPIApp.container = container
 
 # API routes
-app.include_router(dataset_router, prefix="/v1")
-app.include_router(dataset_filter_router, prefix="/v1")
-app.include_router(tenancies_router, prefix="/v1")
-app.include_router(user_router, prefix="/v1")
-app.include_router(client_router, prefix="/v1")
-app.include_router(infrastructure_router, prefix="/v1")
-app.include_router(tus_router, prefix="/v1")
+fastAPIApp.include_router(dataset_router, prefix="/v1")
+fastAPIApp.include_router(dataset_filter_router, prefix="/v1")
+fastAPIApp.include_router(tenancies_router, prefix="/v1")
+fastAPIApp.include_router(user_router, prefix="/v1")
+fastAPIApp.include_router(client_router, prefix="/v1")
+fastAPIApp.include_router(infrastructure_router, prefix="/v1")
+fastAPIApp.include_router(tus_router, prefix="/v1")
 
-app.add_exception_handler(ConflictException, conflict_exception_handler)
-app.add_exception_handler(NotFoundException, not_found_exception_handler)
-app.add_exception_handler(UnauthorizedException, unauthorized_exception_handler)
-app.add_exception_handler(IllegalStateException, illegal_state_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
+fastAPIApp.add_exception_handler(ConflictException, conflict_exception_handler)
+fastAPIApp.add_exception_handler(NotFoundException, not_found_exception_handler)
+fastAPIApp.add_exception_handler(UnauthorizedException, unauthorized_exception_handler)
+fastAPIApp.add_exception_handler(IllegalStateException, illegal_state_exception_handler)
+fastAPIApp.add_exception_handler(Exception, generic_exception_handler)
 
 # Migrate(app, db)
 
@@ -67,7 +67,7 @@ app.add_exception_handler(Exception, generic_exception_handler)
 
 if __name__ == "__main__":
     uvicorn.run(
-        app,
+        fastAPIApp,
         host="localhost",
         port=9092,
     )
