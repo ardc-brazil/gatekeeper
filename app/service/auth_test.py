@@ -25,11 +25,12 @@ class TestAuthService(unittest.TestCase):
 
         with patch("app.service.auth.check_password") as mock_check_password:
             mock_check_password.return_value = True
-            self.assertIsNone(self.auth_service.authorize_client(api_key, salted_api_secret))
+            self.assertIsNone(
+                self.auth_service.authorize_client(api_key, salted_api_secret)
+            )
             self.client_service.fetch.assert_called_once_with(api_key)
             mock_check_password.assert_called_once_with(
-                password=salted_api_secret, 
-                hashed_password=client_secret
+                password=salted_api_secret, hashed_password=client_secret
             )
 
     def test_authorize_client_missing_information(self):
@@ -57,15 +58,17 @@ class TestAuthService(unittest.TestCase):
     def test_validate_jwt_and_decode_missing_information(self):
         with self.assertRaises(UnauthorizedException) as context:
             self.auth_service.validate_jwt_and_decode(None)
-        
+
         self.assertEqual(str(context.exception), "missing_information")
 
     def test_validate_jwt_and_decode_expired_token(self):
         user_token = "test_user_token"
-        with patch("app.service.auth.jwt.decode", side_effect=jwt.ExpiredSignatureError):
+        with patch(
+            "app.service.auth.jwt.decode", side_effect=jwt.ExpiredSignatureError
+        ):
             with self.assertRaises(UnauthorizedException) as context:
                 self.auth_service.validate_jwt_and_decode(user_token)
-        
+
         self.assertEqual(str(context.exception), "expired")
 
     def test_validate_jwt_and_decode_invalid_token(self):
@@ -73,7 +76,7 @@ class TestAuthService(unittest.TestCase):
         with patch("app.service.auth.jwt.decode", side_effect=jwt.InvalidTokenError):
             with self.assertRaises(UnauthorizedException) as context:
                 self.auth_service.validate_jwt_and_decode(user_token)
-        
+
         self.assertEqual(str(context.exception), "invalid_token")
 
     def test_validate_jwt_and_decode_failed_to_validate(self):
@@ -82,7 +85,7 @@ class TestAuthService(unittest.TestCase):
         with patch("app.service.auth.jwt.decode", side_effect=Exception(error_message)):
             with self.assertRaises(Exception) as context:
                 self.auth_service.validate_jwt_and_decode(user_token)
-        
+
         self.assertIn(error_message, str(context.exception))
 
     def test_authorize_user_success(self):
@@ -91,9 +94,7 @@ class TestAuthService(unittest.TestCase):
         action = "test_action"
         self.casbin_enforcer.enforce.return_value = True
 
-        self.assertIsNone(
-            self.auth_service.authorize_user(user_id, resource, action)
-        )
+        self.assertIsNone(self.auth_service.authorize_user(user_id, resource, action))
         self.casbin_enforcer.enforce.assert_called_once_with(
             str(user_id), resource, action
         )
@@ -101,7 +102,7 @@ class TestAuthService(unittest.TestCase):
     def test_authorize_user_missing_information(self):
         with self.assertRaises(UnauthorizedException) as context:
             self.auth_service.authorize_user(None, None, None)
-        
+
         self.assertEqual(str(context.exception), "missing_information")
 
     def test_authorize_user_not_authorized(self):
@@ -112,9 +113,9 @@ class TestAuthService(unittest.TestCase):
 
         with self.assertRaises(UnauthorizedException) as context:
             self.auth_service.authorize_user(user_id, resource, action)
-        
+
         self.assertEqual(str(context.exception), "not_authorized")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -3,17 +3,25 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
-from app.exception.unauthorized import UnauthorizedException
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.user import UserService
-from app.model.dataset import Dataset, DatasetQuery, DatasetVersion, DataFile, DesignState
-from app.model.db.dataset import Dataset as DatasetDBModel, DatasetVersion as DatasetVersionDBModel, DataFile as DataFileDBModel
+from app.model.dataset import (
+    Dataset,
+    DatasetQuery,
+    DataFile,
+    DesignState,
+)
+from app.model.db.dataset import (
+    Dataset as DatasetDBModel,
+    DatasetVersion as DatasetVersionDBModel,
+    DataFile as DataFileDBModel,
+)
 from app.service.dataset import DatasetService
 from app.model.user import User
 
-class TestDatasetService(unittest.TestCase):
 
+class TestDatasetService(unittest.TestCase):
     def setUp(self):
         self.dataset_repository = Mock(spec=DatasetRepository)
         self.dataset_version_repository = Mock(spec=DatasetVersionRepository)
@@ -21,7 +29,7 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_service = DatasetService(
             repository=self.dataset_repository,
             version_repository=self.dataset_version_repository,
-            user_service=self.user_service
+            user_service=self.user_service,
         )
 
     def mock_user(self, tenancies):
@@ -32,10 +40,12 @@ class TestDatasetService(unittest.TestCase):
     def test_fetch_dataset_not_found(self):
         dataset_id = uuid4()
         user_id = uuid4()
-        self.user_service.fetch_by_id.return_value = self.mock_user(['tenancy1'])
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
         self.dataset_repository.fetch.return_value = None
 
-        result = self.dataset_service.fetch_dataset(dataset_id=dataset_id, user_id=user_id)
+        result = self.dataset_service.fetch_dataset(
+            dataset_id=dataset_id, user_id=user_id
+        )
         self.assertIsNone(result)
 
     def test_fetch_dataset_success(self):
@@ -49,7 +59,9 @@ class TestDatasetService(unittest.TestCase):
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_repository.fetch.return_value = dataset_db
 
-        result = self.dataset_service.fetch_dataset(dataset_id=dataset_id, user_id=user_id, tenancies=tenancies)
+        result = self.dataset_service.fetch_dataset(
+            dataset_id=dataset_id, user_id=user_id, tenancies=tenancies
+        )
         self.assertIsNotNone(result)
         self.dataset_repository.fetch.assert_called_once()
 
@@ -62,7 +74,12 @@ class TestDatasetService(unittest.TestCase):
         dataset = Mock(spec=Dataset)
 
         with self.assertRaises(NotFoundException):
-            self.dataset_service.update_dataset(dataset_id=dataset_id, dataset=dataset, user_id=user_id, tenancies=tenancies)
+            self.dataset_service.update_dataset(
+                dataset_id=dataset_id,
+                dataset=dataset,
+                user_id=user_id,
+                tenancies=tenancies,
+            )
 
     def test_create_dataset_success(self):
         dataset = Mock(spec=Dataset)
@@ -81,7 +98,7 @@ class TestDatasetService(unittest.TestCase):
 
     def test_disable_dataset_not_found(self):
         dataset_id = uuid4()
-        self.user_service.fetch_by_id.return_value = self.mock_user(['tenancy1'])
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException):
@@ -89,7 +106,7 @@ class TestDatasetService(unittest.TestCase):
 
     def test_enable_dataset_not_found(self):
         dataset_id = uuid4()
-        self.user_service.fetch_by_id.return_value = self.mock_user(['tenancy1'])
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException):
@@ -105,7 +122,12 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_version_repository.fetch_version_by_name.return_value = None
 
         with self.assertRaises(NotFoundException):
-            self.dataset_service.enable_dataset_version(dataset_id=dataset_id, user_id=user_id, version_name=version_name, tenancies=tenancies)
+            self.dataset_service.enable_dataset_version(
+                dataset_id=dataset_id,
+                user_id=user_id,
+                version_name=version_name,
+                tenancies=tenancies,
+            )
 
     def test_disable_dataset_version_illegal_state(self):
         dataset_id = uuid4()
@@ -118,10 +140,17 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.fetch.return_value = dataset
 
         with self.assertRaises(IllegalStateException):
-            self.dataset_service.disable_dataset_version(dataset_id=dataset_id, user_id=user_id, version_name=version_name, tenancies=tenancies)
+            self.dataset_service.disable_dataset_version(
+                dataset_id=dataset_id,
+                user_id=user_id,
+                version_name=version_name,
+                tenancies=tenancies,
+            )
 
     def test_fetch_available_filters(self):
-        with patch("builtins.open", unittest.mock.mock_open(read_data='{"filters": "data"}')):
+        with patch(
+            "builtins.open", unittest.mock.mock_open(read_data='{"filters": "data"}')
+        ):
             filters = self.dataset_service.fetch_available_filters()
             self.assertEqual(filters, {"filters": "data"})
 
@@ -132,7 +161,9 @@ class TestDatasetService(unittest.TestCase):
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_repository.search.return_value = []
 
-        result = self.dataset_service.search_datasets(query=query, user_id=user_id, tenancies=tenancies)
+        result = self.dataset_service.search_datasets(
+            query=query, user_id=user_id, tenancies=tenancies
+        )
         self.assertIsInstance(result, list)
         self.dataset_repository.search.assert_called_once()
 
@@ -146,9 +177,11 @@ class TestDatasetService(unittest.TestCase):
         version = Mock(spec=DatasetVersionDBModel)
         self.dataset_service.fetch_dataset = Mock(return_value=dataset)
         self.dataset_version_repository.fetch_draft_version.return_value = version
-        self.user_service.fetch_by_id.return_value = self.mock_user(['tenancy1'])
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
 
-        self.dataset_service.create_data_file(file=file, dataset_id=dataset_id, user_id=user_id)
+        self.dataset_service.create_data_file(
+            file=file, dataset_id=dataset_id, user_id=user_id
+        )
         self.dataset_version_repository.upsert.assert_called_once()
 
     def test_publish_dataset_version(self):
@@ -163,9 +196,15 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.fetch.return_value = dataset
         self.dataset_version_repository.fetch_version_by_name.return_value = version
 
-        self.dataset_service.publish_dataset_version(dataset_id=dataset_id, user_id=user_id, version_name=version_name, tenancies=tenancies)
+        self.dataset_service.publish_dataset_version(
+            dataset_id=dataset_id,
+            user_id=user_id,
+            version_name=version_name,
+            tenancies=tenancies,
+        )
         self.dataset_version_repository.upsert.assert_called_once()
         self.dataset_repository.upsert.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
