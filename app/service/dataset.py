@@ -171,9 +171,9 @@ class DatasetService:
                 design_state=DesignState.DRAFT,
                 created_by=user_id,
             )
-            dataset.versions.append(new_version)
+            db_dataset.versions.append(new_version)
 
-        self._repository.upsert(dataset=dataset)
+        self._repository.upsert(dataset=db_dataset)
 
     def create_dataset(self, dataset: Dataset, user_id: UUID) -> Dataset:
         dataset = DatasetDBModel(
