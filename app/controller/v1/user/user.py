@@ -166,8 +166,8 @@ async def remove_provider(
     return {}
 
 
-# GET /users/providers/{provider}/references/{reference}
-@router.get("/providers/{provider}/references/{reference}")
+# GET /users/providers/{provider}/{reference}
+@router.get("/providers/{provider}/{reference}")
 @inject
 async def get_by_provider_reference(
     provider: str,
