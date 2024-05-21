@@ -59,9 +59,6 @@ class TestUserService(unittest.TestCase):
 
         user = self.user_service.fetch_by_email(email)
 
-        print("aqui")
-        print(user)
-
         self.assertEqual(user.email, email)
         self.user_repository.fetch_by_email.assert_called_once_with(email=email, is_enabled=True)
         self.casbin_enforcer.get_roles_for_user.assert_called_once_with(str(db_user.id))

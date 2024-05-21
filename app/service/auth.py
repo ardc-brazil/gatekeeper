@@ -44,10 +44,10 @@ class AuthService:
                 jwt=user_token, key=self._user_token_secret, algorithms=["HS256"]
             )
         except jwt.ExpiredSignatureError:
-            logging.warn(f"expired jwt: {user_token}")
+            logging.warning(f"expired jwt: {user_token}")
             raise UnauthorizedException("expired")
         except jwt.InvalidTokenError:
-            logging.warn(f"invalid token: {user_token}")
+            logging.warning(f"invalid token: {user_token}")
             raise UnauthorizedException("invalid_token")
         except Exception as e:
             logging.error(f"failed to validate jwt. {e}")
