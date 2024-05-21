@@ -46,8 +46,8 @@ fastAPIApp = FastAPI(
 fastAPIApp.container = container
 
 # API routes
-fastAPIApp.include_router(dataset_router, prefix="/v1")
 fastAPIApp.include_router(dataset_filter_router, prefix="/v1")
+fastAPIApp.include_router(dataset_router, prefix="/v1")
 fastAPIApp.include_router(tenancies_router, prefix="/v1")
 fastAPIApp.include_router(user_router, prefix="/v1")
 fastAPIApp.include_router(client_router, prefix="/v1")
