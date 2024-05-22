@@ -6,7 +6,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "uvicorn",
-            "args": ["app.main:app", "--port", "9092", "--reload"],
+            "args": ["app.main:fastAPIApp", "--port", "9092", "--reload"],
             "console": "integratedTerminal"
         }
     ]

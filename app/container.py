@@ -1,6 +1,5 @@
 import logging
 from dependency_injector import containers, providers
-import os
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
 
@@ -18,6 +17,7 @@ from app.service.auth import AuthService
 from app.database import Database
 from app.repository.client import ClientRepository
 from app.service.client import ClientService
+from app.config import settings
 
 logger = logging.getLogger("uvicorn")
 
@@ -34,12 +34,11 @@ class Container(containers.DeclarativeContainer):
         ]
     )
 
-    env_name = os.getenv("ENV", "local")
-    config_file = f"./{env_name}_config.yml"
-    logger.info(f"Using config file: {config_file}")
-    config = providers.Configuration(yaml_files=[config_file])
+    config = providers.Configuration()
+    json_config = settings.model_dump()
+    config.from_dict(json_config)
 
-    db = providers.Singleton(Database, db_url=config.db.url)
+    db = providers.Singleton(Database, db_url=config.DATABASE_URL)
 
     client_repository = providers.Factory(
         ClientRepository,
@@ -66,7 +65,7 @@ class Container(containers.DeclarativeContainer):
     )
     casbin_enforcer = providers.Singleton(
         SyncedEnforcer,
-        config.casbin.model_file,
+        config.CASBIN_MODEL_FILE,
         casbin_adapter,
     )
 
@@ -86,7 +85,7 @@ class Container(containers.DeclarativeContainer):
         AuthService,
         client_service=client_service,
         casbin_enforcer=casbin_enforcer,
-        user_token_secret=config.auth.user.token_secret,
+        user_token_secret=config.AUTH_USER_TOKEN_SECRET,
     )
 
     dataset_repository = providers.Factory(
