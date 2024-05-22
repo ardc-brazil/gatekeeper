@@ -104,9 +104,9 @@ async def get_datasets(
     datasets: list[Dataset] = service.search_datasets(
         query=query, user_id=user_id, tenancies=tenancies
     )
-        
+
     content = [_adapt_dataset(dataset) for dataset in datasets]
-    return  PagedDatasetGetResponse(content=content, size=len(content))
+    return PagedDatasetGetResponse(content=content, size=len(content))
 
 
 # GET /datasets/{id}

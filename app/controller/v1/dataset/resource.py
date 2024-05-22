@@ -39,8 +39,9 @@ class DatasetGetResponse(BaseModel):
         None, title="Current version information"
     )
 
+
 class PagedDatasetGetResponse(BaseModel):
-    content: list[DatasetGetResponse] = Field(...,  title="List of data content")
+    content: list[DatasetGetResponse] = Field(..., title="List of data content")
     size: int = Field(..., title="The size of the content")
 
 
