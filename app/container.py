@@ -38,7 +38,11 @@ class Container(containers.DeclarativeContainer):
     json_config = settings.model_dump()
     config.from_dict(json_config)
 
-    db = providers.Singleton(Database, db_url=config.DATABASE_URL)
+    db = providers.Singleton(
+        Database, 
+        db_url=config.DATABASE_URL,
+        log_enabled=config.DATABASE_LOG_ENABLED,
+    )
 
     client_repository = providers.Factory(
         ClientRepository,

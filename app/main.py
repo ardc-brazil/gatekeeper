@@ -28,11 +28,6 @@ setup.setup_logging()
 setup.setup_routes(fastAPIApp)
 setup.setup_error_handlers(fastAPIApp)
 
-# Migrate(app, db)
-
-# db.init_app(app)
-
-
 if __name__ == "__main__":
     uvicorn.run(
         fastAPIApp,

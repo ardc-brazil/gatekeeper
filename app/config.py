@@ -21,6 +21,9 @@ class Config(BaseSettings):
     DATABASE_URL: Optional[PostgresDsn] = Field(
         default=None, description="Database URL"
     )
+    DATABASE_LOG_ENABLED: bool = Field(
+        default=False, description="Enable database logging"
+    )
 
     AUTH_USER_TOKEN_SECRET: str = Field(..., description="Secret key for user token")
     CASBIN_MODEL_FILE: str = Field(..., description="Casbin model file")

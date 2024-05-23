@@ -13,8 +13,8 @@ Base = declarative_base()
 
 
 class Database:
-    def __init__(self, db_url: PostgresDsn) -> None:
-        self._engine = create_engine(db_url.unicode_string(), echo=True)
+    def __init__(self, db_url: PostgresDsn, log_enabled: bool) -> None:
+        self._engine = create_engine(db_url.unicode_string(), echo=log_enabled)
         self._session_factory = orm.scoped_session(
             orm.sessionmaker(
                 autocommit=False,

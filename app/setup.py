@@ -25,9 +25,11 @@ from app.controller.interceptor.exception_handler import (
 
 def setup_logging() -> None:
     logging.basicConfig(level=settings.LOG_LEVEL)
+    logging.getLogger("uvicorn").handlers.clear()
 
     modules = [
         {"name": "uvicorn", "level": settings.LOG_LEVEL},
+        {"name": "sqlalchemy.engine", "level": settings.LOG_LEVEL},
         {"name": "tests", "level": logging.INFO},
     ]
     for module in modules:
