@@ -14,7 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
-from app.model.dataset import DesignState
+from app.model.dataset import DesignState, ZipStatus
 
 
 class Dataset(Base):
@@ -67,6 +67,8 @@ class DatasetVersion(Base):
     is_enabled = Column(Boolean, nullable=False, default=True)
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=True)
     design_state = Column(Enum(DesignState), nullable=True)
+    zip_status = Column(Enum(ZipStatus), nullable=True)
+    zip_id = Column(UUID(as_uuid=True), nullable=True)
 
     files = relationship("DataFile", lazy="subquery", backref="dataset_version")
 

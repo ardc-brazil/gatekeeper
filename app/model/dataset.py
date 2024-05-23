@@ -8,6 +8,10 @@ class DesignState(enum.Enum):
     DRAFT = "draft"
     PUBLISHED = "published"
 
+class ZipStatus(enum.Enum):
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
 
 @dataclass
 class DataFile:
