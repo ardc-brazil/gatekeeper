@@ -29,7 +29,6 @@ def setup_logging() -> None:
 
     modules = [
         {"name": "uvicorn", "level": settings.LOG_LEVEL},
-        {"name": "sqlalchemy.engine", "level": settings.LOG_LEVEL},
         {"name": "tests", "level": logging.INFO},
     ]
     for module in modules:
