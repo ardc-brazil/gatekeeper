@@ -14,7 +14,7 @@ Backend for DataAmazon.
 1. Start docker containers
 
 ```sh
-make ENV={env} docker-run
+make ENV_FILE_PATH={env_file_path} docker-run
 ```
 
 2. Access pgAdmin in your browser at <http://localhost:5050> or <http://localhost/pgadmin> to use PgAdmin to connect to
@@ -26,7 +26,7 @@ the PostgreSQL database
 3. Create a virtual environment and activate it
 
 ```sh
-make ENV={env} python-env
+make ENV_FILE_PATH={env_file_path} python-env
 ```
 
 4. Install project dependencies
@@ -35,25 +35,25 @@ make ENV={env} python-env
 > `brew install openssl`
 
 ```sh
-make ENV={env} python-pip-install
+make ENV_FILE_PATH={env_file_path} python-pip-install
 ```
 
 5. Run database migrations
 
 ```sh
-make ENV={env} db-migration
+make ENV_FILE_PATH={env_file_path} db-migration
 ```
 
 6. Start the application by using any of the following
 
 ```sh
-make ENV={env} python-run
+make ENV_FILE_PATH={env_file_path} python-run
 ```
 
 7. If you need to delete the docker containers
 
 ```sh
-make ENV={env} docker-down
+make ENV_FILE_PATH={env_file_path} docker-down
 ```
 
 Obs.: this will delete the containers, but not the images generated nor the database data, since it uses a docker 
@@ -69,10 +69,10 @@ To create new migrations, follow the steps below.
 
 1. Map your new table in a new file in `models/{your_new_model}.py`
 2. Import your model in `app/__init__.py`, before the migrate config
-3. Run `make ENV={env} db-create-migration "{COMMENT}"`
+3. Run `make ENV_FILE_PATH={env_file_path} db-create-migration "{COMMENT}"`
 4. Check the generated file under `migrations/versions/<generated_file>.py` and see if any fix is needed.
-5. Run `make ENV={env} db-upgrade`
-6. Check the database, if there's any problem, run `make ENV={env} db-downgrade`
+5. Run `make ENV_FILE_PATH={env_file_path} db-upgrade`
+6. Check the database, if there's any problem, run `make ENV_FILE_PATH={env_file_path} db-downgrade`
 
 > **WARNING**: Sometimes a new migration tries to delete the `casbin_rule` table. This is not intended and should be investigated. As of now, check the migration file to see if the upgrade and downgrade has a create and/or delete table for `cabin_rule`. If, so, just delete this statement from the files (from both upgrade and downgrade).
 
@@ -95,10 +95,10 @@ python3 -m venv venv
 . venv/bin/activate
 
 # Install libraries
-make ENV={env} python-pip-install
+make ENV_FILE_PATH={env_file_path} python-pip-install
 
 # Run db migrations
-make ENV={env} db-upgrade
+make ENV_FILE_PATH={env_file_path} db-upgrade
 
 # Deactivate python virtual env
 deactivate

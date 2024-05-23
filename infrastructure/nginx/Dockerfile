@@ -5,7 +5,6 @@ RUN apk add bash
 
 # Add nginx.conf to container
 COPY --chown=nginx:nginx ./nginx.conf /etc/nginx/nginx.conf
-COPY --chown=nginx:nginx ./start.sh /app/start.sh
 
 # set workdir
 WORKDIR /app
@@ -29,4 +28,5 @@ RUN touch /var/run/nginx.pid && chown -R nginx:nginx /var/run/nginx.pid
 
 USER nginx
 
-CMD ["nginx", "-g", "'daemon off;'"]
+CMD ["nginx", "-g", "daemon off;"]
+ 

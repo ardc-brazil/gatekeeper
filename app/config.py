@@ -42,7 +42,7 @@ class Config(BaseSettings):
         )
 
 
-env_name = os.getenv("ENV", "local")
+env_name = os.getenv("ENVIRONMENT", "local")
 config_file = f"{env_name}.env"
 logger = logging.getLogger("uvicorn")
 logger.info(f"Using config file: {config_file}")
