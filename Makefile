@@ -65,10 +65,10 @@ python-run:
 
 # Database commands
 db-upgrade:
-	flask db upgrade
+	alembic upgrade head
 
 db-create-migration: # Usage: make MESSAGE="Add tenancy column to datasets" db-create-migration
-	flask db migrate -m "$(MESSAGE)"
+	alembic revision --autogenerate -m "$(MESSAGE)"
 
 db-downgrade:
-	flask db downgrade
+	alembic downgrade -1
