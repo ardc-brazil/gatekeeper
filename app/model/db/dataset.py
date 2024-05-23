@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    UniqueConstraint,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -72,6 +73,7 @@ class DatasetVersion(Base):
     __table_args__ = (
         Index("idx_dataset_versions_name", "name"),
         Index("idx_dataset_versions_created_at", "created_at"),
+        UniqueConstraint('name', 'dataset_id', name='uc_dataset_versions_name_dataset_id')
     )
 
 
