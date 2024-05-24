@@ -1,7 +1,7 @@
 #!make
 
-include dev.env
-export $(shell sed 's/=.*//' dev.env)
+include ${ENV_FILE_PATH}
+export $(shell sed 's/=.*//' ${ENV_FILE_PATH})
 
 # Reset
 Color_Off=\033[0m       # Text Reset
@@ -28,27 +28,26 @@ On_White=\033[47m       # White
 
 # Docker commands
 docker-build:
-	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml build
+	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml build
 
 docker-run:
 	@echo "${On_Green}Starting docker containers${Color_Off}"
-	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
+	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml up -d
 
 docker-run-db:
 	@echo "${On_Green}Starting docker containers${Color_Off}"
-	time docker compose -f docker-compose-database.yaml up -d	
+	time docker-compose -f docker-compose-database.yaml up -d	
 
 docker-stop:
 	@echo "${On_Green}Stoping docker containers${Color_Off}"
-	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml stop
+	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml stop
 
 docker-down:
 	@echo "${On_Green}Downing docker containers${Color_Off}"
-	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml down
+	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml down
 
 docker-deployment: docker-build docker-stop docker-down docker-run
 	
-
 # Python commands
 python-env:
 	python3 -m venv venv
@@ -61,12 +60,14 @@ python-pip-freeze:
 	pip freeze > requirements.txt
 
 python-run:
-	flask routes
-	FLASK_ENV=development FLASK_DEBUG=1 flask run -h localhost -p 9092
+	uvicorn app.main:fastAPIApp --host 0.0.0.0 --port 9092 --reload
 
 # Database commands
 db-upgrade:
-	flask db upgrade
+	alembic upgrade head
 
 db-create-migration: # Usage: make MESSAGE="Add tenancy column to datasets" db-create-migration
-	flask db migrate -m "$(MESSAGE)"
+	alembic revision --autogenerate -m "$(MESSAGE)"
+
+db-downgrade:
+	alembic downgrade -1

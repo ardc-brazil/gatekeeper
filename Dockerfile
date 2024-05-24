@@ -1,9 +1,9 @@
-FROM python:3.10.12-alpine as base
+FROM python:3.10.4-alpine as base
 
 FROM base as builder
 
 RUN mkdir /install
-RUN apk update && apk add postgresql-dev gcc python3-dev musl-dev
+RUN apk update && apk add postgresql-dev gcc python3-dev musl-dev libffi-dev
 WORKDIR /install
 COPY requirements.txt /requirements.txt
 RUN pip install --prefix=/install -r /requirements.txt
@@ -16,4 +16,4 @@ RUN apk --no-cache add libpq
 WORKDIR /app
 EXPOSE 9092
 
-CMD ["gunicorn", "-w 3", "-t 60" , "-b 0.0.0.0:9092", "app:create_app()", "--access-logfile -", "--error-logfile -"]
+CMD ["uvicorn", "app.main:fastAPIApp", "--host", "0.0.0.0", "--port", "9092"]
