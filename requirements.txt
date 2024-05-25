@@ -12,6 +12,7 @@ pydantic==2.7.1
 pydantic_core==2.18.2
 pydantic-settings==2.2.1
 PyJWT==2.8.0
+pytest==8.2.1
 requests==2.31.0
 ruff==0.4.1
 SQLAlchemy==1.4.23
