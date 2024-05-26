@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.container import Container
 from app.controller.v1.user.resource import (
+    UserCreateResponse,
     UserEnforceRequest,
     UserEnforceResponse,
     UserProviderAddRequest,
@@ -38,6 +39,11 @@ def _adapt_get_response(user: User) -> UserGetResponse:
         ],
         tenancies=user.tenancies,
     )
+    
+def _adapt_post_response(user_id: UUID) -> UserCreateResponse:
+    return UserCreateResponse(
+        id=user_id
+    )
 
 
 # GET /users
@@ -70,17 +76,19 @@ async def get(
 @inject
 async def create(
     payload: UserCreateRequest,
-    service: UserService = Depends(Provide[Container.user_service]),
-) -> UUID:
-    return service.create(
+    service: UserService = Depends(Provide[Container.user_service])
+) -> UserCreateResponse:
+    
+    user_id = service.create(
         User(
             name=payload.name,
             email=payload.email,
             providers=payload.providers,
             roles=payload.roles,
-            tenancies=payload.tenancies,
         )
     )
+    
+    return _adapt_post_response(user_id=user_id)
 
 
 # PUT /users/{id}
@@ -189,7 +197,7 @@ async def add_tenancy(
     payload: UserTenanciesRequest,
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> None:
-    service.add_tenancies(id=id, tenancies=payload.tenancies)
+    service.add_tenancies(user_id=id, tenancies=payload.tenancies)
     return {}
 
 

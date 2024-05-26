@@ -166,7 +166,7 @@ class TestUserService(unittest.TestCase):
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
 
     def test_add_roles_success(self):
-        user_id = uuid4()
+        user_id = str(uuid4())
         db_user = Mock(spec=UserDBModel)
         self.user_repository.fetch_by_id.return_value = db_user
 

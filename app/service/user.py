@@ -95,7 +95,7 @@ class UserService:
         if user is None:
             raise NotFoundException(f"not_found: {id}")
         for role in roles:
-            self._casbin_enforcer.add_role_for_user(user=id, role=role)
+            self._casbin_enforcer.add_role_for_user(user=str(id), role=role)
 
     def remove_roles(self, id: UUID, roles: list[str]) -> None:
         user: UserDBModel = self._repository.fetch_by_id(id=id)
@@ -154,6 +154,7 @@ class UserService:
 
     def add_tenancies(self, user_id: UUID, tenancies: list[str]) -> None:
         # TODO check editor has the access to the tenancy
+        # TODO: Only admins should have permission to add user to a tenancy
         user: UserDBModel = self._repository.fetch_by_id(id=user_id)
         if user is None:
             raise NotFoundException(f"not_found: {user_id}")
@@ -165,6 +166,7 @@ class UserService:
 
     def remove_tenancies(self, user_id: UUID, tenancies: list[str]) -> None:
         # TODO check editor has the access to the tenancy
+        # TODO: Only admins should have permission to add user to a tenancy
         user: UserDBModel = self._repository.fetch_by_id(id=user_id)
         if user is None:
             raise NotFoundException(f"not_found: {user_id}")
