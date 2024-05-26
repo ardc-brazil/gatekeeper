@@ -30,7 +30,6 @@ class UserCreateRequest(BaseModel):
     email: str = Field(..., description="User email")
     providers: list[UserProvider] = Field([], description="User providers")
     roles: list[str] = Field([], description="User roles")
-    tenancies: list[str] = Field(..., description="User tenancies")
 
 
 class UserProviderAddRequest(BaseModel):

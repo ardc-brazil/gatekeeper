@@ -78,7 +78,6 @@ async def create(
             email=payload.email,
             providers=payload.providers,
             roles=payload.roles,
-            tenancies=payload.tenancies,
         )
     )
 
