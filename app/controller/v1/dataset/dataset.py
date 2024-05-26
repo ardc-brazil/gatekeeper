@@ -10,6 +10,7 @@ from app.controller.interceptor.tenancy_parser import parse_tenancy_header
 from app.controller.interceptor.user_parser import parse_user_header
 from app.controller.v1.dataset.resource import (
     DataFileResponse,
+    DatasetCreateRequest,
     DatasetCreateResponse,
     DatasetGetResponse,
     DatasetUpdateRequest,
@@ -180,7 +181,7 @@ async def delete_dataset(
 @router.post("/", status_code=201)
 @inject
 async def create_dataset(
-    dataset_request: DatasetUpdateRequest,
+    dataset_request: DatasetCreateRequest,
     user_id: UUID = Depends(parse_user_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DatasetCreateResponse:
