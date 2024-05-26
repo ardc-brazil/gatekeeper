@@ -50,8 +50,9 @@ docker-deployment: docker-build docker-stop docker-down docker-run
 	
 # Python commands
 python-env:
-	python3 -m venv venv
-	. venv/bin/activate
+	@echo "${On_White}\rAtention!${Color_Off}"
+	@echo "Use vscode and create the environment locall to run the application"
+	@echo "Check more about it on https://code.visualstudio.com/docs/python/environments#_creating-environments"
 
 python-pip-install:
 	pip install -r requirements.txt

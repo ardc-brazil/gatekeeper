@@ -7,7 +7,14 @@ Backend for DataAmazon.
 - Docker
 - Docker Compose
 
+
+
 ## Environment Setup
+
+### Install the python version
+
+Use vscode and set the python verion from [.python-version](./.python-version) via create environment.
+Follow the tutorial at https://code.visualstudio.com/docs/python/environments#_creating-environments
 
 **Use Makefile targets to make your life easier!**
 
@@ -17,11 +24,15 @@ Backend for DataAmazon.
 make ENV_FILE_PATH={env_file_path} docker-run
 ```
 
-2. Access pgAdmin in your browser at <http://localhost:5050> or <http://localhost/pgadmin> to use PgAdmin to connect to
+The `env_file_path` is the path for the `{env-name}.env` file on your project. We have a `local.env` with a local configuration that could be used by you 
+to configure you local environment.
+
+
+2. Access pgAdmin in your browser at <http://localhost:5050> to use PgAdmin to connect to
 the PostgreSQL database
 
-- Log in using the admin credentials defined in `docker-compose.yml` file, under the service `gatekeeper-pgadmin`.
-- Double click in `Servers > Gatekeeper DB` and inform the password from `docker-compose.yml`
+- Log in using the admin credentials defined in `docker-compose-database.yaml` file that uses the `.env` file, under the service `gatekeeper-pgadmin`.
+- Double click in `Servers > Gatekeeper DB` and inform the password from `docker-compose-database.yaml`
 
 3. Create a virtual environment and activate it
 
@@ -41,7 +52,7 @@ make ENV_FILE_PATH={env_file_path} python-pip-install
 5. Run database migrations
 
 ```sh
-make ENV_FILE_PATH={env_file_path} db-migration
+make ENV_FILE_PATH={env_file_path} db-upgrade
 ```
 
 6. Start the application by using any of the following
