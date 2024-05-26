@@ -3,6 +3,7 @@ bcrypt==4.0.1
 casbin==1.23.0
 casbin-sqlalchemy-adapter==0.5.2
 cffi==1.16.0
+coverage==7.5.1
 dependency-injector==4.41.0
 fastapi==0.111.0
 fastapi-cli==0.0.4

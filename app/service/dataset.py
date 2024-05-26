@@ -135,45 +135,56 @@ class DatasetService:
     def update_dataset(
         self,
         dataset_id: UUID,
-        dataset: Dataset,
+        dataset_request: Dataset,
         user_id: UUID,
         tenancies: list[str] = [],
     ) -> None:
-        db_dataset: DatasetDBModel = self._repository.fetch(
+        dataset_db: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
         )
 
-        if db_dataset is None:
+        if dataset_db is None:
             raise NotFoundException(f"not_found: {dataset_id}")
 
-        db_dataset.name = dataset.name
-        db_dataset.data = dataset.data
-        db_dataset.tenancy = dataset.tenancy
-        db_dataset.owner_id = user_id
+        if self._should_create_new_version(dataset_db, dataset_request): 
+            new_version = self._create_new_version(dataset_db, user_id)
+            dataset_db.versions.append(new_version)
 
+        dataset_db.name = dataset_request.name
+        dataset_db.data = dataset_request.data
+        dataset_db.tenancy = dataset_request.tenancy
+        dataset_db.owner_id = user_id
+        
+        self._repository.upsert(dataset=dataset_db)
+        
+    def _should_create_new_version(self, dataset_db: DatasetDBModel, dataset_request: Dataset) -> bool:
+        
+        is_data_files_changed = dataset_db.data['dataFiles'] != dataset_request.data['dataFiles']
+        
         # check if new version is needed and create it
         draft_version: DatasetVersionDBModel = next(
             (
                 v
-                for v in dataset.versions
+                for v in dataset_db.versions
                 if v.design_state == DesignState.DRAFT and v.is_enabled
             ),
             None,
         )
-
-        if draft_version is None:
-            new_version_name = (
-                str(int(dataset.versions[-1].name) + 1) if dataset.versions else "1"
-            )
-            new_version = DatasetVersionDBModel(
-                name=new_version_name,
-                design_state=DesignState.DRAFT,
-                created_by=user_id,
-            )
-            db_dataset.versions.append(new_version)
-
-        self._repository.upsert(dataset=db_dataset)
+        
+        return (draft_version is None and is_data_files_changed) or draft_version is None
+    
+    def _create_new_version(self, dataset_db: DatasetDBModel, user_id: UUID) -> DatasetVersionDBModel:
+        new_version_name = (
+                    str(int(dataset_db.versions[-1].name) + 1) if dataset_db.versions else "1"
+                )
+        new_version = DatasetVersionDBModel(
+            name=new_version_name,
+            design_state=DesignState.DRAFT,
+            created_by=user_id,
+        )
+        
+        return new_version
 
     def create_dataset(self, dataset: Dataset, user_id: UUID) -> Dataset:
         dataset = DatasetDBModel(

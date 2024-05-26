@@ -152,7 +152,7 @@ async def update_dataset(
 ) -> None:
     service.update_dataset(
         dataset_id=id,
-        dataset=Dataset(
+        dataset_request=Dataset(
             id=id,
             name=dataset_request.name,
             data=dataset_request.data,
