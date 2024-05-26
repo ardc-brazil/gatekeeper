@@ -418,6 +418,49 @@ class TestDatasetService(unittest.TestCase):
                               "failed test {} expected {}, actual {}".format(case.name, case.expected_version_name, actual_version_created))
             self.assertEqual(actual_version_created.design_state, DesignState.DRAFT,
                              "failed test {} expected {}, actual {}".format(case.name, case.expected_version_name, actual_version_created))    
+            
+    def test__determine_tenancies(self):
+        # given
+        given_user_id='7DC7479E-9DCD-4519-BEC8-6CBA708A7B10'
+        given_tenancies=['a', 'b']
+        expected_tenancies=['a', 'b']
 
+        self.user_service.fetch_by_id.return_value = self.mock_user(given_tenancies)
+    
+        # when
+        actual = self.dataset_service._determine_tenancies(user_id=given_user_id, tenancies=given_tenancies)
+        
+        # then
+        self.assertEqual(actual, expected_tenancies)
+    
+    def test__determine_tenancies_unauthorized_when_user_not_found(self):
+        # given
+        given_user_id='7DC7479E-9DCD-4519-BEC8-6CBA708A7B10'
+        given_tenancies=['a', 'b']
+        expected_raise_fetch_user=UnauthorizedException(f"unauthorized_tenancy '{given_tenancies}' for user '{given_user_id}'")
+        self.user_service.fetch_by_id.side_effect = NotFoundException("user not found")
+                
+        # when
+        with self.assertRaises(type(expected_raise_fetch_user)) as cm:
+            self.dataset_service._determine_tenancies(user_id=given_user_id, tenancies=given_tenancies)
+            
+        # then
+        self.assertEqual(str(cm.exception), str(expected_raise_fetch_user))
+        
+    def test__determine_tenancies_unauthorized_list_of_tenancies_are_invalid(self):
+        # given
+        given_user_id='7DC7479E-9DCD-4519-BEC8-6CBA708A7B10'
+        given_request_tenancies=['a', 'b', 'c']
+        given_tenancies=['a', 'b']
+        expected_raise_fetch_user=UnauthorizedException("unauthorized_tenancy: ['a', 'b', 'c']")
+        self.user_service.fetch_by_id.return_value = self.mock_user(given_tenancies)
+                
+        # when
+        with self.assertRaises(type(expected_raise_fetch_user)) as cm:
+            self.dataset_service._determine_tenancies(user_id=given_user_id, tenancies=given_request_tenancies)
+            
+        # then
+        self.assertEqual(str(cm.exception), str(expected_raise_fetch_user))
+            
 if __name__ == "__main__":
     unittest.main()
