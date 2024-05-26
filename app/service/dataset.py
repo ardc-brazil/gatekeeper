@@ -95,7 +95,11 @@ class DatasetService:
     def _determine_tenancies(
         self, user_id: UUID, tenancies: list[str] = []
     ) -> list[str]:
-        user = self._user_service.fetch_by_id(id=user_id)
+    
+        try:
+            user = self._user_service.fetch_by_id(id=user_id)
+        except NotFoundException:
+            raise UnauthorizedException(f"unauthorized_tenancy '{tenancies}' for user '{user_id}'")
 
         if not tenancies:
             tenancies = user.tenancies

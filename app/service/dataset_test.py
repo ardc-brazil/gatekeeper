@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
+from app.exception.unauthorized import UnauthorizedException
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.user import UserService
@@ -65,6 +66,22 @@ class TestDatasetService(unittest.TestCase):
         )
         self.assertIsNotNone(result)
         self.dataset_repository.fetch.assert_called_once()
+        
+    def test_fetch_dataset_by_user_not_found(self):
+        dataset_id = uuid4()
+        user_id = uuid4()
+        tenancies = ["tenancy1"]
+        dataset_db = Mock(spec=DatasetDBModel)
+        mocked_version = Mock(spec=DatasetVersionDBModel)
+        mocked_version.files = [Mock(spec=DataFileDBModel)]
+        dataset_db.versions = [mocked_version]
+        self.user_service.fetch_by_id.side_effect = NotFoundException("user not found")
+        
+        # when + then
+        with self.assertRaises(UnauthorizedException):
+            self.dataset_service.fetch_dataset(
+                dataset_id=dataset_id, user_id=user_id, tenancies=tenancies
+            )
 
     def test_update_dataset_not_found(self):
         dataset_id = uuid4()
