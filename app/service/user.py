@@ -95,7 +95,7 @@ class UserService:
         if user is None:
             raise NotFoundException(f"not_found: {id}")
         for role in roles:
-            self._casbin_enforcer.add_role_for_user(user=id, role=role)
+            self._casbin_enforcer.add_role_for_user(user=str(id), role=role)
 
     def remove_roles(self, id: UUID, roles: list[str]) -> None:
         user: UserDBModel = self._repository.fetch_by_id(id=id)
