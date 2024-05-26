@@ -31,6 +31,8 @@ class UserCreateRequest(BaseModel):
     providers: list[UserProvider] = Field([], description="User providers")
     roles: list[str] = Field([], description="User roles")
 
+class UserCreateResponse(BaseModel):
+    id: UUID = Field(..., description="User id")
 
 class UserProviderAddRequest(BaseModel):
     name: str = Field(..., description="Provider name")
