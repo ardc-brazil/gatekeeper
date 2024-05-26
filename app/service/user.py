@@ -154,6 +154,7 @@ class UserService:
 
     def add_tenancies(self, user_id: UUID, tenancies: list[str]) -> None:
         # TODO check editor has the access to the tenancy
+        # TODO: Only admins should have permission to add user to a tenancy
         user: UserDBModel = self._repository.fetch_by_id(id=user_id)
         if user is None:
             raise NotFoundException(f"not_found: {user_id}")
@@ -165,6 +166,7 @@ class UserService:
 
     def remove_tenancies(self, user_id: UUID, tenancies: list[str]) -> None:
         # TODO check editor has the access to the tenancy
+        # TODO: Only admins should have permission to add user to a tenancy
         user: UserDBModel = self._repository.fetch_by_id(id=user_id)
         if user is None:
             raise NotFoundException(f"not_found: {user_id}")

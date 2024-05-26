@@ -197,7 +197,7 @@ async def add_tenancy(
     payload: UserTenanciesRequest,
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> None:
-    service.add_tenancies(id=id, tenancies=payload.tenancies)
+    service.add_tenancies(user_id=id, tenancies=payload.tenancies)
     return {}
 
 
