@@ -38,7 +38,8 @@ class DatasetVersion:
     created_by: UUID = None
     design_state: DesignState = None
     files: list[DataFile] = field(default_factory=lambda: [])
-
+    zip_id: UUID = None
+    zip_status: ZipStatus = None
 
 @dataclass
 class Dataset:

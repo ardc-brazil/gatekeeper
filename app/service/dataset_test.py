@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
+from app.gateway.zipper.zipper import ZipperGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.user import UserService
@@ -26,10 +27,12 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository = Mock(spec=DatasetRepository)
         self.dataset_version_repository = Mock(spec=DatasetVersionRepository)
         self.user_service = Mock(spec=UserService)
+        self.zipper_gateway = Mock(spec=ZipperGateway)
         self.dataset_service = DatasetService(
             repository=self.dataset_repository,
             version_repository=self.dataset_version_repository,
             user_service=self.user_service,
+            zipper_gateway=self.zipper_gateway,
         )
 
     def mock_user(self, tenancies):

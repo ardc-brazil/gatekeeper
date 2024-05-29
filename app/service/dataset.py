@@ -4,6 +4,8 @@ import json
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
+from app.gateway.zipper.resource import CreateZipResponse
+from app.gateway.zipper.zipper import ZipperGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.user import UserService
@@ -27,10 +29,14 @@ class DatasetService:
         repository: DatasetRepository,
         version_repository: DatasetVersionRepository,
         user_service: UserService,
+        zipper_gateway: ZipperGateway,
+        default_file_bucket: str,
     ):
         self._repository = repository
         self._version_repository = version_repository
         self._user_service = user_service
+        self._zipper_gateway = zipper_gateway
+        self._bucket = default_file_bucket
 
     def _adapt_file(self, file: DataFileDBModel) -> DataFile:
         return DataFile(
@@ -57,6 +63,8 @@ class DatasetService:
             is_enabled=version.is_enabled,
             design_state=version.design_state,
             files=[self._adapt_file(file=file) for file in version.files],
+            zip_id=version.zip_id,
+            zip_status=version.zip_status,
         )
 
     def _adapt_dataset(self, dataset: DatasetDBModel) -> Dataset:
@@ -318,6 +326,9 @@ class DatasetService:
 
         self._version_repository.upsert(version)
 
+    def _get_files_names(self, files: list[DataFileDBModel]) -> list[str]:
+        return [file.storage_file_name for file in files]
+    
     def publish_dataset_version(
         self,
         dataset_id: UUID,
@@ -348,3 +359,33 @@ class DatasetService:
         if dataset.design_state == DesignState.DRAFT:
             dataset.design_state = DesignState.PUBLISHED
             self._repository.upsert(dataset=dataset)
+        
+        zip_response: CreateZipResponse = self._zipper_gateway.create_zip(
+            dataset_id=dataset_id, 
+            version=version_name, 
+            files=self._get_files_names(version.files), 
+            bucket=self._bucket, 
+            zip_name=f"{dataset.id}_{version_name}.zip"
+        )
+
+        if zip_response.status != "IN_PROGRESS":
+            raise IllegalStateException("zip_creation_failed")
+
+        version.zip_id = zip_response.id
+        version.zip_status = zip_response.status
+
+        self._version_repository.upsert(version)
+
+    def update_zip_status(self, dataset_id: UUID, version_name: str, zip_id: UUID, zip_status: str) -> None:
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
+        
+        if version is None:
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+    
+        version.zip_status = zip_status
+
+        self._version_repository.upsert(version)
