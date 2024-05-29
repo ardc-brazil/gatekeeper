@@ -201,7 +201,9 @@ class TestDatasetService(unittest.TestCase):
         version.files = [Mock(spec=DataFileDBModel)]
         self.dataset_repository.fetch.return_value = dataset
         self.dataset_version_repository.fetch_version_by_name.return_value = version
-        self.zipper_gateway.create_zip.return_value = CreateZipResponse(id=uuid4(), status="IN_PROGRESS")
+        self.zipper_gateway.create_zip.return_value = CreateZipResponse(
+            id=uuid4(), status="IN_PROGRESS"
+        )
         self.dataset_service.publish_dataset_version(
             dataset_id=dataset_id,
             user_id=user_id,
@@ -224,7 +226,9 @@ class TestDatasetService(unittest.TestCase):
         version.files = [Mock(spec=DataFileDBModel)]
         self.dataset_repository.fetch.return_value = dataset
         self.dataset_version_repository.fetch_version_by_name.return_value = version
-        self.zipper_gateway.create_zip.return_value = CreateZipResponse(id=uuid4(), status="IN_PROGRESS")
+        self.zipper_gateway.create_zip.return_value = CreateZipResponse(
+            id=uuid4(), status="IN_PROGRESS"
+        )
         self.dataset_service.publish_dataset_version(
             dataset_id=dataset_id,
             user_id=user_id,
@@ -250,7 +254,7 @@ class TestDatasetService(unittest.TestCase):
                 version_name=version_name,
                 tenancies=tenancies,
             )
-    
+
     def test_publish_dataset_version_illegal_state(self):
         dataset_id = uuid4()
         user_id = uuid4()
@@ -263,8 +267,10 @@ class TestDatasetService(unittest.TestCase):
         version.files = [Mock(spec=DataFileDBModel)]
         self.dataset_repository.fetch.return_value = dataset
         self.dataset_version_repository.fetch_version_by_name.return_value = version
-        self.zipper_gateway.create_zip.return_value = CreateZipResponse(id=uuid4(), status="ERROR")
-        
+        self.zipper_gateway.create_zip.return_value = CreateZipResponse(
+            id=uuid4(), status="ERROR"
+        )
+
         with self.assertRaises(IllegalStateException):
             self.dataset_service.publish_dataset_version(
                 dataset_id=dataset_id,
@@ -272,40 +278,56 @@ class TestDatasetService(unittest.TestCase):
                 version_name=version_name,
                 tenancies=tenancies,
             )
-    
-    @patch('app.service.dataset.logging')
+
+    @patch("app.service.dataset.logging")
     def test_update_zip_status_success(self, logging_mock):
         dataset_id = uuid4()
-        version_name = '1'
+        version_name = "1"
         zip_id = uuid4()
-        zip_status = 'SUCCESS'
+        zip_status = "SUCCESS"
 
         version_mock = Mock(spec=DatasetVersionDBModel)
-        self.dataset_version_repository.fetch_version_by_name.return_value = version_mock
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            version_mock
+        )
 
-        self.dataset_service.update_zip_status(dataset_id, version_name, zip_id, zip_status)
+        self.dataset_service.update_zip_status(
+            dataset_id, version_name, zip_id, zip_status
+        )
 
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
         self.assertEqual(version_mock.zip_status, zip_status)
         self.dataset_version_repository.upsert.assert_called_once_with(version_mock)
-        logging_mock.info.assert_called_once_with(f"zip {zip_id} status updated: {zip_status} for dataset {dataset_id} version {version_name}")
+        logging_mock.info.assert_called_once_with(
+            f"zip {zip_id} status updated: {zip_status} for dataset {dataset_id} version {version_name}"
+        )
 
-    @patch('app.service.dataset.logging')
+    @patch("app.service.dataset.logging")
     def test_update_zip_status_version_not_found(self, logging_mock):
         dataset_id = uuid4()
-        version_name = '1'
+        version_name = "1"
         zip_id = uuid4()
-        zip_status = 'SUCESS'
+        zip_status = "SUCESS"
 
         self.dataset_version_repository.fetch_version_by_name.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.update_zip_status(dataset_id, version_name, zip_id, zip_status)
+            self.dataset_service.update_zip_status(
+                dataset_id, version_name, zip_id, zip_status
+            )
 
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
-        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
+        self.assertEqual(
+            str(context.exception),
+            f"not_found: {version_name} for dataset {dataset_id}",
+        )
         self.dataset_version_repository.upsert.assert_not_called()
         logging_mock.info.assert_not_called()
-    
+
+
 if __name__ == "__main__":
     unittest.main()

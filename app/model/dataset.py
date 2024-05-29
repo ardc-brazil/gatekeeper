@@ -8,10 +8,12 @@ class DesignState(enum.Enum):
     DRAFT = "draft"
     PUBLISHED = "published"
 
+
 class ZipStatus(enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     SUCCESS = "SUCCESS"
     FAILURE = "FAILURE"
+
 
 @dataclass
 class DataFile:
@@ -40,6 +42,7 @@ class DatasetVersion:
     files: list[DataFile] = field(default_factory=lambda: [])
     zip_id: UUID = None
     zip_status: ZipStatus = None
+
 
 @dataclass
 class Dataset:

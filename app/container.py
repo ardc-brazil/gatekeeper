@@ -41,7 +41,7 @@ class Container(containers.DeclarativeContainer):
     config.from_dict(json_config)
 
     db = providers.Singleton(
-        Database, 
+        Database,
         db_url=config.DATABASE_URL,
         log_enabled=config.DATABASE_LOG_ENABLED,
     )

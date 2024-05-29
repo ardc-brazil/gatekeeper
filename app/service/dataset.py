@@ -328,7 +328,7 @@ class DatasetService:
 
     def _get_files_names(self, files: list[DataFileDBModel]) -> list[str]:
         return [file.storage_file_name for file in files]
-    
+
     def publish_dataset_version(
         self,
         dataset_id: UUID,
@@ -354,11 +354,11 @@ class DatasetService:
             )
 
         zip_response: CreateZipResponse = self._zipper_gateway.create_zip(
-            dataset_id=dataset_id, 
-            version=version_name, 
-            files=self._get_files_names(version.files), 
-            bucket=self._bucket, 
-            zip_name=f"{dataset.id}_{version_name}.zip"
+            dataset_id=dataset_id,
+            version=version_name,
+            files=self._get_files_names(version.files),
+            bucket=self._bucket,
+            zip_name=f"{dataset.id}_{version_name}.zip",
         )
 
         if zip_response.status != "IN_PROGRESS":
@@ -373,17 +373,21 @@ class DatasetService:
             dataset.design_state = DesignState.PUBLISHED
             self._repository.upsert(dataset=dataset)
 
-    def update_zip_status(self, dataset_id: UUID, version_name: str, zip_id: UUID, zip_status: str) -> None:
+    def update_zip_status(
+        self, dataset_id: UUID, version_name: str, zip_id: UUID, zip_status: str
+    ) -> None:
         version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
             dataset_id=dataset_id, version_name=version_name
         )
-        
+
         if version is None:
             raise NotFoundException(
                 f"not_found: {version_name} for dataset {dataset_id}"
             )
-    
+
         version.zip_status = zip_status
 
         self._version_repository.upsert(version)
-        logging.info(f"zip {zip_id} status updated: {zip_status} for dataset {dataset_id} version {version_name}")
+        logging.info(
+            f"zip {zip_id} status updated: {zip_status} for dataset {dataset_id} version {version_name}"
+        )
