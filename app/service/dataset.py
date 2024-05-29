@@ -353,13 +353,6 @@ class DatasetService:
                 f"not_found: {version_name} for dataset {dataset_id}"
             )
 
-        version.design_state = DesignState.PUBLISHED
-        self._version_repository.upsert(dataset_version=version)
-
-        if dataset.design_state == DesignState.DRAFT:
-            dataset.design_state = DesignState.PUBLISHED
-            self._repository.upsert(dataset=dataset)
-        
         zip_response: CreateZipResponse = self._zipper_gateway.create_zip(
             dataset_id=dataset_id, 
             version=version_name, 
@@ -373,8 +366,12 @@ class DatasetService:
 
         version.zip_id = zip_response.id
         version.zip_status = zip_response.status
+        version.design_state = DesignState.PUBLISHED
+        self._version_repository.upsert(dataset_version=version)
 
-        self._version_repository.upsert(version)
+        if dataset.design_state == DesignState.DRAFT:
+            dataset.design_state = DesignState.PUBLISHED
+            self._repository.upsert(dataset=dataset)
 
     def update_zip_status(self, dataset_id: UUID, version_name: str, zip_id: UUID, zip_status: str) -> None:
         version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
