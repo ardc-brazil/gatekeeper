@@ -389,3 +389,4 @@ class DatasetService:
         version.zip_status = zip_status
 
         self._version_repository.upsert(version)
+        logging.info(f"zip {zip_id} status updated: {zip_status} for dataset {dataset_id} version {version_name}")
