@@ -3,6 +3,7 @@ from dependency_injector import containers, providers
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
 
+from app.gateway.zipper.zipper import ZipperGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.user import UserRepository
@@ -28,6 +29,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.client.client",
             "app.controller.v1.dataset.dataset",
             "app.controller.v1.dataset.dataset_filter",
+            "app.controller.v1.internal.internal",
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
@@ -102,11 +104,18 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
+    zipper_gateway = providers.Factory(
+        ZipperGateway,
+        base_url=config.ZIPPER_BASE_URL,
+    )
+
     dataset_service = providers.Factory(
         DatasetService,
         repository=dataset_repository,
         version_repository=dataset_version_repository,
         user_service=user_service,
+        zipper_gateway=zipper_gateway,
+        default_file_bucket=config.DEFAULT_FILE_BUCKET,
     )
 
     tus_service = providers.Factory(

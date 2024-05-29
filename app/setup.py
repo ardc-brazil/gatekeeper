@@ -9,6 +9,7 @@ from app.controller.v1.tenancy.tenancy import router as tenancies_router
 from app.controller.v1.user.user import router as user_router
 from app.controller.v1.dataset.dataset_filter import router as dataset_filter_router
 from app.controller.v1.dataset.dataset import router as dataset_router
+from app.controller.v1.internal.internal import router as internal_router
 from app.controller.v1.tus.tus import router as tus_router
 from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
@@ -43,6 +44,7 @@ def setup_logging() -> None:
 
 
 def setup_routes(fastAPIApp: FastAPI) -> None:
+    fastAPIApp.include_router(internal_router, prefix="/v1")
     fastAPIApp.include_router(dataset_filter_router, prefix="/v1")
     fastAPIApp.include_router(dataset_router, prefix="/v1")
     fastAPIApp.include_router(tenancies_router, prefix="/v1")
