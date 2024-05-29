@@ -55,6 +55,8 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         design_state=version.design_state.name,
         is_enabled=version.is_enabled,
         files=[_adapt_data_file(file) for file in version.files],
+        zip_id=version.zip_id,
+        zip_status=version.zip_status.name if version.zip_status is not None else None,
     )
 
 
@@ -228,7 +230,6 @@ async def delete_dataset_version(
         tenancies=tenancies,
     )
     return {}
-
 
 # PUT /datasets/:dataset_id/versions/:version/publish
 @router.put("/{dataset_id}/versions/{version_name}/publish")

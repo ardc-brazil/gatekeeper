@@ -23,6 +23,8 @@ class DatasetVersionResponse(BaseModel):
     design_state: str = Field(..., title="Design state")
     is_enabled: bool = Field(..., title="Is enabled")
     files: list[DataFileResponse] = Field([], title="List of data files")
+    zip_id: Optional[UUID] = Field(None, title="Zip ID")
+    zip_status: Optional[str] = Field(None, title="Zip status")
 
 
 class DatasetGetResponse(BaseModel):
