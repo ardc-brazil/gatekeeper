@@ -28,6 +28,9 @@ class Config(BaseSettings):
     AUTH_USER_TOKEN_SECRET: str = Field(..., description="Secret key for user token")
     CASBIN_MODEL_FILE: str = Field(..., description="Casbin model file")
 
+    DEFAULT_FILE_BUCKET: str = Field(..., description="Default file bucket")
+    ZIPPER_BASE_URL: str = Field(..., description="Zipper base URL")
+    
     @field_validator("DATABASE_URL", mode="before")
     def build_database_url(cls, value: Optional[str], values: ValidationInfo) -> str:
         if isinstance(value, str):
