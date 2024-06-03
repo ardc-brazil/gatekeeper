@@ -105,7 +105,7 @@ class DatasetService:
             tenancies = user.tenancies
 
         if not set(tenancies).issubset(set(user.tenancies)):
-            logging.warn(
+            logging.warning(
                 f"user {user_id} trying to query with unauthorized tenancy: {tenancies}"
             )
             raise UnauthorizedException(f"unauthorized_tenancy: {tenancies}")
