@@ -11,9 +11,9 @@ class TestAuthService(unittest.TestCase):
     def setUp(self):
         self.client_service = Mock()
         self.casbin_enforcer = Mock()
-        self.user_token_secret = "test_secret"
+        self.file_upload_token_secret = "fake_secret_for_jwt_token"
         self.auth_service = AuthService(
-            self.client_service, self.casbin_enforcer, self.user_token_secret
+            self.client_service, self.casbin_enforcer, self.file_upload_token_secret
         )
 
     def test_authorize_client_success(self):

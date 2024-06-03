@@ -6,17 +6,16 @@ from app.service.client import ClientService
 from app.service.secret import check_password
 from casbin import SyncedEnforcer
 
-
 class AuthService:
     def __init__(
         self,
         client_service: ClientService,
         casbin_enforcer: SyncedEnforcer,
-        user_token_secret: str,
+        file_upload_token_secret: str,
     ) -> None:
         self._client_service = client_service
         self._casbin_enforcer = casbin_enforcer
-        self._user_token_secret = user_token_secret
+        self._file_upload_token_secret = file_upload_token_secret
 
     def authorize_client(self, api_key: str, salted_api_secret: str) -> None:
         if api_key is None or salted_api_secret is None:
