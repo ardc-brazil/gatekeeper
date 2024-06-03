@@ -40,7 +40,7 @@ class AuthService:
 
         try:
             return jwt.decode(
-                jwt=user_token, key=self._user_token_secret, algorithms=["HS256"]
+                jwt=user_token, key=self._file_upload_token_secret, algorithms=["HS256"], audience="file_upload"
             )
         except jwt.ExpiredSignatureError:
             logging.warning(f"expired jwt: {user_token}")
