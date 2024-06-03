@@ -5,6 +5,7 @@ from app.model.tus import TusResult
 from app.service.dataset import DatasetService
 import os
 
+logger = logging.getLogger("service:tus")
 
 class TusService:
     def __init__(self, dataset_service: DatasetService):
@@ -40,5 +41,6 @@ class TusService:
             else:
                 return TusResult(200, "")
         except Exception as e:
-            logging.error(e)
+            logger.info(payload)
+            logger.error(e)
             return TusResult(status_code=500, body_msg=str(e), reject_upload=True)
