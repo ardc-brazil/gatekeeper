@@ -195,8 +195,10 @@ async def create_dataset(
     )
     return DatasetCreateResponse(
         id=created.id,
+        name=created.name,
         design_state=created.design_state.name,
         versions=[_adapt_dataset_version(version) for version in created.versions],
+        current_version=_adapt_dataset_version(created.current_version)
     )
 
 

@@ -59,5 +59,9 @@ class DatasetCreateRequest(BaseModel):
 
 class DatasetCreateResponse(BaseModel):
     id: UUID = Field(..., title="Dataset ID")
+    name: str = Field(..., title="Dataset title")
     design_state: str = Field(..., title="Design state")
     versions: list[DatasetVersionResponse] = Field(..., title="Version information")
+    current_version: DatasetVersionResponse = Field(
+        None, title="Current version information"
+    )
