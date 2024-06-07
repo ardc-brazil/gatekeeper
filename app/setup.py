@@ -30,6 +30,7 @@ def setup_logging() -> None:
     modules = [
         {"name": "uvicorn", "level": settings.LOG_LEVEL},
         {"name": "tests", "level": logging.INFO},
+        {"name": "casbin.enforcer", "level": settings.LOG_LEVEL}
     ]
     for module in modules:
         logger = logging.getLogger(module["name"])

@@ -89,7 +89,7 @@ class Container(containers.DeclarativeContainer):
         AuthService,
         client_service=client_service,
         casbin_enforcer=casbin_enforcer,
-        user_token_secret=config.AUTH_USER_TOKEN_SECRET,
+        file_upload_token_secret=config.AUTH_FILE_UPLOAD_TOKEN_SECRET,
     )
 
     dataset_repository = providers.Factory(

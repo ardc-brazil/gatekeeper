@@ -28,6 +28,7 @@ class DatasetService:
         version_repository: DatasetVersionRepository,
         user_service: UserService,
     ):
+        self._logger = logging.getLogger("service:DatasetService")
         self._repository = repository
         self._version_repository = version_repository
         self._user_service = user_service
@@ -105,7 +106,7 @@ class DatasetService:
             tenancies = user.tenancies
 
         if not set(tenancies).issubset(set(user.tenancies)):
-            logging.warn(
+            logging.warning(
                 f"user {user_id} trying to query with unauthorized tenancy: {tenancies}"
             )
             raise UnauthorizedException(f"unauthorized_tenancy: {tenancies}")
@@ -164,7 +165,10 @@ class DatasetService:
         
     def _should_create_new_version(self, dataset_db: DatasetDBModel, dataset_request: Dataset) -> bool:
         
-        is_data_files_changed = dataset_db.data['dataFiles'] != dataset_request.data['dataFiles']
+        self._logger.info(dataset_db.data)
+        self._logger.info(dataset_request.data)
+        
+        is_data_files_changed = 'dataFiles' in dataset_db.data and 'dataFiles' in dataset_request.data and dataset_db.data['dataFiles'] != dataset_request.data['dataFiles']
         
         # check if new version is needed and create it
         draft_version: DatasetVersionDBModel = next(

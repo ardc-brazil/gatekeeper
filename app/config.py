@@ -25,7 +25,7 @@ class Config(BaseSettings):
         default=False, description="Enable database logging"
     )
 
-    AUTH_USER_TOKEN_SECRET: str = Field(..., description="Secret key for user token")
+    AUTH_FILE_UPLOAD_TOKEN_SECRET: str = Field(..., description="Secret key for file upload token")
     CASBIN_MODEL_FILE: str = Field(..., description="Casbin model file")
 
     @field_validator("DATABASE_URL", mode="before")

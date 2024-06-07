@@ -126,6 +126,6 @@ class DatasetRepository:
                     Dataset.versions.any(DatasetVersion.name == query_params.version)
                 )
 
-            query = query.filter(Dataset.tenancy.in_(tenancies))
+            query = query.filter(Dataset.tenancy.in_(tenancies)).order_by(Dataset.created_at.desc())
 
             return query.all()

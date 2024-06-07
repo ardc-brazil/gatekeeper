@@ -7,13 +7,12 @@ from sqlalchemy import create_engine, orm
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger("uvicorn")
-
 Base = declarative_base()
 
 
 class Database:
     def __init__(self, db_url: PostgresDsn, log_enabled: bool) -> None:
+        self._logger = logging.getLogger("database")
         self._engine = create_engine(db_url.unicode_string(), echo=log_enabled)
         self._session_factory = orm.scoped_session(
             orm.sessionmaker(
@@ -32,7 +31,7 @@ class Database:
         try:
             yield session
         except Exception:
-            logger.exception("Session rollback because of exception")
+            self._logger.exception("Session rollback because of exception")
             session.rollback()
             raise
         finally:
