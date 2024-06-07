@@ -28,11 +28,11 @@ On_White=\033[47m       # White
 
 # Docker commands
 docker-build:
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml build
+	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml build
 
 docker-run:
 	@echo "${On_Green}Starting docker containers${Color_Off}"
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml up -d
+	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
 
 docker-run-db:
 	@echo "${On_Green}Starting docker containers${Color_Off}"
@@ -40,11 +40,11 @@ docker-run-db:
 
 docker-stop:
 	@echo "${On_Green}Stoping docker containers${Color_Off}"
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml stop
+	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml stop
 
 docker-down:
 	@echo "${On_Green}Downing docker containers${Color_Off}"
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml -f docker-compose-proxy.yaml down
+	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml down
 
 docker-deployment: docker-build docker-stop docker-down docker-run
 	
