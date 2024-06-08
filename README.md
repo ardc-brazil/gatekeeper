@@ -134,7 +134,7 @@ make ENV_FILE_PATH={env_file_path} db-upgrade
 deactivate
 
 # Refresh and deploy the last docker image.
-make docker-deployment
+make ENV_FILE_PATH={env_file_path} docker-deployment
 ```
 
 ### Accessing the application in prod
