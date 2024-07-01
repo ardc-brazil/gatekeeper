@@ -86,6 +86,7 @@ async def get_datasets(
     date_to: datetime = None,
     full_text: str = None,
     include_disabled: bool = False,
+    design_state: str = None,
     version: str = None,
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
@@ -101,6 +102,7 @@ async def get_datasets(
         full_text=full_text,
         include_disabled=include_disabled,
         version=version,
+        design_state=design_state
     )
     datasets: list[Dataset] = service.search_datasets(
         query=query, user_id=user_id, tenancies=tenancies

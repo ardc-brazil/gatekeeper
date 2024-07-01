@@ -61,3 +61,4 @@ class DatasetQuery:
     full_text: str = None
     include_disabled: bool = False
     version: str = None
+    design_state: str = None
