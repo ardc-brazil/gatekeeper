@@ -45,6 +45,7 @@ docker-stop:
 docker-down:
 	@echo "${On_Green}Downing docker containers${Color_Off}"
 	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml down
+	time docker image prune -a
 
 docker-deployment: docker-build docker-stop docker-down docker-run
 	
