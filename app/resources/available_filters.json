@@ -101,5 +101,22 @@
                 "label": "Exporadic"
             }
         ]
+    },
+    {
+        "id": "design_state",
+        "title": "Status",
+        "selection": "one",
+        "options": [
+            {
+                "id": "design_state_draft",
+                "value": "DRAFT",
+                "label": "Draft"
+            },
+            {
+                "id": "design_state_published",
+                "value": "PUBLISHED",
+                "label": "Published"
+            }
+        ]
     }
 ]

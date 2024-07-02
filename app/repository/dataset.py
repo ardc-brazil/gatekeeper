@@ -111,6 +111,9 @@ class DatasetRepository:
 
             if not query_params.include_disabled:
                 query = query.filter(Dataset.is_enabled == true())
+                
+            if query_params.design_state is not None:
+                query = query.filter(Dataset.design_state == query_params.design_state)
 
             if query_params.full_text is not None:
                 search_term = f"%{query_params.full_text}%"
