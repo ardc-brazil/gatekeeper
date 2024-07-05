@@ -72,6 +72,7 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         current_version=_adapt_dataset_version(dataset.current_version)
         if dataset.current_version is not None
         else None,
+        design_state=dataset.design_state.name
     )
 
 
@@ -195,10 +196,13 @@ async def create_dataset(
         ),
         user_id=user_id,
     )
+    
     return DatasetCreateResponse(
         id=created.id,
         name=created.name,
+        data=created.data,
         design_state=created.design_state.name,
+        tenancy=created.tenancy,
         versions=[_adapt_dataset_version(version) for version in created.versions],
         current_version=_adapt_dataset_version(created.current_version)
     )
