@@ -2,7 +2,7 @@ version: '3'
 
 services:
   gatekeeper-db:
-    image: postgres
+    image: postgres:15.7
     restart: always
     container_name: datamap_gatekeeper_db
     env_file:
@@ -15,7 +15,7 @@ services:
       - gatekeeper_gatekeeper-network
 
   gatekeeper-pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:8.9
     restart: always
     container_name: datamap_pgadmin
     env_file:
