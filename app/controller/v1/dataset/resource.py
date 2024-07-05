@@ -38,6 +38,7 @@ class DatasetGetResponse(BaseModel):
     current_version: Optional[DatasetVersionResponse] = Field(
         None, title="Current version information"
     )
+    design_state: str = Field(..., title="Design state")
 
 
 class PagedDatasetGetResponse(BaseModel):
@@ -60,7 +61,9 @@ class DatasetCreateRequest(BaseModel):
 class DatasetCreateResponse(BaseModel):
     id: UUID = Field(..., title="Dataset ID")
     name: str = Field(..., title="Dataset title")
+    data: dict = Field(..., title="Dataset information in JSON format")
     design_state: str = Field(..., title="Design state")
+    tenancy: str = Field(..., title="Tenancy")
     versions: list[DatasetVersionResponse] = Field(..., title="Version information")
     current_version: DatasetVersionResponse = Field(
         None, title="Current version information"
