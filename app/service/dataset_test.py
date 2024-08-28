@@ -99,7 +99,7 @@ class TestDatasetService(unittest.TestCase):
                 tenancies=tenancies,
             )
     
-    def test_update_dataset_with_no_datafiles_changed(self):
+    def test_update_dataset(self):
         # given
         dataset_id = uuid4()
         user_id = uuid4()
@@ -108,7 +108,7 @@ class TestDatasetService(unittest.TestCase):
         
         dataset_db = Mock(spec=DatasetDBModel)
         dataset_db.name = "dataset.name"
-        dataset_db.data = { "dataFiles": ["a/c/b"]}
+        dataset_db.data = { "category": "AEROSOLS" }
         dataset_db.tenancy = "dataset.tenancy"
         dataset_db.owner_id = "user_id"
         
@@ -122,7 +122,7 @@ class TestDatasetService(unittest.TestCase):
         
         dataset = Mock(spec=Dataset)
         dataset.name = "new_name"
-        dataset.data = { "dataFiles": ["a/c/b"]}
+        dataset.data = { "category": "AEROSOLS" }
         dataset.tenancy = "new_name"
         dataset.owner_id = "new_name"
         
@@ -141,49 +141,6 @@ class TestDatasetService(unittest.TestCase):
         self.assertEqual(dataset_db.versions, [mocked_version])
         self.dataset_repository.upsert.assert_called_once()
     
-    def test_update_dataset_with_datafiles_changed(self):
-        # given
-        dataset_id = uuid4()
-        user_id = uuid4()
-        tenancies = ["tenancy1"]
-        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
-        
-        dataset_db = Mock(spec=DatasetDBModel)
-        dataset_db.name = "dataset.name"
-        dataset_db.data = { "dataFiles": ["a/c/b"]}
-        dataset_db.tenancy = "dataset.tenancy"
-        dataset_db.owner_id = "user_id"
-        
-        mocked_version = Mock(spec=DatasetVersionDBModel)
-        mocked_version.name = "1"
-        mocked_version.files = [Mock(spec=DataFileDBModel)]
-        mocked_version.is_enabled = True
-        mocked_version.design_state = DesignState.PUBLISHED
-        
-        dataset_db.versions = [mocked_version]
-        
-        dataset = Mock(spec=Dataset)
-        dataset.name = "new_name"
-        dataset.data = { "dataFiles": ["d/e/f"]}
-        dataset.tenancy = "new_name"
-        dataset.owner_id = "new_name"
-        
-        self.dataset_repository.fetch.return_value = dataset_db
-
-        # when
-        self.dataset_service.update_dataset(
-            dataset_id=dataset_id,
-            dataset_request=dataset,
-            user_id=user_id,
-            tenancies=tenancies,
-        )
-        
-        # then
-        self.assertEqual(len(dataset_db.versions), 2)
-        self.assertEqual(dataset_db.versions[0], mocked_version)
-        self.assertEqual(dataset_db.versions[1].name, "2")
-        self.assertEqual(dataset_db.versions[1].design_state, DesignState.DRAFT)
-        self.dataset_repository.upsert.assert_called_once()
 
     def test_create_dataset_success(self):
         dataset = Mock(spec=Dataset)
@@ -314,57 +271,39 @@ class TestDatasetService(unittest.TestCase):
         class TestCase:
             name: str
             given_version: DatasetVersionDBModel
-            given_new_data_files: bool
             expected: bool
             
         testcases = [
             TestCase(
                 name='version_published_enabled', 
                 given_version=DatasetVersionDBModel(name = "1",design_state = DesignState.PUBLISHED,is_enabled = True),
-                given_new_data_files=True,
-                expected=True
+                expected=False
             ),
             TestCase(
                 name='version_published_disabled', 
                 given_version=DatasetVersionDBModel(name = "1",design_state = DesignState.PUBLISHED,is_enabled = False), 
-                given_new_data_files=True,
                 expected=True
             ),
             TestCase(
                 name='version_draft_enabled', 
                 given_version=DatasetVersionDBModel(name = "1",design_state = DesignState.DRAFT,is_enabled = True), 
-                given_new_data_files=True,
                 expected=False
             ),
             TestCase(
                 name='version_draft_disabled', 
                 given_version=DatasetVersionDBModel(name = "1",design_state = DesignState.DRAFT,is_enabled = False), 
-                given_new_data_files=True,
-                expected=True
-            ),
-            TestCase(
-                name='version_draft_enabled_with_not_changes_in_data_files', 
-                given_version=DatasetVersionDBModel(name = "1",design_state = DesignState.DRAFT,is_enabled = True), 
-                given_new_data_files=False,
-                expected=False
-            ),
-            TestCase(
-                name='version_published_disabled_with_not_changes_in_data_files', 
-                given_version=DatasetVersionDBModel(name = "1",design_state = DesignState.PUBLISHED,is_enabled = False), 
-                given_new_data_files=False,
                 expected=True
             ),
         ]
     
+        # Add a new line to improve the test output
         print()
         
         for case in testcases:            
             # given
-            default_data_file_path = "d/e/f"
-            
             dataset_db = DatasetDBModel(
                 name = "dataset.name",
-                data = { "dataFiles": ['a/b/c' if case.given_new_data_files else default_data_file_path]},
+                data = { "category": "AEROSOLS" },
                 tenancy = "dataset.tenancy",
                 owner_id = "user_id",
                 versions = [case.given_version]
@@ -372,7 +311,7 @@ class TestDatasetService(unittest.TestCase):
             
             dataset_request = Dataset(
                 name = "name",
-                data = { "dataFiles": [default_data_file_path]},
+                data = { "category": "AEROSOLS" },            
             )
             
             # when

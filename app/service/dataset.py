@@ -164,13 +164,7 @@ class DatasetService:
         self._repository.upsert(dataset=dataset_db)
         
     def _should_create_new_version(self, dataset_db: DatasetDBModel, dataset_request: Dataset) -> bool:
-        
-        self._logger.info(dataset_db.data)
-        self._logger.info(dataset_request.data)
-        
-        is_data_files_changed = 'dataFiles' in dataset_db.data and 'dataFiles' in dataset_request.data and dataset_db.data['dataFiles'] != dataset_request.data['dataFiles']
-        
-        # check if new version is needed and create it
+        # get draft dataset version
         draft_version: DatasetVersionDBModel = next(
             (
                 v
@@ -180,7 +174,20 @@ class DatasetService:
             None,
         )
         
-        return (draft_version is None and is_data_files_changed) or draft_version is None
+        # get published dataset version
+        publish_version: DatasetVersionDBModel = next(
+            (
+                v
+                for v in dataset_db.versions
+                if v.design_state == DesignState.PUBLISHED and v.is_enabled
+            ),
+            None,
+        )
+        
+        # check if valid datasets versions exists
+        no_version_enabled = draft_version is None and publish_version is None
+        
+        return no_version_enabled
     
     def _create_new_version(self, dataset_db: DatasetDBModel, user_id: UUID) -> DatasetVersionDBModel:
         new_version_name = (

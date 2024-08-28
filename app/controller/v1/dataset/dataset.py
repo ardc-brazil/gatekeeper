@@ -275,3 +275,9 @@ async def enable_dataset_version(
         tenancies=tenancies,
     )
     return {}
+
+
+# TODO: We need to create new endpoints to manipulate dataset versions for a dataset
+# POST /datasets/:dataset_id/versions/
+#   Creates a new dataset version for a dataset.
+#   This must disable all old versions, and create a new one with new files with the PUBLISHED state.
