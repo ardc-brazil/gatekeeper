@@ -51,6 +51,8 @@ docker-prune:
 	time docker image prune -a -f
 
 docker-deployment: docker-build docker-stop docker-down docker-run docker-prune
+
+docker-deployment-no-prune: docker-build docker-stop docker-down docker-run
 	
 # Python commands
 python-env:
