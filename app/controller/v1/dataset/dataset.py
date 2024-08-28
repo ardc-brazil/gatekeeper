@@ -281,3 +281,8 @@ async def enable_dataset_version(
 # POST /datasets/:dataset_id/versions/
 #   Creates a new dataset version for a dataset.
 #   This must disable all old versions, and create a new one with new files with the PUBLISHED state.
+# 
+# POST /datasets/:dataset_id/versions/ {old_dataset_version_id: ''}
+#   Restore an old dataset vesion.
+#   Dataset versions are always append only. So, when we need to restore an old version, a new version must be
+#   created based on an old dataset version.
