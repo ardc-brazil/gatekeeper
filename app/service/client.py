@@ -36,12 +36,13 @@ class ClientService:
         return [self.__adapt_client(client=client) for client in res]
 
     def create(self, name: str, secret: str) -> UUID:
-        client = Client(
+        model = DBModel(
             name=name,
             secret=hash_password(password=secret),
             is_enabled=True,
         )
-        created_key = self._repository.upsert(client=client).key
+        
+        created_key = self._repository.upsert(client=model).key
         self.fetch.cache_clear()
         return created_key
 
