@@ -3,11 +3,13 @@ from dependency_injector import containers, providers
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
 
+from app.gateway.doi.doi import DOIGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
+from app.service.doi import DOIService
 from app.service.tus import TusService
 from app.service.user import UserService
 
@@ -90,6 +92,19 @@ class Container(containers.DeclarativeContainer):
         client_service=client_service,
         casbin_enforcer=casbin_enforcer,
         file_upload_token_secret=config.AUTH_FILE_UPLOAD_TOKEN_SECRET,
+    )
+
+    doi_gateway = providers.Factory(
+        DOIGateway,
+        base_url=config.DOI_BASE_URL,
+        repository=config.DOI_PREFIX,
+        login=config.DOI_LOGIN,
+        password=config.DOI_PASSWORD,
+    )
+
+    doi_service = providers.Factory(
+        DOIService,
+        doi_gateway=doi_gateway,
     )
 
     dataset_repository = providers.Factory(
