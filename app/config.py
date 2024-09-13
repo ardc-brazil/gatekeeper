@@ -28,6 +28,11 @@ class Config(BaseSettings):
     AUTH_FILE_UPLOAD_TOKEN_SECRET: str = Field(..., description="Secret key for file upload token")
     CASBIN_MODEL_FILE: str = Field(..., description="Casbin model file")
 
+    DOI_BASE_URL: str = Field(..., description="Base URL for DOI service")
+    DOI_PREFIX: str = Field(..., description="Prefix/Repository for DOI service")
+    DOI_LOGIN: str = Field(..., description="Login for DOI service")
+    DOI_PASSWORD: str = Field(..., description="Password for DOI service")
+
     @field_validator("DATABASE_URL", mode="before")
     def build_database_url(cls, value: Optional[str], values: ValidationInfo) -> str:
         if isinstance(value, str):
