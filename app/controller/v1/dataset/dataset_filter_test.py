@@ -1,13 +1,15 @@
 import unittest
 
+from app.controller.interceptor.authentication import authenticate
+from app.controller.interceptor.authorization import authorize
 from app.main import fastAPIApp
 from fastapi.testclient import TestClient
 
 
 class TestDatasetFilterController(unittest.TestCase):
     def setUp(self):
-        # TODO: how to mock the middlewares/interceptors?
-        # fastAPIApp.dependency_overrides[authorize] = mock_authorize
+        fastAPIApp.dependency_overrides[authenticate] = lambda: None
+        fastAPIApp.dependency_overrides[authorize] = lambda: None
         self.client = TestClient(fastAPIApp)
 
     def test_get_datasets_filters(self):
