@@ -98,8 +98,8 @@ coverage html
 To create new migrations, follow the steps below.
 
 1. Map your new table in a new file in `models/{your_new_model}.py`
-2. Import your model in `app/__init__.py`, before the migrate config
-3. Run `make ENV_FILE_PATH={env_file_path} db-create-migration "{COMMENT}"`
+2. Import your new database model in `migrations/env.py` so alembic maps the file.
+3. Run `make ENV_FILE_PATH={ENV_FILE_PATH} MESSAGE="{MESSAGE}" db-create-migration"`
 4. Check the generated file under `migrations/versions/<generated_file>.py` and see if any fix is needed.
 5. Run `make ENV_FILE_PATH={env_file_path} db-upgrade`
 6. Check the database, if there's any problem, run `make ENV_FILE_PATH={env_file_path} db-downgrade`
