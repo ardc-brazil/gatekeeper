@@ -27,6 +27,7 @@ from app.model.db import client
 from app.model.db import dataset
 from app.model.db import tenancy
 from app.model.db import user
+from app.model.db import doi
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
