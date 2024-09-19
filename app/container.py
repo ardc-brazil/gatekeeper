@@ -6,6 +6,7 @@ from casbin import SyncedEnforcer
 from app.gateway.doi.doi import DOIGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
+from app.repository.doi import DOIRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
@@ -100,6 +101,11 @@ class Container(containers.DeclarativeContainer):
         repository=config.DOI_PREFIX,
         login=config.DOI_LOGIN,
         password=config.DOI_PASSWORD,
+    )
+
+    doi_repository = providers.Factory(
+        DOIRepository,
+        session_factory=db.provided.session,
     )
 
     doi_service = providers.Factory(
