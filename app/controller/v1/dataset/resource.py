@@ -88,7 +88,7 @@ class DOIResponse(BaseModel):
     state: DOIState = Field(..., title="State")
 
 class DOIChangeStateResponse(BaseModel):
-    state: DOIState = Field(..., title="State")
+    new_state: DOIState = Field(None, title="State")
     errors: list[DOIErrorResponse] = Field(None, title="List of errors")
 
 class DOICreateResponse(BaseModel):

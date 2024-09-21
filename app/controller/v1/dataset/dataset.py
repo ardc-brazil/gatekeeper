@@ -30,7 +30,7 @@ from app.model.dataset import (
     DatasetVersion,
     DesignState,
 )
-from app.model.doi import DOI, State as DOIState
+from app.model.doi import State as DOIState
 from app.service.dataset import DatasetService
 
 import random
@@ -300,8 +300,8 @@ async def change_doi_state(
     if random.randint(0, 1) == 0:
         return DOIChangeStateResponse(new_state=DOIState.REGISTERED)
     else:
-        errors = DOIErrorResponse([DOIErrorResponse(code="missing_field", field="title")])
-        return DOIChangeStateResponse(new_state=DOIState.DRAFT, errors=errors)
+        errors = [DOIErrorResponse(code="missing_field", field="title")]
+        return DOIChangeStateResponse(errors=errors)
 
 # POST /datasets/:dataset_id/versions/:version/doi
 @router.post("/{dataset_id}/versions/{version_name}/doi")

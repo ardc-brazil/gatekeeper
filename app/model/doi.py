@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import enum
 from uuid import UUID
@@ -50,8 +50,8 @@ class Creator:
     name_type: str = None
     given_name: str = None
     family_name: str = None
-    affiliation: list[Affiliation] = []
-    name_identifier: list[NameIdentifier] = []
+    affiliation: list[Affiliation] = field(default_factory=lambda: [])
+    name_identifier: list[NameIdentifier] = field(default_factory=lambda: [])
 
 @dataclass
 class Identifier:
