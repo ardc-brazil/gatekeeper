@@ -94,4 +94,3 @@ class DOIChangeStateResponse(BaseModel):
 class DOICreateResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
     state: DOIState = Field(None, title="State")
-    
