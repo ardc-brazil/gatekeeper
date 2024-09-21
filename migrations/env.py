@@ -21,12 +21,12 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from app.database import Base
-from app.model.db import casbin_rule
-from app.model.db import client
-from app.model.db import dataset
-from app.model.db import tenancy
-from app.model.db import user
+from app.database import Base # noqa: E402
+from app.model.db import casbin_rule # noqa: E402, F401
+from app.model.db import client # noqa: E402, F401
+from app.model.db import dataset # noqa: E402, F401
+from app.model.db import tenancy # noqa: E402, F401
+from app.model.db import user # noqa: E402, F401
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

@@ -9,6 +9,12 @@ from app.controller.interceptor.authorization import authorize
 from app.controller.interceptor.tenancy_parser import parse_tenancy_header
 from app.controller.interceptor.user_parser import parse_user_header
 from app.controller.v1.dataset.resource import (
+    DOIChangeStateRequest,
+    DOIChangeStateResponse,
+    DOICreateRequest,
+    DOICreateResponse,
+    DOIResponse,
+    DOIErrorResponse, 
     DataFileResponse,
     DatasetCreateRequest,
     DatasetCreateResponse,
@@ -24,7 +30,10 @@ from app.model.dataset import (
     DatasetVersion,
     DesignState,
 )
+from app.model.doi import State as DOIState
 from app.service.dataset import DatasetService
+
+import random
 
 router = APIRouter(
     prefix="/datasets",
@@ -276,6 +285,65 @@ async def enable_dataset_version(
     )
     return {}
 
+# PUT /datasets/:dataset_id/versions/:version/doi
+@router.put("/{dataset_id}/versions/{version_name}/doi")
+@inject
+async def change_doi_state(
+    dataset_id: str,
+    version_name: str,
+    change_state_request: DOIChangeStateRequest,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> DOIChangeStateResponse:
+    # random number to return mocked change state or error
+    if random.randint(0, 1) == 0:
+        return DOIChangeStateResponse(new_state=DOIState.REGISTERED)
+    else:
+        errors = [DOIErrorResponse(code="missing_field", field="title")]
+        return DOIChangeStateResponse(errors=errors)
+
+# POST /datasets/:dataset_id/versions/:version/doi
+@router.post("/{dataset_id}/versions/{version_name}/doi")
+@inject
+async def create_doi(
+    dataset_id: str,
+    version_name: str,
+    create_doi_request: DOICreateRequest,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> DOICreateResponse:
+    if random.randint(0, 1) == 0:
+        # manual doi
+        return DOICreateResponse(identifier="10.1234/abcd")
+    else:
+        # auto generated doi
+        return DOICreateResponse(identifier="10.1234/abcd", state=DOIState.DRAFT)
+
+# GET /datasets/:dataset_id/versions/:version/doi
+@router.get("/{dataset_id}/versions/{version_name}/doi")
+@inject
+async def get_doi(
+    dataset_id: str,
+    version_name: str,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> DOIResponse:
+    return DOIResponse(identifier="10.1234/abcd", state=DOIState.DRAFT)
+
+# DELETE /datasets/:dataset_id/versions/:version/doi
+@router.delete("/{dataset_id}/versions/{version_name}/doi", status_code=204)
+@inject
+async def delete_doi(
+    dataset_id: str,
+    version_name: str,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> None:
+    pass
 
 # TODO: We need to create new endpoints to manipulate dataset versions for a dataset
 # POST /datasets/:dataset_id/versions/
