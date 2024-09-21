@@ -30,7 +30,7 @@ from app.model.dataset import (
     DatasetVersion,
     DesignState,
 )
-from app.model.doi import DOI, State as DOIState
+from app.model.doi import State as DOIState
 from app.service.dataset import DatasetService
 
 import random
