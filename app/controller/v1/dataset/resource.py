@@ -3,6 +3,8 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
+from app.model.doi import DOI, Mode as DOIMode, State as DOIState
+
 
 class DataFileResponse(BaseModel):
     id: UUID = Field(..., title="File ID")
@@ -23,6 +25,7 @@ class DatasetVersionResponse(BaseModel):
     design_state: str = Field(..., title="Design state")
     is_enabled: bool = Field(..., title="Is enabled")
     files: list[DataFileResponse] = Field([], title="List of data files")
+    doi: Optional[DOI] = Field(None, title="DOI")
 
 
 class DatasetGetResponse(BaseModel):
@@ -68,3 +71,27 @@ class DatasetCreateResponse(BaseModel):
     current_version: DatasetVersionResponse = Field(
         None, title="Current version information"
     )
+
+class DOIErrorResponse(BaseModel):
+    code: str = Field(..., title="Error code")
+    field: Optional[str] = Field(None, title="Field")
+
+class DOICreateRequest(BaseModel):
+    identifier: str = Field(..., title="DOI identifier")
+    mode: DOIMode = Field(..., title="Mode")
+
+class DOIChangeStateRequest(BaseModel):
+    state: DOIState = Field(..., title="State")
+
+class DOIResponse(BaseModel):
+    identifier: str = Field(..., title="DOI identifier")
+    state: DOIState = Field(..., title="State")
+
+class DOIChangeStateResponse(BaseModel):
+    new_state: DOIState = Field(None, title="State")
+    errors: list[DOIErrorResponse] = Field(None, title="List of errors")
+
+class DOICreateResponse(BaseModel):
+    identifier: str = Field(..., title="DOI identifier")
+    state: DOIState = Field(None, title="State")
+    
