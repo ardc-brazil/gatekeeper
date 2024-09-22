@@ -77,7 +77,7 @@ class DOIErrorResponse(BaseModel):
     field: Optional[str] = Field(None, title="Field")
 
 class DOICreateRequest(BaseModel):
-    identifier: str = Field(..., title="DOI identifier")
+    identifier: str = Field(None, title="DOI identifier")
     mode: DOIMode = Field(..., title="Mode")
 
 class DOIChangeStateRequest(BaseModel):
@@ -94,3 +94,4 @@ class DOIChangeStateResponse(BaseModel):
 class DOICreateResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
     state: DOIState = Field(None, title="State")
+    mode: str = Field(None, title="Registration mode. AUTO or MANUAL")
