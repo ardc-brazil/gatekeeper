@@ -33,7 +33,7 @@ from app.model.dataset import (
     DatasetVersion,
     DesignState,
 )
-from app.model.doi import State as DOIState
+from app.model.doi import Mode as DOIMode, State as DOIState
 from app.service.dataset import DatasetService
 
 import random
@@ -327,7 +327,7 @@ async def create_doi(
         # auto generated doi
         return DOICreateResponse(
             identifier="10.1234/abcd",
-            mode="AUTO",
+            mode=DOIMode.AUTO,
             state=DOIState.DRAFT,
         )
 
