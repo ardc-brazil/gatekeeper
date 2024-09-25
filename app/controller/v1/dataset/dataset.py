@@ -1,6 +1,10 @@
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
+from pydantic import Field
+import app
 from app.container import Container
 from dependency_injector.wiring import inject, Provide
 
@@ -24,7 +28,7 @@ from app.controller.v1.dataset.resource import (
     PagedDatasetGetResponse,
 )
 
-from app.model.doi import Mode as DOIMode
+from app.exception.client_error import ClientErrorException, ErrorDetails, ClientErrors
 
 from app.model.dataset import (
     DataFile,
@@ -34,7 +38,7 @@ from app.model.dataset import (
     DesignState,
 )
 from app.model.doi import Mode as DOIMode, State as DOIState
-from app.service.dataset import DatasetService
+from app.service.dataset import DatasetService        
 
 import random
 
@@ -317,19 +321,29 @@ async def create_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOICreateResponse:
-    if create_doi_request.mode == DOIMode.MANUAL:
-        # manual doi
-        return DOICreateResponse(
-            identifier=create_doi_request.identifier, 
-            mode=create_doi_request.mode
+    # if create_doi_request.mode == DOIMode.MANUAL:
+    #     # manual doi
+    #     return DOICreateResponse(
+    #         identifier=create_doi_request.identifier, 
+    #         mode=create_doi_request.mode
+    #     )
+    # else:
+    #     # auto generated doi
+    #     return DOICreateResponse(
+    #         identifier="10.1234/abcd",
+    #         mode=DOIMode.AUTO,
+    #         state=DOIState.DRAFT,
+    #     )
+    
+    raise ClientErrorException(
+        code=400,
+        errors=ClientErrors(
+            errors=[
+                ErrorDetails(code="missing_field", field="title"),
+                ErrorDetails(code="missing_field", field="description"),
+            ]
         )
-    else:
-        # auto generated doi
-        return DOICreateResponse(
-            identifier="10.1234/abcd",
-            mode=DOIMode.AUTO,
-            state=DOIState.DRAFT,
-        )
+    )
 
 # GET /datasets/:dataset_id/versions/:version/doi
 @router.get("/{dataset_id}/versions/{version_name}/doi")

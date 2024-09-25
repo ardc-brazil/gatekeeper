@@ -95,3 +95,4 @@ class DOICreateResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
     state: DOIState = Field(None, title="State")
     mode: str = Field(None, title="Registration mode. AUTO or MANUAL")
+    errors: list[DOIErrorResponse] = Field(None, title="List of errors")
