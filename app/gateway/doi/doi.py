@@ -1,12 +1,12 @@
 import dataclasses
 import requests
 
+from app.exception.not_found import NotFoundException
 from app.gateway.doi.resource import DOIPayload
 
 class DOIGateway:
-    def __init__(self, base_url: str, repository: str, login: str, password: str):
+    def __init__(self, base_url: str, login: str, password: str):
         self._base_url = base_url
-        self._repository = repository
         self._login = login
         self._password = password
         self._base_headers = {
@@ -33,6 +33,9 @@ class DOIGateway:
             headers=self._base_headers, 
             auth=(self._login, self._password))
         
+        if response.status_code == 404:
+            raise NotFoundException(f"not_found: {identifier}")
+
         if not response.status_code == 200:
             raise Exception(f"Error getting DOI: {response.text}")
         

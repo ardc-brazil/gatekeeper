@@ -25,8 +25,8 @@ class Attributes:
     titles: List[Title]
     publisher: str
     publicationYear: int
-    types: Types
     url: str
+    types: Types = Types()
     # If None will create as "DRAFT"
     event: str = None
 

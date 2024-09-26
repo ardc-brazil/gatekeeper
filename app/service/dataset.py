@@ -4,8 +4,10 @@ import json
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
+from app.model.doi import DOI, Mode as DOIMode, State as DOIState, Publisher as DOIPublisher, Title as DOITitle, Identifier as DOIIdentifier
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
+from app.service.doi import DOIService
 from app.service.user import UserService
 from app.model.dataset import (
     Dataset,
@@ -19,6 +21,7 @@ from app.model.db.dataset import (
     DatasetVersion as DatasetVersionDBModel,
     DataFile as DataFileDBModel,
 )
+from app.model.db.doi import DOI as DOIDBModel
 
 
 class DatasetService:
@@ -27,11 +30,15 @@ class DatasetService:
         repository: DatasetRepository,
         version_repository: DatasetVersionRepository,
         user_service: UserService,
+        doi_service: DOIService,
+        doi_repository: str,
     ):
         self._logger = logging.getLogger("service:DatasetService")
         self._repository = repository
         self._version_repository = version_repository
         self._user_service = user_service
+        self._doi_service = doi_service
+        self._doi_repository = doi_repository
 
     def _adapt_file(self, file: DataFileDBModel) -> DataFile:
         return DataFile(
@@ -105,6 +112,7 @@ class DatasetService:
         if not tenancies:
             tenancies = user.tenancies
 
+        # TODO check for enabled tenancy, if is not enabled, remove from list
         if not set(tenancies).issubset(set(user.tenancies)):
             logging.warning(
                 f"user {user_id} trying to query with unauthorized tenancy: {tenancies}"
@@ -374,3 +382,52 @@ class DatasetService:
         if dataset.design_state == DesignState.DRAFT:
             dataset.design_state = DesignState.PUBLISHED
             self._repository.upsert(dataset=dataset)
+
+    def create_doi(
+            self, 
+            dataset_id: UUID, 
+            version_name: str, 
+            doi: DOI,
+            user_id: UUID, 
+            tenancies: list[str] = []
+    ) -> DOI:
+        dataset: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id,
+            tenancies=self._determine_tenancies(user_id, tenancies),
+        )
+
+        if dataset is None:
+            raise NotFoundException(f"not_found: {dataset_id}")
+
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
+
+        if version is None:
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+
+        doi.title = DOITitle(title=dataset.name)
+        doi.creators = [dataset.data.get("author")]
+        doi.publication_year = dataset.created_at.year
+        doi.publisher = DOIPublisher(publisher=dataset.data.get("institution"))
+        doi.url = f"https://datamap.pcs.usp.br/doi/dataset/{dataset.id}/version/{version.name}"
+        doi.state = DOIState.DRAFT
+
+        created_doi: DOI = self._doi_service.create(doi)
+
+        version.doi = DOIDBModel(
+            identifier=created_doi.identifier.identifier,
+            mode=created_doi.mode,
+            prefix=created_doi.identifier.split("/")[0],
+            suffix=created_doi.identifier.split("/")[1],
+            url=created_doi.url,
+            state=created_doi.state,
+            created_by=user_id,
+            version_id=version.id,
+            doi=created_doi.provider_response,
+        )
+        self._version_repository.upsert(dataset_version=version)
+
+        return created_doi

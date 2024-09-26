@@ -92,5 +92,6 @@ class DOIChangeStateResponse(BaseModel):
     errors: list[DOIErrorResponse] = Field(None, title="List of errors")
 
 class DOICreateResponse(BaseModel):
-    identifier: str = Field(..., title="DOI identifier")
+    identifier: str = Field(None, title="DOI identifier")
     state: DOIState = Field(None, title="State")
+    errors: list[DOIErrorResponse] = Field(None, title="List of errors")

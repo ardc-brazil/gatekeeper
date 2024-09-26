@@ -23,6 +23,7 @@ from app.controller.v1.dataset.resource import (
     DatasetVersionResponse,
     PagedDatasetGetResponse,
 )
+from app.exception.illegal_state import IllegalStateException
 from app.model.dataset import (
     DataFile,
     Dataset,
@@ -30,7 +31,7 @@ from app.model.dataset import (
     DatasetVersion,
     DesignState,
 )
-from app.model.doi import State as DOIState
+from app.model.doi import DOI, State as DOIState
 from app.service.dataset import DatasetService
 
 import random
@@ -296,7 +297,7 @@ async def change_doi_state(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOIChangeStateResponse:
-    # random number to return mocked change state or error
+    #random number to return mocked change state or error
     if random.randint(0, 1) == 0:
         return DOIChangeStateResponse(new_state=DOIState.REGISTERED)
     else:
@@ -314,12 +315,18 @@ async def create_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOICreateResponse:
-    if random.randint(0, 1) == 0:
-        # manual doi
-        return DOICreateResponse(identifier="10.1234/abcd")
-    else:
-        # auto generated doi
-        return DOICreateResponse(identifier="10.1234/abcd", state=DOIState.DRAFT)
+    try:
+        res = service.create_doi(
+            dataset_id=dataset_id, 
+            version_name=version_name,
+            doi=DOI(identifier=create_doi_request.identifier, mode=create_doi_request.mode),
+            user_id=user_id,
+            tenancies=tenancies)
+        
+        return DOICreateResponse(identifier=res.identifier, state=res.state)
+    except IllegalStateException as e:
+        errors = [DOIErrorResponse(code="missing_field", field=field) for field in e.args["missing_fields"]]
+        return DOICreateResponse(errors=errors)
 
 # GET /datasets/:dataset_id/versions/:version/doi
 @router.get("/{dataset_id}/versions/{version_name}/doi")

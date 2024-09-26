@@ -3,6 +3,10 @@ from datetime import datetime
 import enum
 from uuid import UUID
 
+class Event(enum.Enum):
+    PUBLISH = "publish"
+    REGISTER = "register"
+    HIDE = "hide"
 
 class State(enum.Enum):
     DRAFT = "draft"
@@ -50,27 +54,33 @@ class Creator:
     name_type: str = None
     given_name: str = None
     family_name: str = None
-    affiliation: list[Affiliation] = field(default_factory=lambda: [])
-    name_identifier: list[NameIdentifier] = field(default_factory=lambda: [])
+    affiliation: list[Affiliation] = field(default_factory=list)
+    name_identifier: list[NameIdentifier] = field(default_factory=list)
 
 @dataclass
 class Identifier:
-    identifier: str
+    identifier: str = None
     type: str = "DOI"
 
 @dataclass
+class Error:
+    code: str
+    field: str = None
+
+@dataclass
 class DOI:
-    identifier: Identifier
-    title: Title
-    other_titles: list[Title]
-    creators: list[Creator]
-    publication_year: int
-    publisher: Publisher
-    resource: str
-    mode: Mode
     state: State = State.DRAFT
+    mode: Mode
+    identifier: str = None
+    title: Title = None
+    other_titles: list[Title] = field(default_factory=list)
+    creators: list[Creator] = field(default_factory=list)
+    publication_year: int = None
+    publisher: Publisher = None
+    url: str = None
     resource_type: str = "Dataset"
     created_at: datetime = None
     updated_at: datetime = None
     created_by: UUID = None
     id: UUID = None
+    provider_response: dict = None
