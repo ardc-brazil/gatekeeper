@@ -78,20 +78,20 @@ class DOIErrorResponse(BaseModel):
 
 class DOICreateRequest(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
-    mode: DOIMode = Field(..., title="Mode")
+    mode: str = Field(..., title="Mode")
 
 class DOIChangeStateRequest(BaseModel):
-    state: DOIState = Field(..., title="State")
+    state: str = Field(..., title="State")
 
 class DOIResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
-    state: DOIState = Field(..., title="State")
+    state: str = Field(..., title="State")
+    mode: str = Field(..., title="Registration mode. AUTO or MANUAL")
 
 class DOIChangeStateResponse(BaseModel):
-    new_state: DOIState = Field(None, title="State")
-    errors: list[DOIErrorResponse] = Field(None, title="List of errors")
+    new_state: str = Field(None, title="State")
 
 class DOICreateResponse(BaseModel):
-    identifier: str = Field(None, title="DOI identifier")
-    state: DOIState = Field(None, title="State")
-    errors: list[DOIErrorResponse] = Field(None, title="List of errors")
+    identifier: str = Field(..., title="DOI identifier")
+    state: str = Field(None, title="State")
+    mode: str = Field(None, title="Registration mode. AUTO or MANUAL")
