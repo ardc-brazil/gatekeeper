@@ -98,7 +98,6 @@ class Container(containers.DeclarativeContainer):
     doi_gateway = providers.Factory(
         DOIGateway,
         base_url=config.DOI_BASE_URL,
-        repository=config.DOI_PREFIX,
         login=config.DOI_LOGIN,
         password=config.DOI_PASSWORD,
     )
@@ -128,6 +127,7 @@ class Container(containers.DeclarativeContainer):
         repository=dataset_repository,
         version_repository=dataset_version_repository,
         user_service=user_service,
+        doi_service=doi_service,
     )
 
     tus_service = providers.Factory(

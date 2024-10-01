@@ -26,8 +26,8 @@ class DOIGateway:
 
         return response.json()
 
-    def get(self, identifier: str) -> dict:
-        url = f"{self._base_url}/dois/{self._repository}/{identifier}"
+    def get(self, repository: str, identifier: str) -> dict:
+        url = f"{self._base_url}/dois/{repository}/{identifier}"
         response = requests.get(
             url, headers=self._base_headers, auth=(self._login, self._password)
         )
@@ -41,7 +41,7 @@ class DOIGateway:
         return response.json()
 
     def update(self, doi: DOIPayload, identifier: str) -> dict:
-        url = f"{self._base_url}/dois/{self._repository}/{identifier}"
+        url = f"{self._base_url}/dois/{doi.data.attributes.prefix}/{identifier}"
         response = requests.put(
             url,
             headers=self._base_headers,
@@ -54,8 +54,8 @@ class DOIGateway:
 
         return response.json()
 
-    def delete(self, identifier: str) -> dict:
-        url = f"{self._base_url}/dois/{self._repository}/{identifier}"
+    def delete(self, repository: str,  identifier: str) -> dict:
+        url = f"{self._base_url}/dois/{repository}/{identifier}"
         response = requests.delete(
             url, headers=self._base_headers, auth=(self._login, self._password)
         )

@@ -7,6 +7,7 @@ from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
+from app.service.doi import DOIService
 from app.service.user import UserService
 from app.model.dataset import (
     Dataset,
@@ -28,10 +29,12 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository = Mock(spec=DatasetRepository)
         self.dataset_version_repository = Mock(spec=DatasetVersionRepository)
         self.user_service = Mock(spec=UserService)
+        self.doi_service = Mock(spec=DOIService)
         self.dataset_service = DatasetService(
             repository=self.dataset_repository,
             version_repository=self.dataset_version_repository,
             user_service=self.user_service,
+            doi_service=self.doi_service,
         )
 
     def mock_user(self, tenancies):

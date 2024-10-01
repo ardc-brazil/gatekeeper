@@ -40,14 +40,12 @@ class DatasetService:
         version_repository: DatasetVersionRepository,
         user_service: UserService,
         doi_service: DOIService,
-        doi_repository: str,
     ):
         self._logger = logging.getLogger("service:DatasetService")
         self._repository = repository
         self._version_repository = version_repository
         self._user_service = user_service
         self._doi_service = doi_service
-        self._doi_repository = doi_repository
 
     def _adapt_file(self, file: DataFileDBModel) -> DataFile:
         return DataFile(
