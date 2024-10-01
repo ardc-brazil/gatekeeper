@@ -4,7 +4,7 @@ import json
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
-from app.model.doi import DOI, Mode as DOIMode, State as DOIState, Publisher as DOIPublisher, Title as DOITitle, Identifier as DOIIdentifier
+from app.model.doi import DOI, Mode as DOIMode, State as DOIState, Publisher as DOIPublisher, Title as DOITitle, Identifier as DOIIdentifier, Creator as DOICreator
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.doi import DOIService
@@ -22,7 +22,7 @@ from app.model.db.dataset import (
     DataFile as DataFileDBModel,
 )
 from app.model.db.doi import DOI as DOIDBModel
-
+from app.adapter.doi import database_to_model
 
 class DatasetService:
     def __init__(
@@ -409,7 +409,7 @@ class DatasetService:
             )
 
         doi.title = DOITitle(title=dataset.name)
-        doi.creators = [dataset.data.get("author")]
+        doi.creators = [DOICreator(name=author.name) for author in dataset.data.get("authors")]
         doi.publication_year = dataset.created_at.year
         doi.publisher = DOIPublisher(publisher=dataset.data.get("institution"))
         doi.url = f"https://datamap.pcs.usp.br/doi/dataset/{dataset.id}/version/{version.name}"
@@ -431,3 +431,91 @@ class DatasetService:
         self._version_repository.upsert(dataset_version=version)
 
         return created_doi
+
+    def change_doi_state(
+            self,
+            dataset_id: UUID,
+            version_name: str,
+            new_state: DOIState,
+            user_id: UUID,
+            tenancies: list[str] = [],
+    ):
+        dataset: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id,
+            tenancies=self._determine_tenancies(user_id, tenancies),
+        )
+
+        if dataset is None:
+            raise NotFoundException(f"not_found: {dataset_id}")
+
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
+
+        if version is None:
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+
+        if version.doi is None:
+            raise NotFoundException(f"not_found: DOI for version {version_name}")
+        
+        self._doi_service.update(
+            doi=DOI(
+                state=new_state,
+                mode=DOIMode.AUTO,
+                identifier=DOIIdentifier(identifier=version.doi.identifier),
+            ),
+            identifier=version.doi.identifier,
+        )
+
+        version.doi.state = new_state
+        self._version_repository.upsert(dataset_version=version)
+
+    def get_doi(self, dataset_id: UUID, version_name: str, user_id: UUID, tenancies: list[str] = []):
+        dataset: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id,
+            tenancies=self._determine_tenancies(user_id, tenancies),
+        )
+
+        if dataset is None:
+            raise NotFoundException(f"not_found: {dataset_id}")
+
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
+
+        if version is None:
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+
+        if version.doi is None:
+            raise NotFoundException(f"not_found: DOI for version {version_name}")
+
+        return database_to_model(doi=version.doi)
+
+    def delete_doi(self, dataset_id: UUID, version_name: str, user_id: UUID, tenancies: list[str] = []):
+        dataset: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id,
+            tenancies=self._determine_tenancies(user_id, tenancies),
+        )
+
+        if dataset is None:
+            raise NotFoundException(f"not_found: {dataset_id}")
+
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
+
+        if version is None:
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+
+        if version.doi is None:
+            raise NotFoundException(f"not_found: DOI for version {version_name}")
+
+        self._doi_service.delete(identifier=version.doi.identifier)
+        version.doi = None
+        self._version_repository.upsert(dataset_version=version)
