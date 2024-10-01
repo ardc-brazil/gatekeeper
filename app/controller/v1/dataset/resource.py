@@ -3,7 +3,7 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from app.model.doi import DOI, Mode as DOIMode, State as DOIState
+from app.model.doi import DOI
 
 
 class DataFileResponse(BaseModel):

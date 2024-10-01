@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import MagicMock
-from app.model.doi import DOI as DOIModel, Mode as ModeModel, State as StateModel, Title as TitleModel
+from app.model.doi import Mode as ModeModel, State as StateModel, Title as TitleModel
 from app.model.db.doi import DOI as DOIDb
 from app.adapter.doi import database_to_model, model_to_payload
-from app.gateway.doi.resource import DOIPayload, Data as DOIPayloadData, Attributes as DOIPayloadAttributes, Creator as DOIPayloadCreator, Title as DOIPayloadTitle, Types as DOIPayloadTypes
+from app.gateway.doi.resource import DOIPayload
 
 class TestDOIAdapter(unittest.TestCase):
     

@@ -2,10 +2,7 @@ from app.adapter.doi import model_to_payload
 from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.illegal_state import IllegalStateException
 from app.gateway.doi.doi import DOIGateway
-from app.gateway.doi.resource import DOIPayload, Data as DOIPayloadData, Attributes as DOIPayloadAttributes, Types as DOIPayloadTypes, Creator as DOIPayloadCreator, Title as DOIPayloadTitle
-from app.model.dataset import Dataset, DatasetVersion
-from app.model.doi import DOI, Event, Mode, Title, Publisher, Creator, State, Identifier
-from app.repository.doi import DOIRepository
+from app.model.doi import DOI, Event, Mode, Identifier
 
 
 class DOIService:

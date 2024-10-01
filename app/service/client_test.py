@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.model.db.client import Client as DBModel
-from app.model.client import Client
 from app.repository.client import ClientRepository
 from app.exception.not_found import NotFoundException
 from app.service.client import ClientService
