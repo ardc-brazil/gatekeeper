@@ -297,12 +297,9 @@ async def change_doi_state(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOIChangeStateResponse:
-    #random number to return mocked change state or error
-    if random.randint(0, 1) == 0:
-        return DOIChangeStateResponse(new_state=DOIState.REGISTERED)
-    else:
-        errors = [DOIErrorResponse(code="missing_field", field="title")]
-        return DOIChangeStateResponse(errors=errors)
+    service.change_doi_state(dataset_id=dataset_id, version_name=version_name, new_state=DOIState[change_state_request.state], user_id=user_id, tenancies=tenancies)
+
+    return DOIChangeStateResponse(new_state=change_state_request.state)
 
 # POST /datasets/:dataset_id/versions/:version/doi
 @router.post("/{dataset_id}/versions/{version_name}/doi")
@@ -315,18 +312,14 @@ async def create_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOICreateResponse:
-    try:
-        res = service.create_doi(
-            dataset_id=dataset_id, 
-            version_name=version_name,
-            doi=DOI(identifier=create_doi_request.identifier, mode=create_doi_request.mode),
-            user_id=user_id,
-            tenancies=tenancies)
-        
-        return DOICreateResponse(identifier=res.identifier, state=res.state)
-    except IllegalStateException as e:
-        errors = [DOIErrorResponse(code="missing_field", field=field) for field in e.args["missing_fields"]]
-        return DOICreateResponse(errors=errors)
+    res = service.create_doi(
+        dataset_id=dataset_id, 
+        version_name=version_name,
+        doi=DOI(identifier=create_doi_request.identifier, mode=create_doi_request.mode),
+        user_id=user_id,
+        tenancies=tenancies)
+    
+    return DOICreateResponse(identifier=res.identifier, state=res.state.name, mode=res.mode.name)
 
 # GET /datasets/:dataset_id/versions/:version/doi
 @router.get("/{dataset_id}/versions/{version_name}/doi")
@@ -338,7 +331,8 @@ async def get_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOIResponse:
-    return DOIResponse(identifier="10.1234/abcd", state=DOIState.DRAFT)
+    res: DOI = service.get_doi(dataset_id=dataset_id, version_name=version_name, user_id=user_id, tenancies=tenancies)
+    return DOIResponse(identifier=res.identifier, state=res.state.name, mode=res.mode.name)
 
 # DELETE /datasets/:dataset_id/versions/:version/doi
 @router.delete("/{dataset_id}/versions/{version_name}/doi", status_code=204)
@@ -350,7 +344,8 @@ async def delete_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> None:
-    pass
+    service.delete_doi(dataset_id=dataset_id, version_name=version_name, user_id=user_id, tenancies=tenancies)
+    return {}
 
 # TODO: We need to create new endpoints to manipulate dataset versions for a dataset
 # POST /datasets/:dataset_id/versions/
