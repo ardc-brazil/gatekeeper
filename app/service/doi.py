@@ -8,14 +8,18 @@ from app.model.doi import DOI, Event, Mode, Identifier
 class DOIService:
     def __init__(self, doi_gateway: DOIGateway):
         self._doi_gateway = doi_gateway
-    
+
     def _validate_manual_doi(self, doi: DOI) -> None:
         if not doi.identifier:
-            raise BadRequestException(errors=[ErrorDetails(code="doi_identifier_empty")])
-        
+            raise BadRequestException(
+                errors=[ErrorDetails(code="doi_identifier_empty")]
+            )
+
     def _validate_auto_doi(self, doi: DOI, event: Event) -> None:
         if doi.identifier:
-            raise BadRequestException(errors=[ErrorDetails(code="doi_identifier_not_empty")])
+            raise BadRequestException(
+                errors=[ErrorDetails(code="doi_identifier_not_empty")]
+            )
 
         fields = {
             "title": doi.title,
@@ -24,26 +28,31 @@ class DOIService:
             "publication_year": doi.publication_year,
             "resource_type": doi.resource_type,
             "url": doi.url,
-            "event": event
+            "event": event,
         }
 
         missing_fields = [name for name, value in fields.items() if not value]
 
         if missing_fields:
-            raise BadRequestException(errors=[ErrorDetails(code="missing_field", field=field) for field in missing_fields])
-        
+            raise BadRequestException(
+                errors=[
+                    ErrorDetails(code="missing_field", field=field)
+                    for field in missing_fields
+                ]
+            )
+
     def _validate_doi(self, doi: DOI) -> None:
         if doi.mode == Mode.MANUAL:
             self._validate_manual_doi(doi)
         else:
             self._validate_auto_doi(doi)
-    
+
     def get(self, doi: str) -> DOI:
         return self._doi_gateway.get(doi)
-    
+
     def create(self, doi: DOI) -> DOI:
         self._validate_doi(doi)
-        
+
         if doi.mode == Mode.Auto:
             res = self._doi_gateway.post(model_to_payload(doi))
             doi.identifier = Identifier(identifier=res["data"]["id"])
@@ -53,10 +62,10 @@ class DOIService:
         doi.id = db_res.id
 
         return doi
-    
+
     def update(self, doi: DOI, identifier: str) -> dict:
         return self._doi_gateway.update(model_to_payload(doi), identifier)
-    
+
     def delete(self, identifier: str) -> dict:
         existing_doi = self.get(identifier)
 

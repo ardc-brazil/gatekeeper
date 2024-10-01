@@ -29,9 +29,11 @@ async def illegal_state_exception_handler(request: Request, exc: IllegalStateExc
     logger.info(f"Unauthorized exception: {exc}")
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
+
 async def bad_request_exception_handler(request: Request, exc: Exception):
     logger.error(f"Bad request exception: {exc}")
     return JSONResponse(status_code=400, content=dataclass.asdict(exc.errors))
+
 
 async def generic_exception_handler(request: Request, exc: Exception):
     logger.error(f"Generic exception: {exc}")

@@ -41,7 +41,7 @@ class ClientService:
             secret=hash_password(password=secret),
             is_enabled=True,
         )
-        
+
         created_key = self._repository.upsert(client=model).key
         self.fetch.cache_clear()
         return created_key

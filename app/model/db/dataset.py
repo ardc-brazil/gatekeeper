@@ -76,7 +76,9 @@ class DatasetVersion(Base):
     __table_args__ = (
         Index("idx_dataset_versions_name", "name"),
         Index("idx_dataset_versions_created_at", "created_at"),
-        UniqueConstraint('name', 'dataset_id', name='uc_dataset_versions_name_dataset_id')
+        UniqueConstraint(
+            "name", "dataset_id", name="uc_dataset_versions_name_dataset_id"
+        ),
     )
 
 

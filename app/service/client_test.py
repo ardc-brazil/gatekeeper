@@ -57,9 +57,9 @@ class TestClientService(unittest.TestCase):
         with patch("app.service.client.hash_password") as mock_hash_password:
             mock_hash_password.return_value = "hashed_secret"
             returned_key = self.client_service.create(name, secret)
-            
+
         self.repository.upsert.assert_called_once()
-        called_arg = self.repository.upsert.call_args[1]['client']
+        called_arg = self.repository.upsert.call_args[1]["client"]
         self.assertEqual(called_arg.name, name)
         self.assertEqual(called_arg.secret, "hashed_secret")
         self.assertTrue(called_arg.is_enabled)

@@ -17,7 +17,7 @@ class TusService:
             file_metadata = file_upload["MetaData"]
             storage = file_upload["Storage"]
             dataset_id = UUID(file_metadata["dataset_id"])
-                
+
             file = DataFile(
                 name=file_metadata["filename"],
                 size_bytes=file_upload["Size"],
@@ -35,7 +35,11 @@ class TusService:
             return TusResult(status_code=200, body_msg="")
         except ValueError as e:
             self._logger.error(e)
-            return TusResult(status_code=500, body_msg=f'Error on handle_post_finish {str(e)}', reject_upload=True)
+            return TusResult(
+                status_code=500,
+                body_msg=f"Error on handle_post_finish {str(e)}",
+                reject_upload=True,
+            )
 
     def handle(self, payload: dict, user_id: UUID) -> TusResult:
         try:

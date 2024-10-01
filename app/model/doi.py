@@ -3,15 +3,18 @@ from datetime import datetime
 import enum
 from uuid import UUID
 
+
 class Event(enum.Enum):
     PUBLISH = "publish"
     REGISTER = "register"
     HIDE = "hide"
 
+
 class State(enum.Enum):
     DRAFT = "draft"
     REGISTERED = "registered"
     FINDABLE = "findable"
+
 
 class TitleType(enum.Enum):
     ALTERNATIVE_TITLE = "alternative-title"
@@ -19,9 +22,11 @@ class TitleType(enum.Enum):
     TRANSLATED_TITLE = "translated-title"
     OTHER = "other"
 
+
 class Mode(enum.Enum):
     MANUAL = "manual"
     AUTO = "auto"
+
 
 @dataclass
 class Publisher:
@@ -30,10 +35,12 @@ class Publisher:
     publisher_identifier_scheme: str = None
     scheme_uri: str = None
 
+
 @dataclass
 class Title:
     title: str
     type: TitleType = None
+
 
 @dataclass
 class NameIdentifier:
@@ -41,12 +48,14 @@ class NameIdentifier:
     name_identifier_scheme: str
     scheme_uri: str
 
+
 @dataclass
 class Affiliation:
     affiliation: str
     affiliation_identifier: str = None
     affiliation_identifier_scheme: str = None
     scheme_uri: str = None
+
 
 @dataclass
 class Creator:
@@ -57,15 +66,18 @@ class Creator:
     affiliation: list[Affiliation] = field(default_factory=list)
     name_identifier: list[NameIdentifier] = field(default_factory=list)
 
+
 @dataclass
 class Identifier:
     identifier: str = None
     type: str = "DOI"
 
+
 @dataclass
 class Error:
     code: str
     field: str = None
+
 
 @dataclass
 class DOI:

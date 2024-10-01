@@ -79,7 +79,7 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         current_version=_adapt_dataset_version(dataset.current_version)
         if dataset.current_version is not None
         else None,
-        design_state=dataset.design_state.name
+        design_state=dataset.design_state.name,
     )
 
 
@@ -110,7 +110,7 @@ async def get_datasets(
         full_text=full_text,
         include_disabled=include_disabled,
         version=version,
-        design_state=design_state
+        design_state=design_state,
     )
     datasets: list[Dataset] = service.search_datasets(
         query=query, user_id=user_id, tenancies=tenancies
@@ -203,7 +203,7 @@ async def create_dataset(
         ),
         user_id=user_id,
     )
-    
+
     return DatasetCreateResponse(
         id=created.id,
         name=created.name,
@@ -211,7 +211,7 @@ async def create_dataset(
         design_state=created.design_state.name,
         tenancy=created.tenancy,
         versions=[_adapt_dataset_version(version) for version in created.versions],
-        current_version=_adapt_dataset_version(created.current_version)
+        current_version=_adapt_dataset_version(created.current_version),
     )
 
 
@@ -283,6 +283,7 @@ async def enable_dataset_version(
     )
     return {}
 
+
 # PUT /datasets/:dataset_id/versions/:version/doi
 @router.put("/{dataset_id}/versions/{version_name}/doi")
 @inject
@@ -294,9 +295,16 @@ async def change_doi_state(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOIChangeStateResponse:
-    service.change_doi_state(dataset_id=dataset_id, version_name=version_name, new_state=DOIState[change_state_request.state], user_id=user_id, tenancies=tenancies)
+    service.change_doi_state(
+        dataset_id=dataset_id,
+        version_name=version_name,
+        new_state=DOIState[change_state_request.state],
+        user_id=user_id,
+        tenancies=tenancies,
+    )
 
     return DOIChangeStateResponse(new_state=change_state_request.state)
+
 
 # POST /datasets/:dataset_id/versions/:version/doi
 @router.post("/{dataset_id}/versions/{version_name}/doi")
@@ -310,13 +318,17 @@ async def create_doi(
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOICreateResponse:
     res = service.create_doi(
-        dataset_id=dataset_id, 
+        dataset_id=dataset_id,
         version_name=version_name,
         doi=DOI(identifier=create_doi_request.identifier, mode=create_doi_request.mode),
         user_id=user_id,
-        tenancies=tenancies)
-    
-    return DOICreateResponse(identifier=res.identifier, state=res.state.name, mode=res.mode.name)
+        tenancies=tenancies,
+    )
+
+    return DOICreateResponse(
+        identifier=res.identifier, state=res.state.name, mode=res.mode.name
+    )
+
 
 # GET /datasets/:dataset_id/versions/:version/doi
 @router.get("/{dataset_id}/versions/{version_name}/doi")
@@ -328,8 +340,16 @@ async def get_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOIResponse:
-    res: DOI = service.get_doi(dataset_id=dataset_id, version_name=version_name, user_id=user_id, tenancies=tenancies)
-    return DOIResponse(identifier=res.identifier, state=res.state.name, mode=res.mode.name)
+    res: DOI = service.get_doi(
+        dataset_id=dataset_id,
+        version_name=version_name,
+        user_id=user_id,
+        tenancies=tenancies,
+    )
+    return DOIResponse(
+        identifier=res.identifier, state=res.state.name, mode=res.mode.name
+    )
+
 
 # DELETE /datasets/:dataset_id/versions/:version/doi
 @router.delete("/{dataset_id}/versions/{version_name}/doi", status_code=204)
@@ -341,14 +361,20 @@ async def delete_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> None:
-    service.delete_doi(dataset_id=dataset_id, version_name=version_name, user_id=user_id, tenancies=tenancies)
+    service.delete_doi(
+        dataset_id=dataset_id,
+        version_name=version_name,
+        user_id=user_id,
+        tenancies=tenancies,
+    )
     return {}
+
 
 # TODO: We need to create new endpoints to manipulate dataset versions for a dataset
 # POST /datasets/:dataset_id/versions/
 #   Creates a new dataset version for a dataset.
 #   This must disable all old versions, and create a new one with new files with the PUBLISHED state.
-# 
+#
 # POST /datasets/:dataset_id/versions/ {old_dataset_version_id: ''}
 #   Restore an old dataset vesion.
 #   Dataset versions are always append only. So, when we need to restore an old version, a new version must be

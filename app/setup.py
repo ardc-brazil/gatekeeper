@@ -32,7 +32,7 @@ def setup_logging() -> None:
     modules = [
         {"name": "uvicorn", "level": settings.LOG_LEVEL},
         {"name": "tests", "level": logging.INFO},
-        {"name": "casbin.enforcer", "level": settings.LOG_LEVEL}
+        {"name": "casbin.enforcer", "level": settings.LOG_LEVEL},
     ]
     for module in modules:
         logger = logging.getLogger(module["name"])
@@ -64,7 +64,5 @@ def setup_error_handlers(fastAPIApp: FastAPI) -> None:
     fastAPIApp.add_exception_handler(
         IllegalStateException, illegal_state_exception_handler
     )
-    fastAPIApp.add_exception_handler(
-        BadRequestException, bad_request_exception_handler
-    )
+    fastAPIApp.add_exception_handler(BadRequestException, bad_request_exception_handler)
     fastAPIApp.add_exception_handler(Exception, generic_exception_handler)

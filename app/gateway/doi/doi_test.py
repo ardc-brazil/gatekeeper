@@ -4,8 +4,8 @@ from unittest.mock import patch, MagicMock
 from app.gateway.doi.resource import DOIPayload, Attributes, Creator, Title, Types, Data
 from app.gateway.doi.doi import DOIGateway
 
+
 class TestDOIGateway(unittest.TestCase):
-    
     def setUp(self):
         creators = [Creator(name="Caio Maia")]
         titles = [Title(title="Test REST API")]
@@ -18,110 +18,113 @@ class TestDOIGateway(unittest.TestCase):
             publicationYear=2024,
             types=types,
             url="https://example.org",
-            event="publish"
+            event="publish",
         )
         data = Data(attributes=attributes)
         self.doi_payload = DOIPayload(data=data)
-    
+
         self.base_url = "https://api.datacite.org"
         self.repository = "test-repo"
         self.login = "test-login"
         self.password = "test-password"
-        
-        self.gateway = DOIGateway(self.base_url, self.repository, self.login, self.password)
-    
-    @patch('app.gateway.doi.doi.requests.post')
+
+        self.gateway = DOIGateway(
+            self.base_url, self.repository, self.login, self.password
+        )
+
+    @patch("app.gateway.doi.doi.requests.post")
     def test_post_success(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 201
         mock_response.json.return_value = {"data": {"id": "10.1234/test-doi"}}
         mock_post.return_value = mock_response
-        
+
         response = self.gateway.post(self.doi_payload)
-        
+
         mock_post.assert_called_once_with(
             f"{self.base_url}/dois",
             headers=self.gateway._base_headers,
             auth=(self.login, self.password),
-            json=dataclasses.asdict(self.doi_payload)
+            json=dataclasses.asdict(self.doi_payload),
         )
-        
+
         self.assertEqual(response, {"data": {"id": "10.1234/test-doi"}})
 
-    @patch('app.gateway.doi.doi.requests.post')
+    @patch("app.gateway.doi.doi.requests.post")
     def test_post_failure(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 400
         mock_response.text = "Bad Request"
         mock_post.return_value = mock_response
-        
+
         with self.assertRaises(Exception) as context:
             self.gateway.post(self.doi_payload)
-        
+
         self.assertTrue("Error creating DOI: Bad Request" in str(context.exception))
 
-    @patch('app.gateway.doi.doi.requests.get')
+    @patch("app.gateway.doi.doi.requests.get")
     def test_get_success(self, mock_get):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"data": {"id": "10.1234/test-doi"}}
         mock_get.return_value = mock_response
-        
+
         response = self.gateway.get("test-doi")
-        
+
         mock_get.assert_called_once_with(
             f"{self.base_url}/dois/{self.repository}/test-doi",
             headers=self.gateway._base_headers,
-            auth=(self.login, self.password)
+            auth=(self.login, self.password),
         )
-        
+
         self.assertEqual(response, {"data": {"id": "10.1234/test-doi"}})
 
-    @patch('app.gateway.doi.doi.requests.put')
+    @patch("app.gateway.doi.doi.requests.put")
     def test_update_success(self, mock_put):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"data": {"id": "10.1234/test-doi"}}
         mock_put.return_value = mock_response
-        
+
         response = self.gateway.update(self.doi_payload, "test-doi")
-        
+
         mock_put.assert_called_once_with(
             f"{self.base_url}/dois/{self.repository}/test-doi",
             headers=self.gateway._base_headers,
             auth=(self.login, self.password),
-            json=dataclasses.asdict(self.doi_payload)
+            json=dataclasses.asdict(self.doi_payload),
         )
-        
+
         self.assertEqual(response, {"data": {"id": "10.1234/test-doi"}})
 
-    @patch('app.gateway.doi.doi.requests.delete')
+    @patch("app.gateway.doi.doi.requests.delete")
     def test_delete_success(self, mock_delete):
         mock_response = MagicMock()
         mock_response.status_code = 204
         mock_delete.return_value = mock_response
-        
+
         response = self.gateway.delete("test-doi")
-        
+
         mock_delete.assert_called_once_with(
             f"{self.base_url}/dois/{self.repository}/test-doi",
             headers=self.gateway._base_headers,
-            auth=(self.login, self.password)
+            auth=(self.login, self.password),
         )
-        
+
         self.assertEqual(response, mock_response.json())
-    
-    @patch('app.gateway.doi.doi.requests.delete')
+
+    @patch("app.gateway.doi.doi.requests.delete")
     def test_delete_failure(self, mock_delete):
         mock_response = MagicMock()
         mock_response.status_code = 404
         mock_response.text = "Not Found"
         mock_delete.return_value = mock_response
-        
+
         with self.assertRaises(Exception) as context:
             self.gateway.delete("invalid-doi")
-        
+
         self.assertTrue("Error deleting DOI: Not Found" in str(context.exception))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

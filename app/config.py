@@ -25,7 +25,9 @@ class Config(BaseSettings):
         default=False, description="Enable database logging"
     )
 
-    AUTH_FILE_UPLOAD_TOKEN_SECRET: str = Field(..., description="Secret key for file upload token")
+    AUTH_FILE_UPLOAD_TOKEN_SECRET: str = Field(
+        ..., description="Secret key for file upload token"
+    )
     CASBIN_MODEL_FILE: str = Field(..., description="Casbin model file")
 
     DOI_BASE_URL: str = Field(..., description="Base URL for DOI service")

@@ -72,24 +72,30 @@ class DatasetCreateResponse(BaseModel):
         None, title="Current version information"
     )
 
+
 class DOIErrorResponse(BaseModel):
     code: str = Field(..., title="Error code")
     field: Optional[str] = Field(None, title="Field")
+
 
 class DOICreateRequest(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
     mode: str = Field(..., title="Mode")
 
+
 class DOIChangeStateRequest(BaseModel):
     state: str = Field(..., title="State")
+
 
 class DOIResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
     state: str = Field(..., title="State")
     mode: str = Field(..., title="Registration mode. AUTO or MANUAL")
 
+
 class DOIChangeStateResponse(BaseModel):
     new_state: str = Field(None, title="State")
+
 
 class DOICreateResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")

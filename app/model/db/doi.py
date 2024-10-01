@@ -10,6 +10,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 from app.database import Base
 
+
 class DOI(Base):
     __tablename__ = "dois"
     id = Column(

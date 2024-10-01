@@ -2,21 +2,26 @@ from dataclasses import dataclass
 import enum
 from typing import List
 
+
 class Event(enum.Enum):
     PUBLISH = "publish"
     REGISTER = "register"
+
 
 @dataclass
 class Creator:
     name: str
 
+
 @dataclass
 class Title:
     title: str
 
+
 @dataclass
 class Types:
     resourceTypeGeneral: str = "Dataset"
+
 
 @dataclass
 class Attributes:
@@ -30,10 +35,12 @@ class Attributes:
     # If None will create as "DRAFT"
     event: str = None
 
+
 @dataclass
 class Data:
     attributes: Attributes
     type: str = "dois"
+
 
 @dataclass
 class DOIPayload:
