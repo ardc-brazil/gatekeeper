@@ -69,8 +69,8 @@ class Error:
 
 @dataclass
 class DOI:
-    state: State = State.DRAFT
     mode: Mode
+    state: State = State.DRAFT
     identifier: str = None
     title: Title = None
     other_titles: list[Title] = field(default_factory=list)
