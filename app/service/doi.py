@@ -1,3 +1,5 @@
+from app.adapter.doi import model_to_payload
+from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.illegal_state import IllegalStateException
 from app.gateway.doi.doi import DOIGateway
 from app.gateway.doi.resource import DOIPayload, Data as DOIPayloadData, Attributes as DOIPayloadAttributes, Types as DOIPayloadTypes, Creator as DOIPayloadCreator, Title as DOIPayloadTitle
@@ -10,28 +12,13 @@ class DOIService:
     def __init__(self, doi_gateway: DOIGateway):
         self._doi_gateway = doi_gateway
     
-    def _adapt_model_to_payload(self, doi: DOI) -> DOIPayload:
-        return DOIPayload(
-            data=DOIPayloadData(
-                attributes=DOIPayloadAttributes(
-                    prefix=self._doi_repository,
-                    creators=[DOIPayloadCreator(name=creator.name) for creator in doi.creators],
-                    titles=[DOIPayloadTitle(title=doi.title.title)],
-                    publisher=doi.publisher.publisher,
-                    publicationYear=doi.publication_year,
-                    url=doi.url,
-                    types=DOIPayloadTypes(resourceTypeGeneral=doi.resource_type),
-                )
-            )
-        )
-    
     def _validate_manual_doi(self, doi: DOI) -> None:
         if not doi.identifier:
-            raise IllegalStateException("doi_identifier_empty")
+            raise BadRequestException(errors=[ErrorDetails(code="doi_identifier_empty")])
         
     def _validate_auto_doi(self, doi: DOI, event: Event) -> None:
         if doi.identifier:
-            raise IllegalStateException("doi_identifier_not_empty")
+            raise BadRequestException(errors=[ErrorDetails(code="doi_identifier_not_empty")])
 
         fields = {
             "title": doi.title,
@@ -46,7 +33,7 @@ class DOIService:
         missing_fields = [name for name, value in fields.items() if not value]
 
         if missing_fields:
-            raise IllegalStateException("doi_missing_fields", missing_fields=missing_fields)
+            raise BadRequestException(errors=[ErrorDetails(code="missing_field", field=field) for field in missing_fields])
         
     def _validate_doi(self, doi: DOI) -> None:
         if doi.mode == Mode.MANUAL:
@@ -61,7 +48,7 @@ class DOIService:
         self._validate_doi(doi)
         
         if doi.mode == Mode.Auto:
-            res = self._doi_gateway.post(self._adapt_model_to_payload(doi))
+            res = self._doi_gateway.post(model_to_payload(doi))
             doi.identifier = Identifier(identifier=res["data"]["id"])
             doi.provider_response = res
 
@@ -71,7 +58,7 @@ class DOIService:
         return doi
     
     def update(self, doi: DOI, identifier: str) -> dict:
-        return self._doi_gateway.update(doi, identifier)
+        return self._doi_gateway.update(model_to_payload(doi), identifier)
     
     def delete(self, identifier: str) -> dict:
         existing_doi = self.get(identifier)
