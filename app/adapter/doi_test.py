@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import MagicMock
-from app.model.doi import Mode as ModeModel, State as StateModel, Title as TitleModel
+from app.model.doi import Mode as ModeModel, State as StateModel, Title as TitleModel, Event as EventModel
 from app.model.db.doi import DOI as DOIDb
-from app.adapter.doi import database_to_model, model_to_payload
+from app.adapter.doi import change_state_to_payload, database_to_model, model_to_database, model_to_payload
 from app.gateway.doi.resource import DOIPayload
 
 
@@ -16,21 +16,25 @@ class TestDOIAdapter(unittest.TestCase):
         self.database_doi.url = "https://example.com/doi"
         self.database_doi.state = "DRAFT"
         self.database_doi.doi = {
-            "title": "Test DOI",
-            "creators": [{"name": "Creator One"}, {"name": "Creator Two"}],
-            "publisher": "Test Publisher",
-            "publication_year": 2024,
-            "resource_type": "Text",
+            "data": {
+                "attributes": {
+                    "titles": [{"title": "Test DOI"}],
+                    "creators": [{"name": "Creator One"}, {"name": "Creator Two"}],
+                    "publisher": "Test Publisher",
+                    "published": 2024,
+                    "types": {"resourceTypeGeneral": "Text"}
+                }
+            }
         }
 
     def test_database_to_model_success(self):
         result = database_to_model(self.database_doi)
 
         self.assertEqual(result.identifier, "10.1234/example-doi")
-        self.assertEqual(result.title, "Test DOI")
-        self.assertEqual(
-            result.creators, [{"name": "Creator One"}, {"name": "Creator Two"}]
-        )
+        self.assertEqual(result.title.title, "Test DOI")
+        self.assertEqual(len(result.creators), 2)
+        self.assertEqual(result.creators[0].name, "Creator One")
+        self.assertEqual(result.creators[1].name, "Creator Two")
         self.assertEqual(result.publisher, "Test Publisher")
         self.assertEqual(result.publication_year, 2024)
         self.assertEqual(result.resource_type, "Text")
@@ -40,11 +44,15 @@ class TestDOIAdapter(unittest.TestCase):
         self.assertEqual(
             result.provider_response,
             {
-                "title": "Test DOI",
-                "creators": [{"name": "Creator One"}, {"name": "Creator Two"}],
-                "publisher": "Test Publisher",
-                "publication_year": 2024,
-                "resource_type": "Text",
+                "data": {
+                    "attributes": {
+                        "titles": [{"title": "Test DOI"}],
+                        "creators": [{"name": "Creator One"}, {"name": "Creator Two"}],
+                        "publisher": "Test Publisher",
+                        "published": 2024,
+                        "types": {"resourceTypeGeneral": "Text"}
+                    }
+                }
             },
         )
 
@@ -87,15 +95,25 @@ class TestDOIAdapter(unittest.TestCase):
         model.title = TitleModel(title="")
         payload = model_to_payload(repository="10.1234", doi=model)
 
-        self.assertEqual(payload.data.attributes.titles[0].title.title, "")
+        self.assertEqual(payload.data.attributes.titles[0].title, "")
 
-    def test_model_to_payload_invalid_publication_year(self):
+    def test_change_state_to_payload(self):
+        event = EventModel.PUBLISH
+        payload = change_state_to_payload(self.database_doi, event)
+
+        self.assertEqual(payload.data.attributes.event, event.name)
+
+    def test_model_to_database(self):
         model = database_to_model(self.database_doi)
-        model.publication_year = 0
-        payload = model_to_payload(repository="10.1234", doi=model)
+        database_model = model_to_database(model)
 
-        self.assertEqual(payload.data.attributes.publicationYear, 0)
-
+        self.assertEqual(database_model.identifier, model.identifier)
+        self.assertEqual(database_model.url, model.url)
+        self.assertEqual(database_model.mode, model.mode.name)
+        self.assertEqual(database_model.state, model.state.name)
+        self.assertEqual(database_model.prefix, model.identifier.split("/")[0])
+        self.assertEqual(database_model.suffix, model.identifier.split("/")[1])
+        self.assertEqual(database_model.doi, model.provider_response)
 
 if __name__ == "__main__":
     unittest.main()

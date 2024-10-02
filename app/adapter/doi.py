@@ -1,8 +1,10 @@
 from app.model.doi import (
     DOI as DOIModel, 
-    Mode as ModeModel, 
-    State as StateModel,
     Event as EventModel,
+    State as StateModel,
+    Mode as ModeModel,
+    Creator as CreatorModel,
+    Title as TitleModel,
 )
 from app.model.db.doi import DOI as DOIDb
 from app.gateway.doi.resource import (
@@ -28,8 +30,8 @@ def database_to_model(doi: DOIDb) -> DOIModel:
 
     return DOIModel(
         identifier=doi.identifier,
-        title=titles[0].get("title") if titles else None,
-        creators=creators[0].get("name") if creators else None,
+        title=TitleModel(title=titles[0].get("title")) if titles else None,
+        creators=[CreatorModel(name=creator.get("name")) for creator in creators],
         publisher=publisher,
         publication_year=publication_year,
         resource_type=resource_type,
@@ -41,18 +43,21 @@ def database_to_model(doi: DOIDb) -> DOIModel:
 
 
 def model_to_payload(repository: str, doi: DOIModel) -> DOIPayload:
+    creators = [DOIPayloadCreator(name=creator.name) for creator in doi.creators] if doi.creators else []
+    titles = [DOIPayloadTitle(title=doi.title.title)] if doi.title else []
+
+    resource_type = DOIPayloadTypes(resourceTypeGeneral=doi.resource_type) if doi.resource_type else None
+
     return DOIPayload(
         data=DOIPayloadData(
             attributes=DOIPayloadAttributes(
                 prefix=repository,
-                creators=[
-                    DOIPayloadCreator(name=creator.name) for creator in doi.creators
-                ],
-                titles=[DOIPayloadTitle(title=doi.title.title)],
-                publisher=doi.publisher.publisher,
+                creators=creators,
+                titles=titles,
+                publisher=doi.publisher,
                 publicationYear=doi.publication_year,
                 url=doi.url,
-                types=DOIPayloadTypes(resourceTypeGeneral=doi.resource_type),
+                types=resource_type,
             )
         )
     )
