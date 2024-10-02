@@ -96,3 +96,7 @@ class DOI:
     created_by: UUID = None
     id: UUID = None
     provider_response: dict = None
+    dataset_id: UUID = None
+    dataset_version_id: UUID = None
+    dataset_version_name: str = None
+    created_by: UUID = None
