@@ -14,6 +14,7 @@ from app.controller.v1.dataset.resource import (
     DOICreateRequest,
     DOICreateResponse,
     DOIResponse,
+    DataFileDownloadResponse,
     DataFileResponse,
     DatasetCreateRequest,
     DatasetCreateResponse,
@@ -382,7 +383,7 @@ async def get_file_download_url(
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
-):
+) -> DataFileDownloadResponse:
     file = service.get_file_download_url(
         dataset_id=dataset_id,
         version_name=version_name,
@@ -390,7 +391,8 @@ async def get_file_download_url(
         user_id=user_id,
         tenancies=tenancies,
     )
-    return {"url": file}
+    return DataFileDownloadResponse(url=file)
+
 # TODO: We need to create new endpoints to manipulate dataset versions for a dataset
 # POST /datasets/:dataset_id/versions/
 #   Creates a new dataset version for a dataset.
