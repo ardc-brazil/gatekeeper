@@ -5,7 +5,7 @@ from sqlalchemy import (
     Column,
     String,
     DateTime,
-    ForeignKey,
+    ForeignKey
 )
 from sqlalchemy.sql import func
 from app.database import Base
@@ -40,4 +40,4 @@ class DOI(Base):
         UUID(as_uuid=True), ForeignKey("dataset_versions.id"), nullable=False
     )
 
-    __table_args__ = (Index("idx_identifier", "identifier"),)
+    __table_args__ = (Index("idx_identifier", identifier, unique=True),)
