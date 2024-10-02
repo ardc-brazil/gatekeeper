@@ -10,9 +10,9 @@ db = container.db()
 db.create_database()
 
 # Setup casbin auto reload policy
-# casbin_enforcer = container.casbin_enforcer()
-# casbin_enforcer.enable_auto_build_role_links(True)
-# casbin_enforcer.start_auto_load_policy(5)  # reload policy every 5 seconds
+casbin_enforcer = container.casbin_enforcer()
+casbin_enforcer.enable_auto_build_role_links(True)
+casbin_enforcer.start_auto_load_policy(5)  # reload policy every 5 seconds
 
 fastAPIApp = FastAPI(
     title="Gatekeeper API",
