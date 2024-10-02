@@ -62,7 +62,7 @@ class TestDOIAdapter(unittest.TestCase):
 
     def test_model_to_payload_success(self):
         model = database_to_model(self.database_doi)
-        payload = model_to_payload(model)
+        payload = model_to_payload(repository="10.1234", doi=model)
 
         self.assertIsInstance(payload, DOIPayload)
         self.assertEqual(payload.data.attributes.prefix, "10.1234")
@@ -78,21 +78,21 @@ class TestDOIAdapter(unittest.TestCase):
     def test_model_to_payload_empty_creators(self):
         model = database_to_model(self.database_doi)
         model.creators = []
-        payload = model_to_payload(model)
+        payload = model_to_payload(repository="10.1234", doi=model)
 
         self.assertEqual(payload.data.attributes.creators, [])
 
     def test_model_to_payload_missing_title(self):
         model = database_to_model(self.database_doi)
         model.title = TitleModel(title="")
-        payload = model_to_payload(model)
+        payload = model_to_payload(repository="10.1234", doi=model)
 
         self.assertEqual(payload.data.attributes.titles[0].title.title, "")
 
     def test_model_to_payload_invalid_publication_year(self):
         model = database_to_model(self.database_doi)
         model.publication_year = 0
-        payload = model_to_payload(model)
+        payload = model_to_payload(repository="10.1234", doi=model)
 
         self.assertEqual(payload.data.attributes.publicationYear, 0)
 
