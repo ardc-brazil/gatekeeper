@@ -6,11 +6,9 @@ from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
 from app.model.doi import (
     DOI,
-    Mode as DOIMode,
     State as DOIState,
     Publisher as DOIPublisher,
     Title as DOITitle,
-    Identifier as DOIIdentifier,
     Creator as DOICreator,
 )
 from app.repository.dataset import DatasetRepository
@@ -29,7 +27,6 @@ from app.model.db.dataset import (
     DatasetVersion as DatasetVersionDBModel,
     DataFile as DataFileDBModel,
 )
-from app.model.db.doi import DOI as DOIDBModel
 from app.adapter.doi import database_to_model
 
 
