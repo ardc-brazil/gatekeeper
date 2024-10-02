@@ -419,30 +419,25 @@ class DatasetService:
             raise NotFoundException(
                 f"not_found: {version_name} for dataset {dataset_id}"
             )
+        
+        if version.doi:
+            raise IllegalStateException("doi_already_exists")
 
         doi.title = DOITitle(title=dataset.name)
+        
         doi.creators = [
-            DOICreator(name=author.name) for author in dataset.data.get("authors")
+            DOICreator(name=author['name']) for author in dataset.data.get("authors", [])
         ]
         doi.publication_year = dataset.created_at.year
-        doi.publisher = DOIPublisher(publisher=dataset.data.get("institution"))
+        doi.publisher = DOIPublisher(publisher=dataset.data.get("institution")) if dataset.data.get("institution") else None
         doi.url = f"https://datamap.pcs.usp.br/doi/dataset/{dataset.id}/version/{version.name}"
         doi.state = DOIState.DRAFT
+        doi.dataset_version_name = version_name
+        doi.dataset_id = dataset_id
+        doi.dataset_version_id = version.id
+        doi.created_by = user_id
 
         created_doi: DOI = self._doi_service.create(doi)
-
-        version.doi = DOIDBModel(
-            identifier=created_doi.identifier.identifier,
-            mode=created_doi.mode,
-            prefix=created_doi.identifier.split("/")[0],
-            suffix=created_doi.identifier.split("/")[1],
-            url=created_doi.url,
-            state=created_doi.state,
-            created_by=user_id,
-            version_id=version.id,
-            doi=created_doi.provider_response,
-        )
-        self._version_repository.upsert(dataset_version=version)
 
         return created_doi
 
@@ -474,17 +469,10 @@ class DatasetService:
         if version.doi is None:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
-        self._doi_service.update(
-            doi=DOI(
-                state=new_state,
-                mode=DOIMode.AUTO,
-                identifier=DOIIdentifier(identifier=version.doi.identifier),
-            ),
+        self._doi_service.change_state(
             identifier=version.doi.identifier,
+            new_state=new_state,
         )
-
-        version.doi.state = new_state
-        self._version_repository.upsert(dataset_version=version)
 
     def get_doi(
         self,
@@ -510,7 +498,7 @@ class DatasetService:
                 f"not_found: {version_name} for dataset {dataset_id}"
             )
 
-        if version.doi is None:
+        if not version.doi:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
         return database_to_model(doi=version.doi)
@@ -543,5 +531,3 @@ class DatasetService:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
         self._doi_service.delete(identifier=version.doi.identifier)
-        version.doi = None
-        self._version_repository.upsert(dataset_version=version)

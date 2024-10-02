@@ -29,7 +29,7 @@ from app.model.dataset import (
     DatasetVersion,
     DesignState,
 )
-from app.model.doi import DOI, State as DOIState
+from app.model.doi import DOI, State as DOIState, Mode as DOIMode
 from app.service.dataset import DatasetService
 
 
@@ -320,7 +320,7 @@ async def create_doi(
     res = service.create_doi(
         dataset_id=dataset_id,
         version_name=version_name,
-        doi=DOI(identifier=create_doi_request.identifier, mode=create_doi_request.mode),
+        doi=DOI(identifier=create_doi_request.identifier, mode=DOIMode[create_doi_request.mode]),
         user_id=user_id,
         tenancies=tenancies,
     )

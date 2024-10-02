@@ -11,9 +11,9 @@ class DOIRepository:
     def __init__(self, session_factory: Callable[..., AbstractContextManager[Session]]):
         self._session_factory = session_factory
 
-    def fetch(self, doi: str) -> DOI:
+    def fetch(self, identifier: str) -> DOI:
         with self._session_factory() as session:
-            return session.query(DOI).filter(DOI.identifier == doi).one_or_none()
+            return session.query(DOI).filter(DOI.identifier == identifier).one_or_none()
 
     def fetch_all(self) -> list[DOI]:
         with self._session_factory() as session:
@@ -28,3 +28,8 @@ class DOIRepository:
                 return doi
         except IntegrityError:
             raise ConflictException(f"doi_already_exists: {doi.identifier}")
+    
+    def delete(self, identifier: DOI) -> None:
+        with self._session_factory() as session:
+            session.delete(identifier)
+            session.commit()

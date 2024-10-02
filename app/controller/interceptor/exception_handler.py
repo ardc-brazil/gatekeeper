@@ -1,5 +1,4 @@
 from dataclasses import asdict
-import dataclasses
 import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse

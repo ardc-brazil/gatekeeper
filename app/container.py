@@ -110,6 +110,8 @@ class Container(containers.DeclarativeContainer):
     doi_service = providers.Factory(
         DOIService,
         doi_gateway=doi_gateway,
+        doi_repository=doi_repository,
+        doi_prefix=config.DOI_PREFIX,
     )
 
     dataset_repository = providers.Factory(

@@ -14,7 +14,7 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 @dataclass
 class ErrorDetails:
     code: str
-    field: Optional[str]
+    field: Optional[str] = None
 
 
 class BadRequestException(Exception):

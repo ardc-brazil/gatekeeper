@@ -79,7 +79,7 @@ class DOIErrorResponse(BaseModel):
 
 
 class DOICreateRequest(BaseModel):
-    identifier: str = Field(..., title="DOI identifier")
+    identifier: str = Field(None, title="DOI identifier")
     mode: str = Field(..., title="Mode")
 
 

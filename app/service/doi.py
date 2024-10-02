@@ -1,24 +1,33 @@
-from app.adapter.doi import model_to_payload
+from app.adapter.doi import model_to_payload, model_to_database, change_state_to_payload
 from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.illegal_state import IllegalStateException
+from app.exception.not_found import NotFoundException
 from app.gateway.doi.doi import DOIGateway
-from app.model.doi import DOI, Event, Mode, Identifier
+from app.model.doi import DOI, Mode, Identifier, State, Event
+from app.repository.doi import DOIRepository
+from app.model.db.doi import DOI as DOIDb
 
 
 class DOIService:
-    def __init__(self, doi_gateway: DOIGateway):
+    def __init__(
+            self, 
+            doi_gateway: DOIGateway, 
+            doi_repository: DOIRepository,
+            doi_prefix: str):
         self._doi_gateway = doi_gateway
+        self._doi_repository = doi_repository
+        self._doi_prefix = doi_prefix
 
     def _validate_manual_doi(self, doi: DOI) -> None:
         if not doi.identifier:
             raise BadRequestException(
-                errors=[ErrorDetails(code="doi_identifier_empty")]
+                errors=[ErrorDetails(code="empty", field="identifier")]
             )
 
-    def _validate_auto_doi(self, doi: DOI, event: Event) -> None:
+    def _validate_auto_doi(self, doi: DOI) -> None:
         if doi.identifier:
             raise BadRequestException(
-                errors=[ErrorDetails(code="doi_identifier_not_empty")]
+                errors=[ErrorDetails(code="not_empty", field="identifier")]
             )
 
         fields = {
@@ -28,7 +37,6 @@ class DOIService:
             "publication_year": doi.publication_year,
             "resource_type": doi.resource_type,
             "url": doi.url,
-            "event": event,
         }
 
         missing_fields = [name for name, value in fields.items() if not value]
@@ -49,27 +57,60 @@ class DOIService:
 
     def get(self, doi: str) -> DOI:
         return self._doi_gateway.get(doi)
+    
+    def get_from_database(self, identifier: str) -> DOIDb:
+        return self._doi_repository.fetch(identifier=identifier)
 
     def create(self, doi: DOI) -> DOI:
         self._validate_doi(doi)
 
-        if doi.mode == Mode.Auto:
-            res = self._doi_gateway.post(model_to_payload(doi))
-            doi.identifier = Identifier(identifier=res["data"]["id"])
+        if doi.mode == Mode.AUTO:
+            res = self._doi_gateway.post(model_to_payload(repository=self._doi_prefix, doi=doi))
+            doi.identifier = res["data"]["id"]
             doi.provider_response = res
 
-        db_res = self._doi_repository.upsert(self._adapt_to_db(doi))
+        db_res = self._doi_repository.upsert(model_to_database(doi))
         doi.id = db_res.id
 
         return doi
+    
+    def _get_valid_event_from_state(self, doi: DOIDb, new_state: State) -> Event:
+        if doi.state == State.DRAFT.name and new_state == State.FINDABLE:
+            return Event.PUBLISH
+        elif doi.state == State.DRAFT.name and new_state == State.REGISTERED:
+            return Event.REGISTER
+        elif doi.state == State.REGISTERED.name and new_state == State.FINDABLE:
+            return Event.PUBLISH
+        elif doi.state == State.FINDABLE.name and new_state == State.REGISTERED:
+            return Event.HIDE
+        else:
+            raise IllegalStateException("invalid_state_transition")
+        
 
-    def update(self, doi: DOI, identifier: str) -> dict:
-        return self._doi_gateway.update(model_to_payload(doi), identifier)
+    def change_state(self, identifier: str, new_state: State):
+        from_database: DOIDb = self.get_from_database(identifier)
+
+        if from_database.mode == Mode.MANUAL.name:
+            raise IllegalStateException("manual_doi_cannot_change_state")
+        
+        if from_database.mode == Mode.AUTO.name:
+            event: Event = self._get_valid_event_from_state(from_database, new_state)
+            res = self._doi_gateway.update(change_state_to_payload(doi=from_database, event=event), identifier)
+            from_database.doi = res
+            from_database.state = new_state.name
+        
+        self._doi_repository.upsert(doi=from_database)
 
     def delete(self, identifier: str) -> dict:
-        existing_doi = self.get(identifier)
+        existing_doi: DOIDb = self.get_from_database(identifier)
 
-        if existing_doi.get("data", {}).get("state") != "draft":
-            raise IllegalStateException("doi_not_draft")
+        if not existing_doi:
+            raise NotFoundException(f"not_found: {identifier}")
 
-        return self._doi_gateway.delete(identifier)
+        if existing_doi.state != State.DRAFT.name:
+            raise IllegalStateException("doi_not_in_draft_state")
+        
+        if existing_doi.mode == Mode.AUTO.name:
+            self._doi_gateway.delete(repository=identifier.split("/")[0], identifier=identifier.split("/")[1])
+        
+        self._doi_repository.delete(doi=existing_doi)

@@ -25,13 +25,13 @@ class Types:
 
 @dataclass
 class Attributes:
-    prefix: str
-    creators: List[Creator]
-    titles: List[Title]
-    publisher: str
-    publicationYear: int
-    url: str
-    types: Types = Types()
+    prefix: str = None
+    creators: List[Creator] = None
+    titles: List[Title] = None
+    publisher: str = None
+    publicationYear: int = None
+    url: str = None
+    types: Types = None
     # If None will create as "DRAFT"
     event: str = None
 
