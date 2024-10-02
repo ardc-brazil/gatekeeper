@@ -67,13 +67,18 @@ class DatasetVersion(Base):
     is_enabled = Column(Boolean, nullable=False, default=True)
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=True)
     design_state = Column(Enum(DesignState), nullable=True)
+    doi_identifier = Column(String(256), nullable=True)
+    doi_state = Column(String(256), nullable=True)
 
     files = relationship("DataFile", lazy="subquery", backref="dataset_version")
+    doi = relationship("DOI", lazy="subquery", backref="dataset_version", uselist=False)
 
     __table_args__ = (
         Index("idx_dataset_versions_name", "name"),
         Index("idx_dataset_versions_created_at", "created_at"),
-        UniqueConstraint('name', 'dataset_id', name='uc_dataset_versions_name_dataset_id')
+        UniqueConstraint(
+            "name", "dataset_id", name="uc_dataset_versions_name_dataset_id"
+        ),
     )
 
 

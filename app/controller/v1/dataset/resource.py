@@ -3,7 +3,7 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from app.model.doi import DOI, Mode as DOIMode, State as DOIState
+from app.model.doi import DOI
 
 
 class DataFileResponse(BaseModel):
@@ -72,26 +72,32 @@ class DatasetCreateResponse(BaseModel):
         None, title="Current version information"
     )
 
+
 class DOIErrorResponse(BaseModel):
     code: str = Field(..., title="Error code")
     field: Optional[str] = Field(None, title="Field")
 
+
 class DOICreateRequest(BaseModel):
     identifier: str = Field(None, title="DOI identifier")
-    mode: DOIMode = Field(..., title="Mode")
+    mode: str = Field(..., title="Mode")
+
 
 class DOIChangeStateRequest(BaseModel):
-    state: DOIState = Field(..., title="State")
+    state: str = Field(..., title="State")
+
 
 class DOIResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
-    state: DOIState = Field(..., title="State")
+    state: str = Field(..., title="State")
+    mode: str = Field(..., title="Registration mode. AUTO or MANUAL")
+
 
 class DOIChangeStateResponse(BaseModel):
-    new_state: DOIState = Field(None, title="State")
-    errors: list[DOIErrorResponse] = Field(None, title="List of errors")
+    new_state: str = Field(None, title="State")
+
 
 class DOICreateResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
-    state: DOIState = Field(None, title="State")
+    state: str = Field(None, title="State")
     mode: str = Field(None, title="Registration mode. AUTO or MANUAL")

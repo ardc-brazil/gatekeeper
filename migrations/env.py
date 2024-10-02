@@ -21,12 +21,14 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from app.database import Base # noqa: E402
-from app.model.db import casbin_rule # noqa: E402, F401
-from app.model.db import client # noqa: E402, F401
-from app.model.db import dataset # noqa: E402, F401
-from app.model.db import tenancy # noqa: E402, F401
-from app.model.db import user # noqa: E402, F401
+from app.database import Base  # noqa: E402
+from app.model.db import casbin_rule  # noqa: E402, F401
+from app.model.db import client  # noqa: E402, F401
+from app.model.db import dataset  # noqa: E402, F401
+from app.model.db import tenancy  # noqa: E402, F401
+from app.model.db import user  # noqa: E402, F401
+from app.model.db import doi  # noqa: E402, F401
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -34,8 +36,10 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+
 def get_url() -> PostgresDsn:
     return settings.DATABASE_URL
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

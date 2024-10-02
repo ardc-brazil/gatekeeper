@@ -1,6 +1,8 @@
+from dataclasses import asdict
 import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from app.exception.bad_request import BadRequestException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
@@ -27,6 +29,13 @@ async def unauthorized_exception_handler(request: Request, exc: UnauthorizedExce
 async def illegal_state_exception_handler(request: Request, exc: IllegalStateException):
     logger.info(f"Unauthorized exception: {exc}")
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+async def bad_request_exception_handler(request: Request, exc: BadRequestException):
+    logger.error(f"Bad request exception: {exc}")
+    return JSONResponse(
+        status_code=400, content=[asdict(error) for error in exc.errors]
+    )
 
 
 async def generic_exception_handler(request: Request, exc: Exception):

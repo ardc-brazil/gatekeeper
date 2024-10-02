@@ -6,6 +6,7 @@ from app.service.client import ClientService
 from app.service.secret import check_password
 from casbin import SyncedEnforcer
 
+
 class AuthService:
     def __init__(
         self,
@@ -40,7 +41,10 @@ class AuthService:
 
         try:
             return jwt.decode(
-                jwt=user_token, key=self._file_upload_token_secret, algorithms=["HS256"], audience="file_upload"
+                jwt=user_token,
+                key=self._file_upload_token_secret,
+                algorithms=["HS256"],
+                audience="file_upload",
             )
         except jwt.ExpiredSignatureError:
             logging.warning(f"expired jwt: {user_token}")

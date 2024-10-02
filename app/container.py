@@ -3,11 +3,14 @@ from dependency_injector import containers, providers
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
 
+from app.gateway.doi.doi import DOIGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
+from app.repository.doi import DOIRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
+from app.service.doi import DOIService
 from app.service.tus import TusService
 from app.service.user import UserService
 
@@ -39,7 +42,7 @@ class Container(containers.DeclarativeContainer):
     config.from_dict(json_config)
 
     db = providers.Singleton(
-        Database, 
+        Database,
         db_url=config.DATABASE_URL,
         log_enabled=config.DATABASE_LOG_ENABLED,
     )
@@ -92,6 +95,25 @@ class Container(containers.DeclarativeContainer):
         file_upload_token_secret=config.AUTH_FILE_UPLOAD_TOKEN_SECRET,
     )
 
+    doi_gateway = providers.Factory(
+        DOIGateway,
+        base_url=config.DOI_BASE_URL,
+        login=config.DOI_LOGIN,
+        password=config.DOI_PASSWORD,
+    )
+
+    doi_repository = providers.Factory(
+        DOIRepository,
+        session_factory=db.provided.session,
+    )
+
+    doi_service = providers.Factory(
+        DOIService,
+        doi_gateway=doi_gateway,
+        doi_repository=doi_repository,
+        doi_prefix=config.DOI_PREFIX,
+    )
+
     dataset_repository = providers.Factory(
         DatasetRepository,
         session_factory=db.provided.session,
@@ -107,6 +129,7 @@ class Container(containers.DeclarativeContainer):
         repository=dataset_repository,
         version_repository=dataset_version_repository,
         user_service=user_service,
+        doi_service=doi_service,
     )
 
     tus_service = providers.Factory(

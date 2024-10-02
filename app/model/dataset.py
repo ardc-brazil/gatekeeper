@@ -34,6 +34,7 @@ class DatasetVersion:
     created_by: UUID = None
     design_state: DesignState = None
     files: list[DataFile] = field(default_factory=lambda: [])
+    doi: dict = None
 
 
 @dataclass

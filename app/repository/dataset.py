@@ -111,7 +111,7 @@ class DatasetRepository:
 
             if not query_params.include_disabled:
                 query = query.filter(Dataset.is_enabled == true())
-                
+
             if query_params.design_state is not None:
                 query = query.filter(Dataset.design_state == query_params.design_state)
 
@@ -129,6 +129,8 @@ class DatasetRepository:
                     Dataset.versions.any(DatasetVersion.name == query_params.version)
                 )
 
-            query = query.filter(Dataset.tenancy.in_(tenancies)).order_by(Dataset.created_at.desc())
+            query = query.filter(Dataset.tenancy.in_(tenancies)).order_by(
+                Dataset.created_at.desc()
+            )
 
             return query.all()

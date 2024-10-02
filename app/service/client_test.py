@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.model.db.client import Client as DBModel
-from app.model.client import Client
 from app.repository.client import ClientRepository
 from app.exception.not_found import NotFoundException
 from app.service.client import ClientService
@@ -59,9 +58,13 @@ class TestClientService(unittest.TestCase):
             mock_hash_password.return_value = "hashed_secret"
             returned_key = self.client_service.create(name, secret)
 
-        self.repository.upsert.assert_called_once_with(
-            client=Client(name=name, secret="hashed_secret", is_enabled=True)
-        )
+        self.repository.upsert.assert_called_once()
+        called_arg = self.repository.upsert.call_args[1]["client"]
+        self.assertEqual(called_arg.name, name)
+        self.assertEqual(called_arg.secret, "hashed_secret")
+        self.assertTrue(called_arg.is_enabled)
+        self.assertEqual(called_arg.key, None)
+
         self.assertEqual(returned_key, created_key)
 
     def test_update_success(self):
