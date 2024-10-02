@@ -2,8 +2,10 @@ import logging
 from dependency_injector import containers, providers
 from casbin_sqlalchemy_adapter import Adapter as CasbinSQLAlchemyAdapter
 from casbin import SyncedEnforcer
+from minio import Minio
 
 from app.gateway.doi.doi import DOIGateway
+from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
@@ -113,6 +115,19 @@ class Container(containers.DeclarativeContainer):
         doi_repository=doi_repository,
         doi_prefix=config.DOI_PREFIX,
     )
+    
+    minio_client = providers.Factory(
+        Minio,
+        config.MINIO_URL,
+        access_key=config.MINIO_ACCESS_KEY,
+        secret_key=config.MINIO_SECRET_KEY,
+        secure=False,
+    )
+
+    minio_gateway = providers.Factory(
+        ObjectStorageGateway,
+        minio_client=minio_client,
+    )
 
     dataset_repository = providers.Factory(
         DatasetRepository,
@@ -130,6 +145,8 @@ class Container(containers.DeclarativeContainer):
         version_repository=dataset_version_repository,
         user_service=user_service,
         doi_service=doi_service,
+        minio_gateway=minio_gateway,
+        dataset_bucket=config.MINIO_DATASET_BUCKET,
     )
 
     tus_service = providers.Factory(

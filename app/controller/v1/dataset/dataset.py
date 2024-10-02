@@ -372,7 +372,25 @@ async def delete_doi(
     )
     return {}
 
-
+# GET /datasets/:dataset_id/versions/:version/files/:file_id
+@router.get("/{dataset_id}/versions/{version_name}/files/{file_id}")
+@inject
+async def get_file_download_url(
+    dataset_id: UUID,
+    version_name: str,
+    file_id: UUID,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+):
+    file = service.get_file_download_url(
+        dataset_id=dataset_id,
+        version_name=version_name,
+        file_id=file_id,
+        user_id=user_id,
+        tenancies=tenancies,
+    )
+    return {"url": file}
 # TODO: We need to create new endpoints to manipulate dataset versions for a dataset
 # POST /datasets/:dataset_id/versions/
 #   Creates a new dataset version for a dataset.

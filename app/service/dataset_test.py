@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
+from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.doi import DOIService
@@ -30,11 +31,14 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_version_repository = Mock(spec=DatasetVersionRepository)
         self.user_service = Mock(spec=UserService)
         self.doi_service = Mock(spec=DOIService)
+        self.minio_gateway = Mock(spec=ObjectStorageGateway)
         self.dataset_service = DatasetService(
             repository=self.dataset_repository,
             version_repository=self.dataset_version_repository,
             user_service=self.user_service,
             doi_service=self.doi_service,
+            minio_gateway=self.minio_gateway,
+            dataset_bucket="dataset_bucket",
         )
 
     def mock_user(self, tenancies):
