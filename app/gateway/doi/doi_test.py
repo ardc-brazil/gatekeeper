@@ -29,8 +29,8 @@ class TestDOIGateway(unittest.TestCase):
         self.password = "test-password"
 
         self.gateway = DOIGateway(
-            base_url=self.base_url, 
-            login=self.login, 
+            base_url=self.base_url,
+            login=self.login,
             password=self.password,
         )
 
@@ -85,10 +85,15 @@ class TestDOIGateway(unittest.TestCase):
     def test_update_success(self, mock_put):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"data": {"id": f"{self.doi_payload.data.attributes.prefix}/test-doi"}}
+        mock_response.json.return_value = {
+            "data": {"id": f"{self.doi_payload.data.attributes.prefix}/test-doi"}
+        }
         mock_put.return_value = mock_response
 
-        response = self.gateway.update(doi=self.doi_payload, identifier=f"{self.doi_payload.data.attributes.prefix}/test-doi")
+        response = self.gateway.update(
+            doi=self.doi_payload,
+            identifier=f"{self.doi_payload.data.attributes.prefix}/test-doi",
+        )
 
         mock_put.assert_called_once_with(
             f"{self.base_url}/dois/{self.doi_payload.data.attributes.prefix}/test-doi",
@@ -97,7 +102,10 @@ class TestDOIGateway(unittest.TestCase):
             json=dataclasses.asdict(self.doi_payload),
         )
 
-        self.assertEqual(response, {"data": {"id": f"{self.doi_payload.data.attributes.prefix}/test-doi"}})
+        self.assertEqual(
+            response,
+            {"data": {"id": f"{self.doi_payload.data.attributes.prefix}/test-doi"}},
+        )
 
     @patch("app.gateway.doi.doi.requests.delete")
     def test_delete_success(self, mock_delete):

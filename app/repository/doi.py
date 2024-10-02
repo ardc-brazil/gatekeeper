@@ -28,7 +28,7 @@ class DOIRepository:
                 return doi
         except IntegrityError:
             raise ConflictException(f"doi_already_exists: {doi.identifier}")
-    
+
     def delete(self, identifier: DOI) -> None:
         with self._session_factory() as session:
             session.delete(identifier)

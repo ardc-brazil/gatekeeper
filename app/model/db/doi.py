@@ -1,12 +1,6 @@
 import sqlalchemy
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy import (
-    Index,
-    Column,
-    String,
-    DateTime,
-    ForeignKey
-)
+from sqlalchemy import Index, Column, String, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from app.database import Base
 

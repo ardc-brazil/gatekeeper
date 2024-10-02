@@ -54,7 +54,7 @@ class DOIGateway:
 
         return response.json()
 
-    def delete(self, repository: str,  identifier: str) -> None:
+    def delete(self, repository: str, identifier: str) -> None:
         url = f"{self._base_url}/dois/{repository}/{identifier}"
         response = requests.delete(
             url, headers=self._base_headers, auth=(self._login, self._password)

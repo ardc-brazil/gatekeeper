@@ -10,10 +10,8 @@ from app.model.db.doi import DOI as DOIDb
 
 class DOIService:
     def __init__(
-            self, 
-            doi_gateway: DOIGateway, 
-            doi_repository: DOIRepository,
-            doi_prefix: str):
+        self, doi_gateway: DOIGateway, doi_repository: DOIRepository, doi_prefix: str
+    ):
         self._doi_gateway = doi_gateway
         self._doi_repository = doi_repository
         self._doi_prefix = doi_prefix
@@ -57,7 +55,7 @@ class DOIService:
 
     def get(self, doi: str) -> DOI:
         return self._doi_gateway.get(doi)
-    
+
     def get_from_database(self, identifier: str) -> DOIDb:
         return self._doi_repository.fetch(identifier=identifier)
 
@@ -65,7 +63,9 @@ class DOIService:
         self._validate_doi(doi)
 
         if doi.mode == Mode.AUTO:
-            res = self._doi_gateway.post(model_to_payload(repository=self._doi_prefix, doi=doi))
+            res = self._doi_gateway.post(
+                model_to_payload(repository=self._doi_prefix, doi=doi)
+            )
             doi.identifier = res["data"]["id"]
             doi.provider_response = res
 
@@ -73,7 +73,7 @@ class DOIService:
         doi.id = db_res.id
 
         return doi
-    
+
     def _get_valid_event_from_state(self, doi: DOIDb, new_state: State) -> Event:
         if doi.state == State.DRAFT.name and new_state == State.FINDABLE:
             return Event.PUBLISH
@@ -85,20 +85,21 @@ class DOIService:
             return Event.HIDE
         else:
             raise IllegalStateException("invalid_state_transition")
-        
 
     def change_state(self, identifier: str, new_state: State):
         from_database: DOIDb = self.get_from_database(identifier)
 
         if from_database.mode == Mode.MANUAL.name:
             raise IllegalStateException("manual_doi_cannot_change_state")
-        
+
         if from_database.mode == Mode.AUTO.name:
             event: Event = self._get_valid_event_from_state(from_database, new_state)
-            res = self._doi_gateway.update(change_state_to_payload(doi=from_database, event=event), identifier)
+            res = self._doi_gateway.update(
+                change_state_to_payload(doi=from_database, event=event), identifier
+            )
             from_database.doi = res
             from_database.state = new_state.name
-        
+
         self._doi_repository.upsert(doi=from_database)
 
     def delete(self, identifier: str) -> None:
@@ -109,8 +110,10 @@ class DOIService:
 
         if existing_doi.state != State.DRAFT.name:
             raise IllegalStateException("doi_not_in_draft_state")
-        
+
         if existing_doi.mode == Mode.AUTO.name:
-            self._doi_gateway.delete(repository=identifier.split("/")[0], identifier=identifier.split("/")[1])
-        
+            self._doi_gateway.delete(
+                repository=identifier.split("/")[0], identifier=identifier.split("/")[1]
+            )
+
         self._doi_repository.delete(doi=existing_doi)

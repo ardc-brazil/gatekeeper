@@ -1,8 +1,18 @@
 import unittest
 from unittest.mock import MagicMock
-from app.model.doi import Mode as ModeModel, State as StateModel, Title as TitleModel, Event as EventModel
+from app.model.doi import (
+    Mode as ModeModel,
+    State as StateModel,
+    Title as TitleModel,
+    Event as EventModel,
+)
 from app.model.db.doi import DOI as DOIDb
-from app.adapter.doi import change_state_to_payload, database_to_model, model_to_database, model_to_payload
+from app.adapter.doi import (
+    change_state_to_payload,
+    database_to_model,
+    model_to_database,
+    model_to_payload,
+)
 from app.gateway.doi.resource import DOIPayload
 
 
@@ -22,7 +32,7 @@ class TestDOIAdapter(unittest.TestCase):
                     "creators": [{"name": "Creator One"}, {"name": "Creator Two"}],
                     "publisher": "Test Publisher",
                     "published": 2024,
-                    "types": {"resourceTypeGeneral": "Text"}
+                    "types": {"resourceTypeGeneral": "Text"},
                 }
             }
         }
@@ -50,7 +60,7 @@ class TestDOIAdapter(unittest.TestCase):
                         "creators": [{"name": "Creator One"}, {"name": "Creator Two"}],
                         "publisher": "Test Publisher",
                         "published": 2024,
-                        "types": {"resourceTypeGeneral": "Text"}
+                        "types": {"resourceTypeGeneral": "Text"},
                     }
                 }
             },
@@ -114,6 +124,7 @@ class TestDOIAdapter(unittest.TestCase):
         self.assertEqual(database_model.prefix, model.identifier.split("/")[0])
         self.assertEqual(database_model.suffix, model.identifier.split("/")[1])
         self.assertEqual(database_model.doi, model.provider_response)
+
 
 if __name__ == "__main__":
     unittest.main()

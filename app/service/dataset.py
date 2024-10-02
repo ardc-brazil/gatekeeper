@@ -416,17 +416,22 @@ class DatasetService:
             raise NotFoundException(
                 f"not_found: {version_name} for dataset {dataset_id}"
             )
-        
+
         if version.doi:
             raise IllegalStateException("doi_already_exists")
 
         doi.title = DOITitle(title=dataset.name)
-        
+
         doi.creators = [
-            DOICreator(name=author['name']) for author in dataset.data.get("authors", [])
+            DOICreator(name=author["name"])
+            for author in dataset.data.get("authors", [])
         ]
         doi.publication_year = dataset.created_at.year
-        doi.publisher = DOIPublisher(publisher=dataset.data.get("institution")) if dataset.data.get("institution") else None
+        doi.publisher = (
+            DOIPublisher(publisher=dataset.data.get("institution"))
+            if dataset.data.get("institution")
+            else None
+        )
         doi.url = f"https://datamap.pcs.usp.br/doi/dataset/{dataset.id}/version/{version.name}"
         doi.state = DOIState.DRAFT
         doi.dataset_version_name = version_name

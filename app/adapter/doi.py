@@ -1,5 +1,5 @@
 from app.model.doi import (
-    DOI as DOIModel, 
+    DOI as DOIModel,
     Event as EventModel,
     State as StateModel,
     Mode as ModeModel,
@@ -43,10 +43,18 @@ def database_to_model(doi: DOIDb) -> DOIModel:
 
 
 def model_to_payload(repository: str, doi: DOIModel) -> DOIPayload:
-    creators = [DOIPayloadCreator(name=creator.name) for creator in doi.creators] if doi.creators else []
+    creators = (
+        [DOIPayloadCreator(name=creator.name) for creator in doi.creators]
+        if doi.creators
+        else []
+    )
     titles = [DOIPayloadTitle(title=doi.title.title)] if doi.title else []
 
-    resource_type = DOIPayloadTypes(resourceTypeGeneral=doi.resource_type) if doi.resource_type else None
+    resource_type = (
+        DOIPayloadTypes(resourceTypeGeneral=doi.resource_type)
+        if doi.resource_type
+        else None
+    )
 
     return DOIPayload(
         data=DOIPayloadData(
@@ -61,6 +69,7 @@ def model_to_payload(repository: str, doi: DOIModel) -> DOIPayload:
             )
         )
     )
+
 
 def database_to_payload(doi: DOIDb) -> DOIPayload:
     doi_data = doi.doi if doi.doi else {}
@@ -88,13 +97,14 @@ def database_to_payload(doi: DOIDb) -> DOIPayload:
             )
         )
     )
-    
+
 
 def change_state_to_payload(doi: DOIDb, event: EventModel) -> DOIPayload:
     payload: DOIPayload = database_to_payload(doi)
     payload.data.attributes.event = event.name
 
     return payload
+
 
 def model_to_database(doi: DOIModel) -> DOIDb:
     return DOIDb(
