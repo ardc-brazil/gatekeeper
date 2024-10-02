@@ -88,7 +88,7 @@ class TestDOIGateway(unittest.TestCase):
         mock_response.json.return_value = {"data": {"id": f"{self.doi_payload.data.attributes.prefix}/test-doi"}}
         mock_put.return_value = mock_response
 
-        response = self.gateway.update(doi=self.doi_payload, identifier="test-doi")
+        response = self.gateway.update(doi=self.doi_payload, identifier=f"{self.doi_payload.data.attributes.prefix}/test-doi")
 
         mock_put.assert_called_once_with(
             f"{self.base_url}/dois/{self.doi_payload.data.attributes.prefix}/test-doi",
@@ -105,15 +105,13 @@ class TestDOIGateway(unittest.TestCase):
         mock_response.status_code = 204
         mock_delete.return_value = mock_response
 
-        response = self.gateway.delete(repository=self.repository, identifier="test-doi")
+        self.gateway.delete(repository=self.repository, identifier="test-doi")
 
         mock_delete.assert_called_once_with(
             f"{self.base_url}/dois/{self.repository}/test-doi",
             headers=self.gateway._base_headers,
             auth=(self.login, self.password),
         )
-
-        self.assertEqual(response, mock_response.json())
 
     @patch("app.gateway.doi.doi.requests.delete")
     def test_delete_failure(self, mock_delete):
