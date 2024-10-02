@@ -3,7 +3,7 @@ from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.gateway.doi.doi import DOIGateway
-from app.model.doi import DOI, Mode, Identifier, State, Event
+from app.model.doi import DOI, Mode, State, Event
 from app.repository.doi import DOIRepository
 from app.model.db.doi import DOI as DOIDb
 
@@ -101,7 +101,7 @@ class DOIService:
         
         self._doi_repository.upsert(doi=from_database)
 
-    def delete(self, identifier: str) -> dict:
+    def delete(self, identifier: str) -> None:
         existing_doi: DOIDb = self.get_from_database(identifier)
 
         if not existing_doi:
