@@ -102,5 +102,6 @@ class DOICreateResponse(BaseModel):
     state: str = Field(None, title="State")
     mode: str = Field(None, title="Registration mode. AUTO or MANUAL")
 
+
 class DataFileDownloadResponse(BaseModel):
     url: str = Field(..., title="Download URL")

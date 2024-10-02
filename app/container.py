@@ -115,7 +115,7 @@ class Container(containers.DeclarativeContainer):
         doi_repository=doi_repository,
         doi_prefix=config.DOI_PREFIX,
     )
-    
+
     minio_client = providers.Factory(
         Minio,
         config.MINIO_URL,

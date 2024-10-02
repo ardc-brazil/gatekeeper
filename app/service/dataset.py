@@ -540,10 +540,16 @@ class DatasetService:
         self._doi_service.delete(identifier=version.doi.identifier)
 
     def get_file_download_url(
-        self, dataset_id: UUID, version_name: str, file_id: UUID, user_id: UUID, tenancies: list[str] = []
+        self,
+        dataset_id: UUID,
+        version_name: str,
+        file_id: UUID,
+        user_id: UUID,
+        tenancies: list[str] = [],
     ) -> str:
         dataset: DatasetDBModel = self.fetch_dataset(
-            dataset_id=dataset_id, user_id=user_id,
+            dataset_id=dataset_id,
+            user_id=user_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
         )
 
@@ -567,5 +573,7 @@ class DatasetService:
             raise NotFoundException(f"not_found: {file_id}")
 
         return self._minio_gateway.get_pre_signed_url(
-            bucket_name=self._dataset_bucket, object_name=file.storage_file_name, original_file_name=file.name
+            bucket_name=self._dataset_bucket,
+            object_name=file.storage_file_name,
+            original_file_name=file.name,
         )

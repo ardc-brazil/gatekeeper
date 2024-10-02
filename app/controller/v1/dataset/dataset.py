@@ -373,6 +373,7 @@ async def delete_doi(
     )
     return {}
 
+
 # GET /datasets/:dataset_id/versions/:version/files/:file_id
 @router.get("/{dataset_id}/versions/{version_name}/files/{file_id}")
 @inject
@@ -392,6 +393,7 @@ async def get_file_download_url(
         tenancies=tenancies,
     )
     return DataFileDownloadResponse(url=file)
+
 
 # TODO: We need to create new endpoints to manipulate dataset versions for a dataset
 # POST /datasets/:dataset_id/versions/
