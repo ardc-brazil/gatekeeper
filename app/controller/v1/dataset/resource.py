@@ -101,3 +101,7 @@ class DOICreateResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
     state: str = Field(None, title="State")
     mode: str = Field(None, title="Registration mode. AUTO or MANUAL")
+
+
+class DataFileDownloadResponse(BaseModel):
+    url: str = Field(..., title="Download URL")

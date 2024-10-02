@@ -4,6 +4,7 @@ import json
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
+from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.model.doi import (
     DOI,
     State as DOIState,
@@ -37,12 +38,16 @@ class DatasetService:
         version_repository: DatasetVersionRepository,
         user_service: UserService,
         doi_service: DOIService,
+        minio_gateway: ObjectStorageGateway,
+        dataset_bucket: str,
     ):
         self._logger = logging.getLogger("service:DatasetService")
         self._repository = repository
         self._version_repository = version_repository
         self._user_service = user_service
         self._doi_service = doi_service
+        self._minio_gateway = minio_gateway
+        self._dataset_bucket = dataset_bucket
 
     def _adapt_file(self, file: DataFileDBModel) -> DataFile:
         return DataFile(
@@ -533,3 +538,42 @@ class DatasetService:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
         self._doi_service.delete(identifier=version.doi.identifier)
+
+    def get_file_download_url(
+        self,
+        dataset_id: UUID,
+        version_name: str,
+        file_id: UUID,
+        user_id: UUID,
+        tenancies: list[str] = [],
+    ) -> str:
+        dataset: DatasetDBModel = self.fetch_dataset(
+            dataset_id=dataset_id,
+            user_id=user_id,
+            tenancies=self._determine_tenancies(user_id, tenancies),
+        )
+
+        if dataset is None:
+            raise NotFoundException(f"not_found: {dataset_id}")
+
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
+
+        if version is None:
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+
+        file: DataFileDBModel = next(
+            (file for file in version.files if file.id == file_id), None
+        )
+
+        if file is None:
+            raise NotFoundException(f"not_found: {file_id}")
+
+        return self._minio_gateway.get_pre_signed_url(
+            bucket_name=self._dataset_bucket,
+            object_name=file.storage_file_name,
+            original_file_name=file.name,
+        )

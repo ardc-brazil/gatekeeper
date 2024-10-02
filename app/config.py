@@ -35,6 +35,11 @@ class Config(BaseSettings):
     DOI_LOGIN: str = Field(..., description="Login for DOI service")
     DOI_PASSWORD: str = Field(..., description="Password for DOI service")
 
+    MINIO_URL: str = Field(..., description="Minio URL")
+    MINIO_ACCESS_KEY: str = Field(..., description="Minio access key")
+    MINIO_SECRET_KEY: str = Field(..., description="Minio secret key")
+    MINIO_DATASET_BUCKET: str = Field(..., description="Minio dataset bucket")
+
     @field_validator("DATABASE_URL", mode="before")
     def build_database_url(cls, value: Optional[str], values: ValidationInfo) -> str:
         if isinstance(value, str):
