@@ -1,6 +1,7 @@
 import logging
 from uuid import UUID
 import json
+from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
@@ -424,7 +425,9 @@ class DatasetService:
             )
 
         if version.doi:
-            raise IllegalStateException("doi_already_exists")
+            raise BadRequestException(
+                errors=[ErrorDetails(code="already_exists")]
+            )
 
         doi.title = DOITitle(title=dataset.name)
 
