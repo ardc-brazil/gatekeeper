@@ -420,14 +420,10 @@ class DatasetService:
         )
 
         if version is None:
-            raise NotFoundException(
-                f"not_found: {version_id} for dataset {dataset_id}"
-            )
+            raise NotFoundException(f"not_found: {version_name} for dataset {dataset_id}")
 
         if version.doi:
-            raise BadRequestException(
-                errors=[ErrorDetails(code="already_exists")]
-            )
+            raise BadRequestException(errors=[ErrorDetails(code="already_exists")])
 
         doi.title = DOITitle(title=dataset.name)
 
@@ -512,7 +508,7 @@ class DatasetService:
         if not version.doi:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
-        return database_to_model(doi=version.doi)
+        return DOIAdapter.database_to_model(doi=version.doi)
 
     def delete_doi(
         self,

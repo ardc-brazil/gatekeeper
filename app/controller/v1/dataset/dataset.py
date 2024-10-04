@@ -64,7 +64,13 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         design_state=version.design_state.name,
         is_enabled=version.is_enabled,
         files=[_adapt_data_file(file) for file in version.files],
-        doi=DOIResponse(identifier=version.doi.identifier, state=version.doi.state.name, mode=version.doi.mode.name) if version.doi is not None else None,
+        doi=DOIResponse(
+            identifier=version.doi.identifier,
+            state=version.doi.state.name,
+            mode=version.doi.mode.name,
+        )
+        if version.doi is not None
+        else None,
     )
 
 

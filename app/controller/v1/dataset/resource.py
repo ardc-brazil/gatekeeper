@@ -3,7 +3,6 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from app.model.doi import DOI
 
 
 class DataFileResponse(BaseModel):
@@ -17,6 +16,7 @@ class DataFileResponse(BaseModel):
     storage_file_name: Optional[str] = Field(None, title="Storage file name")
     storage_path: Optional[str] = Field(None, title="Storage path")
     created_by: Optional[UUID] = Field(None, title="Created by")
+
 
 class DOIResponse(BaseModel):
     identifier: str = Field(..., title="DOI identifier")
