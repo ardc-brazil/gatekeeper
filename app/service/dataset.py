@@ -28,7 +28,7 @@ from app.model.db.dataset import (
     DatasetVersion as DatasetVersionDBModel,
     DataFile as DataFileDBModel,
 )
-from app.adapter.doi import database_to_model
+from app.adapter import doi as DOIAdapter
 
 
 class DatasetService:
@@ -74,6 +74,7 @@ class DatasetService:
             is_enabled=version.is_enabled,
             design_state=version.design_state,
             files=[self._adapt_file(file=file) for file in version.files],
+            doi=DOIAdapter.database_to_model(doi=version.doi) if version.doi else None,
         )
 
     def _adapt_dataset(self, dataset: DatasetDBModel) -> Dataset:
@@ -419,7 +420,7 @@ class DatasetService:
 
         if version is None:
             raise NotFoundException(
-                f"not_found: {version_name} for dataset {dataset_id}"
+                f"not_found: {version_id} for dataset {dataset_id}"
             )
 
         if version.doi:

@@ -1,3 +1,4 @@
+from uuid import UUID
 from app.model.dataset import DesignState
 from app.model.db.dataset import DatasetVersion
 from sqlalchemy import desc
@@ -42,3 +43,7 @@ class DatasetVersionRepository:
                 .filter_by(dataset_id=dataset_id, name=version_name)
                 .first()
             )
+    
+    def fetch_by_id(self, id: UUID) -> DatasetVersion:
+        with self._session_factory() as session:
+            return session.query(DatasetVersion).filter(DatasetVersion.id == id).one_or_none()
