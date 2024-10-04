@@ -64,6 +64,13 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         design_state=version.design_state.name,
         is_enabled=version.is_enabled,
         files=[_adapt_data_file(file) for file in version.files],
+        doi=DOIResponse(
+            identifier=version.doi.identifier,
+            state=version.doi.state.name,
+            mode=version.doi.mode.name,
+        )
+        if version.doi is not None
+        else None,
     )
 
 
@@ -299,7 +306,7 @@ async def change_doi_state(
     service.change_doi_state(
         dataset_id=dataset_id,
         version_name=version_name,
-        new_state=DOIState[change_state_request.state],
+        new_state=DOIState[change_state_request.state.upper()],
         user_id=user_id,
         tenancies=tenancies,
     )
@@ -311,7 +318,7 @@ async def change_doi_state(
 @router.post("/{dataset_id}/versions/{version_name}/doi")
 @inject
 async def create_doi(
-    dataset_id: str,
+    dataset_id: UUID,
     version_name: str,
     create_doi_request: DOICreateRequest,
     user_id: UUID = Depends(parse_user_header),
@@ -323,7 +330,7 @@ async def create_doi(
         version_name=version_name,
         doi=DOI(
             identifier=create_doi_request.identifier,
-            mode=DOIMode[create_doi_request.mode],
+            mode=DOIMode[create_doi_request.mode.upper()],
         ),
         user_id=user_id,
         tenancies=tenancies,

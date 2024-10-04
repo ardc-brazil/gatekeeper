@@ -3,7 +3,6 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from app.model.doi import DOI
 
 
 class DataFileResponse(BaseModel):
@@ -19,13 +18,19 @@ class DataFileResponse(BaseModel):
     created_by: Optional[UUID] = Field(None, title="Created by")
 
 
+class DOIResponse(BaseModel):
+    identifier: str = Field(..., title="DOI identifier")
+    state: str = Field(..., title="State")
+    mode: str = Field(..., title="Registration mode. AUTO or MANUAL")
+
+
 class DatasetVersionResponse(BaseModel):
     id: UUID = Field(..., title="Version ID")
     name: str = Field(..., title="Name")
     design_state: str = Field(..., title="Design state")
     is_enabled: bool = Field(..., title="Is enabled")
     files: list[DataFileResponse] = Field([], title="List of data files")
-    doi: Optional[DOI] = Field(None, title="DOI")
+    doi: Optional[DOIResponse] = Field(None, title="DOI")
 
 
 class DatasetGetResponse(BaseModel):
@@ -85,12 +90,6 @@ class DOICreateRequest(BaseModel):
 
 class DOIChangeStateRequest(BaseModel):
     state: str = Field(..., title="State")
-
-
-class DOIResponse(BaseModel):
-    identifier: str = Field(..., title="DOI identifier")
-    state: str = Field(..., title="State")
-    mode: str = Field(..., title="Registration mode. AUTO or MANUAL")
 
 
 class DOIChangeStateResponse(BaseModel):

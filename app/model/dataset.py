@@ -3,6 +3,8 @@ from datetime import datetime
 import enum
 from uuid import UUID
 
+from app.model.doi import DOI
+
 
 class DesignState(enum.Enum):
     DRAFT = "draft"
@@ -34,7 +36,7 @@ class DatasetVersion:
     created_by: UUID = None
     design_state: DesignState = None
     files: list[DataFile] = field(default_factory=lambda: [])
-    doi: dict = None
+    doi: DOI = None
 
 
 @dataclass

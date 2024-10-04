@@ -27,7 +27,7 @@ async def unauthorized_exception_handler(request: Request, exc: UnauthorizedExce
 
 
 async def illegal_state_exception_handler(request: Request, exc: IllegalStateException):
-    logger.info(f"Unauthorized exception: {exc}")
+    logger.info(f"Illegal State exception: {exc}")
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 

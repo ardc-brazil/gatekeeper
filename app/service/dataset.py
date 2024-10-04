@@ -1,6 +1,7 @@
 import logging
 from uuid import UUID
 import json
+from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
@@ -28,7 +29,7 @@ from app.model.db.dataset import (
     DatasetVersion as DatasetVersionDBModel,
     DataFile as DataFileDBModel,
 )
-from app.adapter.doi import database_to_model
+from app.adapter import doi as DOIAdapter
 
 
 class DatasetService:
@@ -74,6 +75,7 @@ class DatasetService:
             is_enabled=version.is_enabled,
             design_state=version.design_state,
             files=[self._adapt_file(file=file) for file in version.files],
+            doi=DOIAdapter.database_to_model(doi=version.doi) if version.doi else None,
         )
 
     def _adapt_dataset(self, dataset: DatasetDBModel) -> Dataset:
@@ -418,12 +420,10 @@ class DatasetService:
         )
 
         if version is None:
-            raise NotFoundException(
-                f"not_found: {version_name} for dataset {dataset_id}"
-            )
+            raise NotFoundException(f"not_found: {version_name} for dataset {dataset_id}")
 
         if version.doi:
-            raise IllegalStateException("doi_already_exists")
+            raise BadRequestException(errors=[ErrorDetails(code="already_exists")])
 
         doi.title = DOITitle(title=dataset.name)
 
@@ -508,7 +508,7 @@ class DatasetService:
         if not version.doi:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
-        return database_to_model(doi=version.doi)
+        return DOIAdapter.database_to_model(doi=version.doi)
 
     def delete_doi(
         self,
