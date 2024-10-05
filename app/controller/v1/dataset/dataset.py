@@ -330,7 +330,7 @@ async def create_doi(
         version_name=version_name,
         doi=DOI(
             identifier=create_doi_request.identifier,
-            mode=DOIMode[create_doi_request.mode.upper()],
+            mode=DOIMode[create_doi_request.mode],
         ),
         user_id=user_id,
         tenancies=tenancies,
