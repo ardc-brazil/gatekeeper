@@ -122,6 +122,11 @@ class Container(containers.DeclarativeContainer):
         access_key=config.MINIO_ACCESS_KEY,
         secret_key=config.MINIO_SECRET_KEY,
         secure=False,
+        # Set a default region to avoid client instantiation try 
+        # to connect to the MINIO to detect the right region before 
+        # generating pre-signed-urls.
+        # More details at: https://github.com/minio/minio-py/issues/759#issuecomment-490277280
+        region=config.MINIO_DEFAULT_REGION_ID,
     )
 
     minio_gateway = providers.Factory(

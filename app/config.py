@@ -39,6 +39,7 @@ class Config(BaseSettings):
     MINIO_ACCESS_KEY: str = Field(..., description="Minio access key")
     MINIO_SECRET_KEY: str = Field(..., description="Minio secret key")
     MINIO_DATASET_BUCKET: str = Field(..., description="Minio dataset bucket")
+    MINIO_DEFAULT_REGION_ID: str = Field(..., description="Minio default region id")
 
     @field_validator("DATABASE_URL", mode="before")
     def build_database_url(cls, value: Optional[str], values: ValidationInfo) -> str:
