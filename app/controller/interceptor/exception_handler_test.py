@@ -17,7 +17,6 @@ class TestExceptionHandler(unittest.IsolatedAsyncioTestCase):
         # then
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.body)
-        print(data)
         self.assertEqual(data['details'], 'Invalid client input')
         self.assertListEqual(data['errors'], [{'code':'missing_field', 'field': 'field1'}])
 
