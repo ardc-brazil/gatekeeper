@@ -11,6 +11,8 @@ class Config(BaseSettings):
     APP_TITLE: str = Field(default="gatekeeper")
     DEBUG: bool = False
     LOG_LEVEL: str = Field(..., description="Log level of the application")
+    CASBIN_LOG_LEVEL: str = Field(logging.INFO, description="Log level of the casbin enforcer")
+    SQLALCHEMY_LOG_LEVEL: str = Field(logging.WARN, description="Log level of the SQLAlchemy")
     ENVIRONMENT: str = Field(..., description="Environment of the application")
 
     POSTGRES_HOST: str = Field(..., description="Postgres database host")

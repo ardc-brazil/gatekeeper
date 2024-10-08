@@ -30,6 +30,7 @@ class DatasetVersionResponse(BaseModel):
     design_state: str = Field(..., title="Design state")
     is_enabled: bool = Field(..., title="Is enabled")
     files: list[DataFileResponse] = Field([], title="List of data files")
+    files_in: list[DataFileResponse] = Field([], title="List of data files")
     doi: Optional[DOIResponse] = Field(None, title="DOI")
 
 
@@ -104,3 +105,14 @@ class DOICreateResponse(BaseModel):
 
 class DataFileDownloadResponse(BaseModel):
     url: str = Field(..., title="Download URL")
+    
+class DatasetVersionCreateRequest(BaseModel):
+    datafilesPreviouslyUploaded: list[str] = Field([], title="List of data files ids already created to attach to this version")  
+    
+class DatasetVersionCreateResponse(BaseModel):
+    id: UUID = Field(..., title="Version ID")
+    name: str = Field(..., title="Name")
+    design_state: str = Field(..., title="Design state")
+    is_enabled: bool = Field(..., title="Is enabled")
+    files_in: list[DataFileResponse] = Field([], title="List of data files")
+    doi: Optional[DOIResponse] = Field(None, title="DOI")

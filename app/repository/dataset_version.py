@@ -31,10 +31,10 @@ class DatasetVersionRepository:
                 session.commit()
                 session.refresh(dataset_version)
                 return dataset_version
-        except IntegrityError:
+        except IntegrityError as e:
             raise ConflictException(
                 f"dataset_version_already_exists: {dataset_version.id}"
-            )
+            ) from e
 
     def fetch_version_by_name(self, dataset_id, version_name) -> DatasetVersion:
         with self._session_factory() as session:
