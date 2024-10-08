@@ -76,6 +76,9 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         else None,
     )
 
+def _adapt_dataset_version_creation(version: DatasetVersion) -> DatasetVersionCreateResponse:
+    return _adapt_dataset_version(version=version)
+
 
 def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
     return DatasetGetResponse(
@@ -422,11 +425,4 @@ async def create_dataset_version(
         tenancies=tenancies,
     )
     
-    return DatasetVersionCreateResponse(
-        id=new_version.id,
-        name=new_version.name,
-        design_state=new_version.design_state,
-        files_in=new_version.files_in,
-        is_enabled=new_version.is_enabled,
-        doi=new_version.doi
-    )
+    return _adapt_dataset_version_creation(version=new_version)
