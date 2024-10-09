@@ -28,7 +28,7 @@ from app.model.db.dataset import (
     DatasetVersion as DatasetVersionDBModel,
     DataFile as DataFileDBModel,
 )
-from app.adapter.doi import database_to_model
+from app.adapter import doi as DOIAdapter
 
 
 class DatasetService:
@@ -170,14 +170,20 @@ class DatasetService:
         if dataset_db is None:
             raise NotFoundException(f"not_found: {dataset_id}")
 
-        if self._should_create_new_version(dataset_db, dataset_request):
-            new_version = self._create_new_version(dataset_db, user_id)
-            dataset_db.versions.append(new_version)
-
         dataset_db.name = dataset_request.name
         dataset_db.data = dataset_request.data
         dataset_db.tenancy = dataset_request.tenancy
         dataset_db.owner_id = user_id
+
+        if self._should_create_new_version(dataset_db, dataset_request):
+            new_version = self._create_new_version(dataset_db, user_id)
+            dataset_db.versions.append(new_version)
+        else:
+            # TODO Should we get the specific version for doi, updated the last doi or update all dois for each version?
+            current_version = self._get_current_dataset_version(dataset_db.versions)
+            if current_version and current_version.doi is not None:
+                doi = self._create_doi_model(doi=DOIAdapter.database_to_model(current_version.doi), dataset=dataset_db, version=current_version, creator_id=user_id)
+                self._doi_service.update_metadata(doi=doi)
 
         self._repository.upsert(dataset=dataset_db)
 
@@ -397,6 +403,28 @@ class DatasetService:
             dataset.design_state = DesignState.PUBLISHED
             self._repository.upsert(dataset=dataset)
 
+    def _create_doi_model(self, doi: DOI, dataset: DatasetDBModel, version: DatasetVersionDBModel, creator_id: UUID) -> DOI:
+        doi.title = DOITitle(title=dataset.name)
+
+        doi.creators = [
+            DOICreator(name=author["name"])
+            for author in dataset.data.get("authors", [])
+        ]
+        doi.publication_year = dataset.created_at.year
+        doi.publisher = (
+            DOIPublisher(publisher=dataset.data.get("institution"))
+            if dataset.data.get("institution")
+            else None
+        )
+        doi.url = f"https://datamap.pcs.usp.br/doi/dataset/{dataset.id}/version/{version.name}"
+        doi.state = DOIState.DRAFT
+        doi.dataset_version_name = version.name
+        doi.dataset_id = dataset.id
+        doi.dataset_version_id = version.id
+        doi.created_by = creator_id
+
+        return doi
+
     def create_doi(
         self,
         dataset_id: UUID,
@@ -425,26 +453,9 @@ class DatasetService:
         if version.doi:
             raise IllegalStateException("doi_already_exists")
 
-        doi.title = DOITitle(title=dataset.name)
-
-        doi.creators = [
-            DOICreator(name=author["name"])
-            for author in dataset.data.get("authors", [])
-        ]
-        doi.publication_year = dataset.created_at.year
-        doi.publisher = (
-            DOIPublisher(publisher=dataset.data.get("institution"))
-            if dataset.data.get("institution")
-            else None
-        )
-        doi.url = f"https://datamap.pcs.usp.br/doi/dataset/{dataset.id}/version/{version.name}"
-        doi.state = DOIState.DRAFT
-        doi.dataset_version_name = version_name
-        doi.dataset_id = dataset_id
-        doi.dataset_version_id = version.id
-        doi.created_by = user_id
-
-        created_doi: DOI = self._doi_service.create(doi)
+        doi = self._create_doi_model(doi=doi, dataset=dataset, version=version, creator_id=user_id)
+        
+        created_doi: DOI = self._doi_service.create(doi=doi)
 
         return created_doi
 
@@ -508,7 +519,7 @@ class DatasetService:
         if not version.doi:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
-        return database_to_model(doi=version.doi)
+        return DOIAdapter.database_to_model(doi=version.doi)
 
     def delete_doi(
         self,

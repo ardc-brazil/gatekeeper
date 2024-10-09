@@ -117,3 +117,19 @@ class DOIService:
             )
 
         self._doi_repository.delete(doi=existing_doi)
+
+    def update_metadata(self, doi: DOI) -> None:
+        if doi is not None and doi.mode == Mode.AUTO:
+            from_database: DOIDb = self.get_from_database(doi.identifier)
+
+            if from_database is None:
+                raise NotFoundException(f"not_found: {doi.identifier}")
+            
+            if from_database.mode == Mode.MANUAL.name:
+                raise IllegalStateException("manual_doi_cannot_update_metadata")
+            
+            res = self._doi_gateway.update(doi=model_to_payload(repository=from_database.prefix, doi=doi), identifier=doi.identifier)
+            from_database.doi = res
+
+            self._doi_repository.upsert(doi=from_database)
+

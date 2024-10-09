@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import datetime
 import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
@@ -21,8 +22,18 @@ from app.model.db.dataset import (
     DatasetVersion as DatasetVersionDBModel,
     DataFile as DataFileDBModel,
 )
+from app.model.db.doi import DOI as DOIDb
 from app.service.dataset import DatasetService
 from app.model.user import User
+from app.model.doi import (
+    DOI,
+    State as DOIState,
+    Title as DOITitle,
+    Creator as DOICreator,
+    Publisher as DOIPublisher,
+    Mode as DOIMode,
+) 
+from app.adapter import doi as DOIAdapter
 
 
 class TestDatasetService(unittest.TestCase):
@@ -124,6 +135,7 @@ class TestDatasetService(unittest.TestCase):
         mocked_version.files = [Mock(spec=DataFileDBModel)]
         mocked_version.is_enabled = True
         mocked_version.design_state = DesignState.DRAFT
+        mocked_version.doi = None
 
         dataset_db.versions = [mocked_version]
 
@@ -444,6 +456,951 @@ class TestDatasetService(unittest.TestCase):
         # then
         self.assertEqual(str(cm.exception), str(expected_raise_fetch_user))
 
+    def test_update_dataset_update_doi_metadata_success(self):
+        dataset_id = uuid4()
+        user_id = uuid4()
+        now = datetime.datetime.now()
+        dataset_request = Dataset(
+            id=dataset_id,
+            name="Updated Dataset",
+            data={"key": "value", "authors": [{"name": "Author One"}], "institution": "Test Institution"},
+            tenancy=["tenant1"],
+            is_enabled=True,
+            created_at=datetime.datetime.now(),
+            updated_at=datetime.datetime.now(),
+            design_state=DesignState.PUBLISHED,
+            versions=[],
+            current_version=None,
+        )
 
+        # Existing dataset with a current version that has a DOI
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name="1",
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=DOIDb(
+                identifier="10.1234/example-doi",
+                mode="AUTO",
+                prefix="10.1234",
+                suffix="example-doi",
+                url="https://example.com/doi",
+                state="DRAFT",
+                created_at=now,
+                updated_at=now,
+                created_by=user_id,
+                version_id=uuid4(),
+                doi={"title": "Original Dataset", "creators": [{"name": "Author One"}], "publisher": "Test Institution", "publicationYear": now.year},
+            )
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+    
+        # Mock the update_metadata method to do nothing (assume success)
+        self.doi_service.update_metadata.return_value = None
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenant1"])
+
+        self.dataset_service.update_dataset(
+            dataset_id=dataset_id,
+            dataset_request=dataset_request,
+            user_id=user_id,
+            tenancies=["tenant1"],
+        )
+
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id,
+            tenancies=["tenant1"],
+        )
+        # Verify that the dataset was updated
+        self.assertEqual(existing_dataset.name, "Updated Dataset")
+        self.assertEqual(existing_dataset.data, {"key": "value", "authors": [{"name": "Author One"}], "institution": "Test Institution"})
+        self.assertEqual(existing_dataset.tenancy, ["tenant1"])
+        self.assertEqual(existing_dataset.owner_id, user_id)
+
+        # Verify that DOI was updated
+        expected_doi = DOI(
+            identifier="10.1234/example-doi",
+            mode=DOIMode.AUTO,
+            title=DOITitle(title="Updated Dataset"),
+            creators=[DOICreator(name="Author One")],
+            publisher=DOIPublisher(publisher="Test Institution"),
+            publication_year=now.year,
+            resource_type={},
+            url=f"https://datamap.pcs.usp.br/doi/dataset/{existing_dataset.id}/version/{existing_version.name}",
+            state=DOIState.DRAFT,
+            dataset_version_name=existing_version.name,
+            dataset_id=existing_dataset.id,
+            dataset_version_id=existing_version.id,
+            created_by=user_id,
+            provider_response={'title': 'Original Dataset', 'creators': [{'name': 'Author One'}], 'publisher': 'Test Institution', 'publicationYear': 2024},
+        )
+        self.doi_service.update_metadata.assert_called_once_with(doi=expected_doi)
+        self.dataset_repository.upsert.assert_called_once_with(dataset=existing_dataset)
+
+    def test_updated_dataset_update_doi_metadata_failure(self):
+        dataset_id = uuid4()
+        user_id = uuid4()
+        now = datetime.datetime.now()
+
+        dataset_request = Dataset(
+            id=dataset_id,
+            name="Updated Dataset",
+            data={"key": "value", "authors": [{"name": "Author One"}], "institution": "Test Institution"},
+            tenancy=["tenant1"],
+            is_enabled=True,
+            created_at=datetime.datetime.now(),
+            updated_at=datetime.datetime.now(),
+            design_state=DesignState.PUBLISHED,
+            versions=[],
+            current_version=None,
+        )
+
+        # Existing dataset with a current version that has a DOI
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name="1",
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=DOIDb(
+                identifier="10.1234/example-doi",
+                mode="AUTO",
+                prefix="10.1234",
+                suffix="example-doi",
+                url="https://example.com/doi",
+                state="DRAFT",
+                created_at=now,
+                updated_at=now,
+                created_by=user_id,
+                version_id=uuid4(),
+                doi={"title": "Original Dataset", "creators": [{"name": "Author One"}], "publisher": "Test Institution", "publicationYear": now.year},
+            )
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+        
+        # Mock the update_metadata method to simulate failure
+        self.doi_service.update_metadata.side_effect = Exception("Update failed")
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenant1"])
+
+        with self.assertRaises(Exception):
+            self.dataset_service.update_dataset(
+                dataset_id=dataset_id,
+                dataset_request=dataset_request,
+                user_id=user_id,
+                tenancies=["tenant1"],
+            )
+
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id,
+            tenancies=["tenant1"],
+        )
+        
+        expected_doi = DOI(
+            identifier="10.1234/example-doi",
+            mode=DOIMode.AUTO,
+            title=DOITitle(title="Updated Dataset"),
+            creators=[DOICreator(name="Author One")],
+            publisher=DOIPublisher(publisher="Test Institution"),
+            publication_year=now.year,
+            resource_type={},
+            url=f"https://datamap.pcs.usp.br/doi/dataset/{existing_dataset.id}/version/{existing_version.name}",
+            state=DOIState.DRAFT,
+            dataset_version_name=existing_version.name,
+            dataset_id=existing_dataset.id,
+            dataset_version_id=existing_version.id,
+            created_by=user_id,
+            provider_response={'title': 'Original Dataset', 'creators': [{'name': 'Author One'}], 'publisher': 'Test Institution', 'publicationYear': now.year},
+        )
+        self.doi_service.update_metadata.assert_called_once_with(doi=expected_doi)
+        self.dataset_repository.upsert.assert_not_called()
+    
+    def test_get_file_download_url_success(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        file_id = uuid4()
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        dataset_db = Mock(spec=DatasetDBModel)
+        mocked_version = Mock(spec=DatasetVersionDBModel)
+        mocked_version.files = [Mock(spec=DataFileDBModel)]
+        dataset_db.versions = [mocked_version]
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset_db
+        version_mock = Mock()
+        version_mock.files = [Mock(id=file_id, storage_file_name="file_name", name="file.txt")]
+        self.dataset_version_repository.fetch_version_by_name.return_value = version_mock
+
+        self.minio_gateway.get_pre_signed_url.return_value = "https://example.com/download/file_name"
+
+        result = self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
+
+        self.assertEqual(result, "https://example.com/download/file_name")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, is_enabled=True, tenancies=tenancies, latest_version=False, version_design_state=None, version_is_enabled=True)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_get_file_download_url_dataset_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        file_id = uuid4()
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
+        
+        self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
+
+    def test_get_file_download_url_version_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        file_id = uuid4()
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        dataset_db = Mock(spec=DatasetDBModel)
+        mocked_version = Mock(spec=DatasetVersionDBModel)
+        mocked_version.files = [Mock(spec=DataFileDBModel)]
+        dataset_db.versions = [mocked_version]
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset_db
+
+        self.dataset_version_repository.fetch_version_by_name.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+
+    def test_get_file_download_url_file_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        file_id = uuid4()
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        dataset_db = Mock(spec=DatasetDBModel)
+        mocked_version = Mock(spec=DatasetVersionDBModel)
+        mocked_version.files = [Mock(spec=DataFileDBModel)]
+        dataset_db.versions = [mocked_version]
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset_db
+        version_mock = Mock()
+        version_mock.files = [] # No files in the version
+        self.dataset_version_repository.fetch_version_by_name.return_value = version_mock
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {file_id}")
+
+    def test_create_doi_success(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        # Existing dataset with a current version that has a DOI
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name="1",
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=None,
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+
+        expected_doi = DOI(
+            identifier="10.1234/example-doi",
+            mode=DOIMode.AUTO,
+            title=DOITitle(title="Updated Dataset"),
+            creators=[DOICreator(name="Author One")],
+            publisher=DOIPublisher(publisher="Test Institution"),
+            publication_year=now.year,
+            resource_type={},
+            url=f"https://datamap.pcs.usp.br/doi/dataset/{existing_dataset.id}/version/{existing_version.name}",
+            state=DOIState.DRAFT,
+            dataset_version_name=existing_version.name,
+            dataset_id=existing_dataset.id,
+            dataset_version_id=existing_version.id,
+            created_by=user_id,
+            provider_response={'title': 'Original Dataset', 'creators': [{'name': 'Author One'}], 'publisher': 'Test Institution', 'publicationYear': 2024},
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.doi_service.create.return_value = expected_doi
+
+        result = self.dataset_service.create_doi(dataset_id, version_name, expected_doi, user_id, tenancies)
+
+        self.assertEqual(result, expected_doi)
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.doi_service.create.assert_called_once_with(doi=expected_doi)
+
+    def test_create_doi_dataset_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        self.dataset_repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+
+    def test_create_doi_version_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_create_doi_already_exists(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name="1",
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=DOIDb(identifier="10.1234/example-doi"),  # DOI already exists
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        with self.assertRaises(IllegalStateException) as context:
+            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+
+        self.assertEqual(str(context.exception), "doi_already_exists")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_create_doi_internal_service_failure(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name="1",
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=None,
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        # Simulate a failure in the DOI service
+        self.doi_service.create.side_effect = Exception("DOI service failure")
+
+        with self.assertRaises(Exception) as context:
+            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+
+        self.assertEqual(str(context.exception), "DOI service failure")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_change_doi_state_success(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        new_state = DOIState.FINDABLE
+        tenancies = ["tenant1"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        now = datetime.datetime.now()
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name=version_name,
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=DOIDb(identifier="10.1234/example-doi"),
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.doi_service.change_state.assert_called_once_with(identifier=existing_version.doi.identifier, new_state=new_state)
+
+    def test_change_doi_state_dataset_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        new_state = DOIState.FINDABLE
+        tenancies = ["tenant1"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        self.dataset_repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+
+    def test_change_doi_state_version_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        new_state = DOIState.FINDABLE
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_change_doi_state_doi_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        new_state = DOIState.FINDABLE
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name=version_name,
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=None,  # DOI is not present
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: DOI for version {version_name}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_get_doi_success(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        now = datetime.datetime.now()
+
+        existing_doi = DOIDb(
+            identifier="10.1234/example-doi",
+            mode=DOIMode.AUTO.name,
+            state=DOIState.DRAFT.name,
+            created_by=user_id,
+            prefix="10.1234",
+            suffix="example-doi",
+            url="https://example.com/doi",
+            created_at=now,
+            updated_at=now,
+            version_id=uuid4(),
+        )
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name=version_name,
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=existing_doi,
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        result = self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.assertEqual(result, DOIAdapter.database_to_model(doi=existing_doi))
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_get_doi_dataset_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        self.dataset_repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+
+    def test_get_doi_version_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_get_doi_doi_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name=version_name,
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=None,  # DOI is not present
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: DOI for version {version_name}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_delete_doi_success(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        now = datetime.datetime.now()
+
+        existing_doi = DOIDb(
+            identifier="10.1234/example-doi",
+            mode=DOIMode.AUTO,
+            state=DOIState.DRAFT,
+            created_by=user_id,
+        )
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name=version_name,
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=existing_doi,
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.doi_service.delete.assert_called_once_with(identifier=existing_doi.identifier)
+
+    def test_delete_doi_dataset_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        self.dataset_repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+
+    def test_delete_doi_version_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+
+    def test_delete_doi_doi_not_found(self):
+        dataset_id = uuid4()
+        version_name = "1"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        now = datetime.datetime.now()
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name=version_name,
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=None,  # DOI is not present
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
+
+        self.assertEqual(str(context.exception), f"not_found: DOI for version {version_name}")
+        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
 if __name__ == "__main__":
     unittest.main()
