@@ -10,12 +10,20 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     UniqueConstraint,
+    Table
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.model.dataset import DesignState
 
+
+version_data_file_association = Table(
+    "dataset_versions_data_files",
+    Base.metadata,
+    Column("dataset_version_id", UUID(as_uuid=True), ForeignKey("dataset_versions.id"), primary_key=True),
+    Column("data_file_id", UUID(as_uuid=True), ForeignKey("data_files.id"), primary_key=True),
+)
 
 class Dataset(Base):
     __tablename__ = "datasets"
@@ -70,7 +78,11 @@ class DatasetVersion(Base):
     doi_identifier = Column(String(256), nullable=True)
     doi_state = Column(String(256), nullable=True)
 
+    # TODO: files must be deprecated after migrated to files_in
     files = relationship("DataFile", lazy="subquery", backref="dataset_version")
+    files_in = relationship(
+        "DataFile", lazy="joined", secondary=version_data_file_association, backref="dataset_versions"
+    )
     doi = relationship("DOI", lazy="subquery", backref="dataset_version", uselist=False)
 
     __table_args__ = (
@@ -106,7 +118,7 @@ class DataFile(Base):
     )
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     version_id = Column(
-        UUID(as_uuid=True), ForeignKey("dataset_versions.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("dataset_versions.id"), nullable=True
     )
 
     __table_args__ = (

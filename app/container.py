@@ -6,6 +6,7 @@ from minio import Minio
 
 from app.gateway.doi.doi import DOIGateway
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
+from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
@@ -142,11 +143,17 @@ class Container(containers.DeclarativeContainer):
         DatasetVersionRepository,
         session_factory=db.provided.session,
     )
+    
+    data_file_repository = providers.Factory(
+        DataFileRepository,
+        session_factory=db.provided.session,
+    )
 
     dataset_service = providers.Factory(
         DatasetService,
         repository=dataset_repository,
         version_repository=dataset_version_repository,
+        data_file_repository=data_file_repository,
         user_service=user_service,
         doi_service=doi_service,
         minio_gateway=minio_gateway,

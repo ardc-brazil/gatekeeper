@@ -32,7 +32,10 @@ def setup_logging() -> None:
     modules = [
         {"name": "uvicorn", "level": settings.LOG_LEVEL},
         {"name": "tests", "level": logging.INFO},
-        {"name": "casbin.enforcer", "level": settings.LOG_LEVEL},
+        {"name": "casbin.enforcer", "level": settings.CASBIN_LOG_LEVEL},
+        {"name": "casbin.policy", "level": settings.CASBIN_LOG_LEVEL},
+        {"name": "casbin.role", "level": settings.CASBIN_LOG_LEVEL},
+        {"name": "sqlalchemy.engine", "level": settings.SQLALCHEMY_LOG_LEVEL},
     ]
     for module in modules:
         logger = logging.getLogger(module["name"])

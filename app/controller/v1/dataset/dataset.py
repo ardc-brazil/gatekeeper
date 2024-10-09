@@ -20,6 +20,8 @@ from app.controller.v1.dataset.resource import (
     DatasetCreateResponse,
     DatasetGetResponse,
     DatasetUpdateRequest,
+    DatasetVersionCreateRequest,
+    DatasetVersionCreateResponse,
     DatasetVersionResponse,
     PagedDatasetGetResponse,
 )
@@ -64,6 +66,7 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         design_state=version.design_state.name,
         is_enabled=version.is_enabled,
         files=[_adapt_data_file(file) for file in version.files],
+        files_in=[_adapt_data_file(file) for file in version.files_in],
         doi=DOIResponse(
             identifier=version.doi.identifier,
             state=version.doi.state.name,
@@ -72,6 +75,9 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         if version.doi is not None
         else None,
     )
+
+def _adapt_dataset_version_creation(version: DatasetVersion) -> DatasetVersionCreateResponse:
+    return _adapt_dataset_version(version=version)
 
 
 def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
@@ -401,13 +407,22 @@ async def get_file_download_url(
     )
     return DataFileDownloadResponse(url=file)
 
-
-# TODO: We need to create new endpoints to manipulate dataset versions for a dataset
-# POST /datasets/:dataset_id/versions/
-#   Creates a new dataset version for a dataset.
-#   This must disable all old versions, and create a new one with new files with the PUBLISHED state.
-#
-# POST /datasets/:dataset_id/versions/ {old_dataset_version_id: ''}
-#   Restore an old dataset vesion.
-#   Dataset versions are always append only. So, when we need to restore an old version, a new version must be
-#   created based on an old dataset version.
+# POST /datasets/:dataset_id/versions
+@router.post("/{dataset_id}/versions")
+@inject
+async def create_dataset_version(
+    dataset_id: UUID,
+    dataset_request: DatasetVersionCreateRequest,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),    
+) -> DatasetVersionCreateResponse:
+    
+    new_version = service.create_new_version(
+        dataset_id=dataset_id,
+        datafilesPreviouslyUploaded=dataset_request.datafilesPreviouslyUploaded,
+        user_id=user_id,
+        tenancies=tenancies,
+    )
+    
+    return _adapt_dataset_version_creation(version=new_version)
