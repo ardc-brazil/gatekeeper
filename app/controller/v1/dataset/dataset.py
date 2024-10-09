@@ -65,7 +65,7 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         name=version.name,
         design_state=version.design_state.name,
         is_enabled=version.is_enabled,
-        files=[_adapt_data_file(file) for file in version.files],
+        files=[_adapt_data_file(file) for file in version.files_in],
         files_in=[_adapt_data_file(file) for file in version.files_in],
         doi=DOIResponse(
             identifier=version.doi.identifier,
