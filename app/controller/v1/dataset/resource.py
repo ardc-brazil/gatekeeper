@@ -49,6 +49,17 @@ class DatasetGetResponse(BaseModel):
     )
     design_state: str = Field(..., title="Design state")
 
+class DatasetVersionGetResponse(BaseModel):
+    id: UUID = Field(..., title="Dataset ID")
+    name: str = Field(..., title="Name")
+    # TODO: Maybe `data` should be a str to be compatible with old version
+    data: dict = Field(..., title="Dataset information in JSON format")
+    tenancy: str = Field(..., title="Tenancy")
+    is_enabled: bool = Field(..., title="Is enabled")
+    created_at: datetime = Field(..., title="Created at")
+    updated_at: datetime = Field(..., title="Updated at")
+    version: DatasetVersionResponse = Field(..., title="Specific version information")
+    design_state: str = Field(..., title="Design state")
 
 class PagedDatasetGetResponse(BaseModel):
     content: list[DatasetGetResponse] = Field(..., title="List of data content")
