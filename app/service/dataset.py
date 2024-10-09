@@ -448,7 +448,7 @@ class DatasetService:
             if dataset.data.get("institution")
             else None
         )
-        doi.url = f"https://datamap.pcs.usp.br/doi/dataset/{dataset.id}/version/{version.name}"
+        doi.url = f"https://datamap.pcs.usp.br/doi/datasets/{dataset.id}/versions/{version.name}"
         doi.state = DOIState.DRAFT
         doi.dataset_version_name = version.name
         doi.dataset_id = dataset.id
