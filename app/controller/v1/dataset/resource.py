@@ -31,6 +31,8 @@ class DatasetVersionResponse(BaseModel):
     files: list[DataFileResponse] = Field([], title="List of data files")
     files_in: list[DataFileResponse] = Field([], title="List of data files")
     doi: Optional[DOIResponse] = Field(None, title="DOI")
+    created_at: datetime = Field(..., title="Created at")
+    updated_at: datetime = Field(..., title="Updated at")
 
 
 class DatasetGetResponse(BaseModel):
