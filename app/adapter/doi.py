@@ -3,10 +3,10 @@ from app.model.doi import (
     Event as EventModel,
     State as StateModel,
     Mode as ModeModel,
-    Creator as CreatorModel,
-    Title as TitleModel,
+    Creator as DOICreator,
+    Title as DOITitle,
 )
-from app.model.db.doi import DOI as DOIDb
+from app.model.db.doi import DOI as DOIDBModel
 from app.gateway.doi.resource import (
     DOIPayload,
     Data as DOIPayloadData,
@@ -17,7 +17,7 @@ from app.gateway.doi.resource import (
 )
 
 
-def database_to_model(doi: DOIDb) -> DOIModel:
+def database_to_model(doi: DOIDBModel) -> DOIModel:
     doi_data = doi.doi if doi.doi else {}
     data = doi_data.get("data", {})
     attributes = data.get("attributes", {})
@@ -30,8 +30,8 @@ def database_to_model(doi: DOIDb) -> DOIModel:
 
     return DOIModel(
         identifier=doi.identifier,
-        title=TitleModel(title=titles[0].get("title")) if titles else None,
-        creators=[CreatorModel(name=creator.get("name")) for creator in creators],
+        title=DOITitle(title=titles[0].get("title")) if titles else None,
+        creators=[DOICreator(name=creator.get("name")) for creator in creators],
         publisher=publisher,
         publication_year=publication_year,
         resource_type=resource_type,
@@ -71,7 +71,7 @@ def model_to_payload(repository: str, doi: DOIModel) -> DOIPayload:
     )
 
 
-def database_to_payload(doi: DOIDb) -> DOIPayload:
+def database_to_payload(doi: DOIDBModel) -> DOIPayload:
     doi_data = doi.doi if doi.doi else {}
     data = doi_data.get("data", {})
     attributes = data.get("attributes", {})
@@ -99,15 +99,15 @@ def database_to_payload(doi: DOIDb) -> DOIPayload:
     )
 
 
-def change_state_to_payload(doi: DOIDb, event: EventModel) -> DOIPayload:
+def change_state_to_payload(doi: DOIDBModel, event: EventModel) -> DOIPayload:
     payload: DOIPayload = database_to_payload(doi)
     payload.data.attributes.event = event.name
 
     return payload
 
 
-def model_to_database(doi: DOIModel) -> DOIDb:
-    return DOIDb(
+def model_to_database(doi: DOIModel) -> DOIDBModel:
+    return DOIDBModel(
         id=doi.id,
         identifier=doi.identifier,
         doi=doi.provider_response,

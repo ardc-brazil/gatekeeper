@@ -12,11 +12,11 @@ from app.model.doi import (
     Title as TitleModel,
     Creator as CreatorModel,
 )
-from app.model.db.doi import DOI as DOIDb
+from app.model.db.doi import DOI as DOIDBModel
 from app.exception.bad_request import BadRequestException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
-
+from app.adapter.doi import model_to_payload
 
 class TestDOIService(unittest.TestCase):
     def setUp(self):
@@ -195,7 +195,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_get_from_database_success(self):
         identifier = "10.1234/example-doi"
-        expected_doidb = DOIDb(
+        expected_doidb = DOIDBModel(
             id=uuid.uuid4(),
             identifier=identifier,
             mode="AUTO",
@@ -225,7 +225,7 @@ class TestDOIService(unittest.TestCase):
             provider_response={},
         )
 
-        mock_doidb = DOIDb(
+        mock_doidb = DOIDBModel(
             id=1,
             identifier=doi.identifier,
             mode=doi.mode.name,
@@ -262,7 +262,7 @@ class TestDOIService(unittest.TestCase):
         gateway_response = {"data": {"id": "10.1234/new-doi"}}
         self.mock_gateway.post.return_value = gateway_response
 
-        mock_doidb = DOIDb(
+        mock_doidb = DOIDBModel(
             id=1,
             identifier=gateway_response["data"]["id"],
             mode=doi.mode.name,
@@ -308,7 +308,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_change_state_manual_mode_fail(self):
         identifier = "10.1234/example-doi"
-        from_database = DOIDb(
+        from_database = DOIDBModel(
             identifier=identifier,
             mode=Mode.MANUAL.name,
             state=State.DRAFT.name,
@@ -329,7 +329,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_change_state_auto_mode_valid_transition(self):
         identifier = "10.1234/example-doi"
-        from_database = DOIDb(
+        from_database = DOIDBModel(
             identifier=identifier,
             mode=Mode.AUTO.name,
             state=State.DRAFT.name,
@@ -360,7 +360,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_change_state_auto_mode_invalid_transition(self):
         identifier = "10.1234/example-doi"
-        from_database = DOIDb(
+        from_database = DOIDBModel(
             identifier=identifier,
             mode=Mode.AUTO.name,
             state=State.DRAFT.name,
@@ -400,7 +400,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_delete_not_in_draft_state(self):
         identifier = "10.1234/example-doi"
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier=identifier,
             state=State.FINDABLE.name,
             mode=Mode.AUTO.name,
@@ -421,7 +421,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_delete_manual_mode_success(self):
         identifier = "10.1234/example-doi"
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier=identifier,
             state=State.DRAFT.name,
             mode=Mode.MANUAL.name,
@@ -440,7 +440,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_delete_auto_mode_success(self):
         identifier = "10.1234/example-doi"
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier=identifier,
             state=State.DRAFT.name,
             mode=Mode.AUTO.name,
@@ -459,6 +459,105 @@ class TestDOIService(unittest.TestCase):
         )
         self.mock_repository.delete.assert_called_once_with(doi=existing_doi)
 
+    def test_update_metadata_success(self):
+        doi = DOI(
+            identifier="10.1234/example-doi",
+            mode=Mode.AUTO,
+            title=TitleModel(title="Updated DOI"),
+            creators=[CreatorModel(name="Creator One")],
+            publisher="Updated Publisher",
+            publication_year=2024,
+            resource_type="Text",
+            url="https://example.com/doi",
+            provider_response={},
+        )
+
+        existing_doi_db = DOIDBModel(
+            id=uuid.uuid4(),
+            identifier=doi.identifier,
+            mode=doi.mode.name,
+            state="DRAFT",
+            doi={"data": {}},
+            prefix=doi.identifier.split("/")[0],
+            suffix=doi.identifier.split("/")[1],
+            url=doi.url,
+        )
+
+        # Simulate the database fetch
+        self.mock_repository.fetch.return_value = existing_doi_db
+
+        # Simulate the gateway update response
+        updated_doi_response = {"data": {"attributes": {"title": doi.title.title}}}
+        self.mock_gateway.update.return_value = updated_doi_response
+
+        # Call the update_metadata method
+        self.service.update_metadata(doi)
+
+        # Verify the update was made in the gateway
+        self.mock_gateway.update.assert_called_once_with(
+            doi=model_to_payload(repository=existing_doi_db.prefix, doi=doi), identifier=doi.identifier
+        )
+
+        # Verify the DOI object was updated in the repository
+        existing_doi_db.doi = updated_doi_response
+        self.mock_repository.upsert.assert_called_once_with(doi=existing_doi_db)
+
+    def test_update_metadata_manual_mode_fail(self):
+        doi = DOI(
+            identifier="10.1234/example-doi",
+            mode=Mode.AUTO,
+            title=TitleModel(title="Updated DOI"),
+            creators=[CreatorModel(name="Creator One")],
+            publisher="Updated Publisher",
+            publication_year=2024,
+            resource_type="Text",
+            url="https://example.com/doi",
+            provider_response={},
+        )
+
+        existing_doi_db = DOIDBModel(
+            id=uuid.uuid4(),
+            identifier=doi.identifier,
+            mode=Mode.MANUAL.name,
+            state="DRAFT",
+            doi={"data": {}},
+            prefix=doi.identifier.split("/")[0],
+            suffix=doi.identifier.split("/")[1],
+            url=doi.url,
+        )
+
+        # Simulate the database fetch
+        self.mock_repository.fetch.return_value = existing_doi_db
+
+        with self.assertRaises(IllegalStateException) as context:
+            self.service.update_metadata(doi)
+
+        self.assertEqual(str(context.exception), "manual_doi_cannot_update_metadata")
+        self.mock_gateway.update.assert_not_called()
+        self.mock_repository.upsert.assert_not_called()
+
+    def test_update_metadata_not_found(self):
+        doi = DOI(
+            identifier="10.1234/non-existent-doi",
+            mode=Mode.AUTO,
+            title=TitleModel(title="Updated DOI"),
+            creators=[CreatorModel(name="Creator One")],
+            publisher="Updated Publisher",
+            publication_year=2024,
+            resource_type="Text",
+            url="https://example.com/doi",
+            provider_response={},
+        )
+
+        # Simulate the database fetch returning None
+        self.mock_repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException) as context:
+            self.service.update_metadata(doi)
+
+        self.assertEqual(str(context.exception), f"not_found: {doi.identifier}")
+        self.mock_gateway.update.assert_not_called()
+        self.mock_repository.upsert.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
