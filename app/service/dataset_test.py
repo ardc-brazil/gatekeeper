@@ -3,6 +3,7 @@ import datetime
 import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
+from app.exception.bad_request import BadRequestException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
@@ -695,18 +696,47 @@ class TestDatasetService(unittest.TestCase):
     def test_get_file_download_url_success(self):
         dataset_id = uuid4()
         version_name = "1"
-        file_id = uuid4()
         user_id = uuid4()
         tenancies = ["tenant1"]
-        dataset_db = Mock(spec=DatasetDBModel)
-        mocked_version = Mock(spec=DatasetVersionDBModel)
-        mocked_version.files = [Mock(spec=DataFileDBModel)]
-        dataset_db.versions = [mocked_version]
+        now = datetime.datetime.now()
+        file_id = uuid4()
+
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
-        self.dataset_repository.fetch.return_value = dataset_db
-        version_mock = Mock()
-        version_mock.files = [Mock(id=file_id, storage_file_name="file_name", name="file.txt")]
-        self.dataset_version_repository.fetch_version_by_name.return_value = version_mock
+
+        existing_file = DataFileDBModel(id=file_id, name="file_name", size_bytes=100, created_at=now, updated_at=now)
+        
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name="1",
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[existing_file],
+            files_in=[existing_file],
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=None,
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.data_file_repository.fetch_by_id.return_value = existing_file
 
         self.minio_gateway.get_pre_signed_url.return_value = "https://example.com/download/file_name"
 
@@ -733,38 +763,73 @@ class TestDatasetService(unittest.TestCase):
     def test_get_file_download_url_version_not_found(self):
         dataset_id = uuid4()
         version_name = "1"
-        file_id = uuid4()
         user_id = uuid4()
         tenancies = ["tenant1"]
-        dataset_db = Mock(spec=DatasetDBModel)
-        mocked_version = Mock(spec=DatasetVersionDBModel)
-        mocked_version.files = [Mock(spec=DataFileDBModel)]
-        dataset_db.versions = [mocked_version]
-        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
-        self.dataset_repository.fetch.return_value = dataset_db
+        now = datetime.datetime.now()
 
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_version_repository.fetch_version_by_name.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
+            self.dataset_service.get_file_download_url(dataset_id, version_name, uuid4(), user_id, tenancies)
 
         self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
 
     def test_get_file_download_url_file_not_found(self):
         dataset_id = uuid4()
         version_name = "1"
-        file_id = uuid4()
         user_id = uuid4()
         tenancies = ["tenant1"]
-        dataset_db = Mock(spec=DatasetDBModel)
-        mocked_version = Mock(spec=DatasetVersionDBModel)
-        mocked_version.files = [Mock(spec=DataFileDBModel)]
-        dataset_db.versions = [mocked_version]
+        now = datetime.datetime.now()
+        file_id = uuid4()
+
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
-        self.dataset_repository.fetch.return_value = dataset_db
-        version_mock = Mock()
-        version_mock.files = [] # No files in the version
-        self.dataset_version_repository.fetch_version_by_name.return_value = version_mock
+
+        existing_version = DatasetVersionDBModel(
+            id=uuid4(),
+            name="1",
+            description="Initial version",
+            design_state=DesignState.PUBLISHED,
+            is_enabled=True,
+            created_by=user_id,
+            files=[], # No files in the version
+            created_at=now,
+            updated_at=now,
+            dataset_id=dataset_id,
+            doi_identifier="10.1234/example-doi",
+            doi_state="DRAFT",
+            doi=None,
+        )
+
+        existing_dataset = DatasetDBModel(
+            id=dataset_id,
+            name="Original Dataset",
+            data={"key": "original"},
+            is_enabled=True,
+            created_at=now,
+            updated_at=now,
+            tenancy=["tenant1"],
+            design_state=DesignState.DRAFT,
+            owner_id=user_id,
+            versions=[existing_version],
+        )
+        self.dataset_repository.fetch.return_value = existing_dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
 
         with self.assertRaises(NotFoundException) as context:
             self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
@@ -908,7 +973,7 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=dataset_id,
             doi_identifier="10.1234/example-doi",
             doi_state="DRAFT",
-            doi=DOIDBModel(identifier="10.1234/example-doi"),  # DOI already exists
+            doi=DOIDBModel(identifier="10.1234/example-doi", mode="DRAFT", created_at=now, updated_at=now),  # DOI already exists
         )
 
         existing_dataset = DatasetDBModel(
@@ -923,13 +988,14 @@ class TestDatasetService(unittest.TestCase):
             owner_id=user_id,
             versions=[existing_version],
         )
+
         self.dataset_repository.fetch.return_value = existing_dataset
         self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
 
-        with self.assertRaises(IllegalStateException) as context:
+        with self.assertRaises(BadRequestException) as context:
             self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
 
-        self.assertEqual(str(context.exception), "doi_already_exists")
+        self.assertEqual(str(context.exception.errors[0].code), "already_exists")
         self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
 
