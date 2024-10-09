@@ -75,6 +75,8 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         )
         if version.doi is not None
         else None,
+        created_at=version.created_at,
+        updated_at=version.updated_at,
     )
 
 
