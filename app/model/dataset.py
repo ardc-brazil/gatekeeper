@@ -52,6 +52,7 @@ class Dataset:
     design_state: DesignState = None
     versions: list[DatasetVersion] = field(default_factory=lambda: [])
     current_version: DatasetVersion = None
+    version: DatasetVersion = None
     created_at: datetime = None
     updated_at: datetime = None
 

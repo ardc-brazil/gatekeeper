@@ -101,6 +101,18 @@ class DatasetService:
             else None,
         )
 
+    def _adapt_dataset_version(self, dataset: DatasetDBModel, dataset_version: DatasetVersionDBModel) -> Dataset:
+        return Dataset(
+            id=dataset.id,
+            name=dataset.name,
+            data=dataset.data,
+            is_enabled=dataset.is_enabled,
+            created_at=dataset.created_at,
+            updated_at=dataset.updated_at,
+            tenancy=dataset.tenancy,
+            design_state=dataset.design_state,
+            version=self._adapt_version(version=dataset_version),
+        )
     def _get_current_dataset_version(
         self, versions: list[DatasetVersionDBModel]
     ) -> DatasetVersionDBModel:
@@ -625,5 +637,30 @@ class DatasetService:
         self._version_repository.upsert(dataset_version=new_version)
         
         return self._adapt_version(version=new_version)
-        
+    
+    def fetch_dataset_version(
+        self,
+        dataset_id: UUID,
+        version_name: str,
+        user_id: UUID,
+        tenancies: list[str] = [],
+    ) -> Dataset:
+        dataset: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id,
+            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+        )
+
+        if dataset is None:
+            raise NotFoundException(f"not_found: {dataset_id}")
+
+        version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
+            dataset_id=dataset_id, version_name=version_name
+        )
+
+        if version is None:
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+
+        return self._adapt_dataset_version(dataset=dataset, dataset_version=version)
         

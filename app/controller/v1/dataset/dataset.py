@@ -22,6 +22,7 @@ from app.controller.v1.dataset.resource import (
     DatasetUpdateRequest,
     DatasetVersionCreateRequest,
     DatasetVersionCreateResponse,
+    DatasetVersionGetResponse,
     DatasetVersionResponse,
     PagedDatasetGetResponse,
 )
@@ -93,6 +94,19 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         current_version=_adapt_dataset_version(dataset.current_version)
         if dataset.current_version is not None
         else None,
+        design_state=dataset.design_state.name,
+    )
+
+def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetGetResponse:
+    return DatasetVersionGetResponse(
+        id=dataset.id,
+        name=dataset.name,
+        data=dataset.data,
+        tenancy=dataset.tenancy,
+        is_enabled=dataset.is_enabled,
+        created_at=dataset.created_at,
+        updated_at=dataset.updated_at,
+        version=_adapt_dataset_version(dataset.version),
         design_state=dataset.design_state.name,
     )
 
@@ -426,3 +440,21 @@ async def create_dataset_version(
     )
     
     return _adapt_dataset_version_creation(version=new_version)
+
+# GET /datasets/:dataset_id/versions/:version
+@router.get("/{dataset_id}/versions/{version_name}")
+@inject
+async def get_dataset_version(
+    dataset_id: UUID,
+    version_name: str,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
+) -> DatasetVersionGetResponse:
+    res = service.fetch_dataset_version(
+        dataset_id=dataset_id,
+        version_name=version_name,
+        user_id=user_id,
+        tenancies=tenancies,
+    )
+    return _adapt_dataset_specific_version(dataset=res)
