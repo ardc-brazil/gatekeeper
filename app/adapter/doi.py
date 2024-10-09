@@ -3,8 +3,8 @@ from app.model.doi import (
     Event as EventModel,
     State as StateModel,
     Mode as ModeModel,
-    Creator as CreatorModel,
-    Title as TitleModel,
+    Creator as DOICreator,
+    Title as DOITitle,
 )
 from app.model.db.doi import DOI as DOIDb
 from app.gateway.doi.resource import (
@@ -30,8 +30,8 @@ def database_to_model(doi: DOIDb) -> DOIModel:
 
     return DOIModel(
         identifier=doi.identifier,
-        title=TitleModel(title=titles[0].get("title")) if titles else None,
-        creators=[CreatorModel(name=creator.get("name")) for creator in creators],
+        title=DOITitle(title=titles[0].get("title")) if titles else None,
+        creators=[DOICreator(name=creator.get("name")) for creator in creators],
         publisher=publisher,
         publication_year=publication_year,
         resource_type=resource_type,
