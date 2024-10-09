@@ -12,7 +12,7 @@ from app.model.doi import (
     Title as TitleModel,
     Creator as CreatorModel,
 )
-from app.model.db.doi import DOI as DOIDb
+from app.model.db.doi import DOI as DOIDBModel
 from app.exception.bad_request import BadRequestException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
@@ -195,7 +195,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_get_from_database_success(self):
         identifier = "10.1234/example-doi"
-        expected_doidb = DOIDb(
+        expected_doidb = DOIDBModel(
             id=uuid.uuid4(),
             identifier=identifier,
             mode="AUTO",
@@ -225,7 +225,7 @@ class TestDOIService(unittest.TestCase):
             provider_response={},
         )
 
-        mock_doidb = DOIDb(
+        mock_doidb = DOIDBModel(
             id=1,
             identifier=doi.identifier,
             mode=doi.mode.name,
@@ -262,7 +262,7 @@ class TestDOIService(unittest.TestCase):
         gateway_response = {"data": {"id": "10.1234/new-doi"}}
         self.mock_gateway.post.return_value = gateway_response
 
-        mock_doidb = DOIDb(
+        mock_doidb = DOIDBModel(
             id=1,
             identifier=gateway_response["data"]["id"],
             mode=doi.mode.name,
@@ -308,7 +308,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_change_state_manual_mode_fail(self):
         identifier = "10.1234/example-doi"
-        from_database = DOIDb(
+        from_database = DOIDBModel(
             identifier=identifier,
             mode=Mode.MANUAL.name,
             state=State.DRAFT.name,
@@ -329,7 +329,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_change_state_auto_mode_valid_transition(self):
         identifier = "10.1234/example-doi"
-        from_database = DOIDb(
+        from_database = DOIDBModel(
             identifier=identifier,
             mode=Mode.AUTO.name,
             state=State.DRAFT.name,
@@ -360,7 +360,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_change_state_auto_mode_invalid_transition(self):
         identifier = "10.1234/example-doi"
-        from_database = DOIDb(
+        from_database = DOIDBModel(
             identifier=identifier,
             mode=Mode.AUTO.name,
             state=State.DRAFT.name,
@@ -400,7 +400,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_delete_not_in_draft_state(self):
         identifier = "10.1234/example-doi"
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier=identifier,
             state=State.FINDABLE.name,
             mode=Mode.AUTO.name,
@@ -421,7 +421,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_delete_manual_mode_success(self):
         identifier = "10.1234/example-doi"
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier=identifier,
             state=State.DRAFT.name,
             mode=Mode.MANUAL.name,
@@ -440,7 +440,7 @@ class TestDOIService(unittest.TestCase):
 
     def test_delete_auto_mode_success(self):
         identifier = "10.1234/example-doi"
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier=identifier,
             state=State.DRAFT.name,
             mode=Mode.AUTO.name,
@@ -472,7 +472,7 @@ class TestDOIService(unittest.TestCase):
             provider_response={},
         )
 
-        existing_doi_db = DOIDb(
+        existing_doi_db = DOIDBModel(
             id=uuid.uuid4(),
             identifier=doi.identifier,
             mode=doi.mode.name,
@@ -515,7 +515,7 @@ class TestDOIService(unittest.TestCase):
             provider_response={},
         )
 
-        existing_doi_db = DOIDb(
+        existing_doi_db = DOIDBModel(
             id=uuid.uuid4(),
             identifier=doi.identifier,
             mode=Mode.MANUAL.name,

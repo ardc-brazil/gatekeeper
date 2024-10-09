@@ -3,6 +3,8 @@ from datetime import datetime
 import enum
 from uuid import UUID
 
+from app.model.doi import DOI
+
 
 class DesignState(enum.Enum):
     DRAFT = "draft"
@@ -33,8 +35,10 @@ class DatasetVersion:
     description: str = None
     created_by: UUID = None
     design_state: DesignState = None
+    # TODO: deprecate files in favor to files_in
     files: list[DataFile] = field(default_factory=lambda: [])
-    doi: dict = None
+    files_in: list[DataFile] = field(default_factory=lambda: [])
+    doi: DOI = None
 
 
 @dataclass

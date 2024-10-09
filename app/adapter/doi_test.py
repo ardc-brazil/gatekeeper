@@ -6,7 +6,7 @@ from app.model.doi import (
     Title as TitleModel,
     Event as EventModel,
 )
-from app.model.db.doi import DOI as DOIDb
+from app.model.db.doi import DOI as DOIDBModel
 from app.adapter.doi import (
     change_state_to_payload,
     database_to_model,
@@ -18,7 +18,7 @@ from app.gateway.doi.resource import DOIPayload
 
 class TestDOIAdapter(unittest.TestCase):
     def setUp(self):
-        self.database_doi = MagicMock(spec=DOIDb)
+        self.database_doi = MagicMock(spec=DOIDBModel)
         self.database_doi.identifier = "10.1234/example-doi"
         self.database_doi.mode = "AUTO"
         self.database_doi.prefix = "10.1234"

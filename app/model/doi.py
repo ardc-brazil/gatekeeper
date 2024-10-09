@@ -11,9 +11,9 @@ class Event(enum.Enum):
 
 
 class State(enum.Enum):
-    DRAFT = "draft"
-    REGISTERED = "registered"
-    FINDABLE = "findable"
+    DRAFT = "DRAFT"
+    REGISTERED = "REGISTERED"
+    FINDABLE = "FINDABLE"
 
 
 class TitleType(enum.Enum):
@@ -24,8 +24,8 @@ class TitleType(enum.Enum):
 
 
 class Mode(enum.Enum):
-    MANUAL = "manual"
-    AUTO = "auto"
+    MANUAL = "MANUAL"
+    AUTO = "AUTO"
 
 
 @dataclass

@@ -1,3 +1,4 @@
+from uuid import UUID
 from app.model.dataset import DesignState
 from app.model.db.dataset import DatasetVersion
 from sqlalchemy import desc
@@ -30,10 +31,10 @@ class DatasetVersionRepository:
                 session.commit()
                 session.refresh(dataset_version)
                 return dataset_version
-        except IntegrityError:
+        except IntegrityError as e:
             raise ConflictException(
                 f"dataset_version_already_exists: {dataset_version.id}"
-            )
+            ) from e
 
     def fetch_version_by_name(self, dataset_id, version_name) -> DatasetVersion:
         with self._session_factory() as session:
@@ -41,4 +42,12 @@ class DatasetVersionRepository:
                 session.query(DatasetVersion)
                 .filter_by(dataset_id=dataset_id, name=version_name)
                 .first()
+            )
+
+    def fetch_by_id(self, id: UUID) -> DatasetVersion:
+        with self._session_factory() as session:
+            return (
+                session.query(DatasetVersion)
+                .filter(DatasetVersion.id == id)
+                .one_or_none()
             )

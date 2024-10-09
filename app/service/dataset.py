@@ -1,6 +1,7 @@
 import logging
 from uuid import UUID
 import json
+from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
@@ -12,6 +13,7 @@ from app.model.doi import (
     Title as DOITitle,
     Creator as DOICreator,
 )
+from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.doi import DOIService
@@ -36,6 +38,7 @@ class DatasetService:
         self,
         repository: DatasetRepository,
         version_repository: DatasetVersionRepository,
+        data_file_repository: DataFileRepository,
         user_service: UserService,
         doi_service: DOIService,
         minio_gateway: ObjectStorageGateway,
@@ -48,6 +51,7 @@ class DatasetService:
         self._doi_service = doi_service
         self._minio_gateway = minio_gateway
         self._dataset_bucket = dataset_bucket
+        self._data_file_repository = data_file_repository
 
     def _adapt_file(self, file: DataFileDBModel) -> DataFile:
         return DataFile(
@@ -74,6 +78,8 @@ class DatasetService:
             is_enabled=version.is_enabled,
             design_state=version.design_state,
             files=[self._adapt_file(file=file) for file in version.files],
+            files_in=[self._adapt_file(file=file) for file in version.files_in],
+            doi=DOIAdapter.database_to_model(doi=version.doi) if version.doi else None,
         )
 
     def _adapt_dataset(self, dataset: DatasetDBModel) -> Dataset:
@@ -358,7 +364,7 @@ class DatasetService:
             dataset_id=dataset.id
         )
 
-        version.files.append(
+        version.files_in.append(
             DataFileDBModel(
                 name=file.name,
                 size_bytes=file.size_bytes,
@@ -446,12 +452,10 @@ class DatasetService:
         )
 
         if version is None:
-            raise NotFoundException(
-                f"not_found: {version_name} for dataset {dataset_id}"
-            )
+            raise NotFoundException(f"not_found: {version_name} for dataset {dataset_id}")
 
         if version.doi:
-            raise IllegalStateException("doi_already_exists")
+            raise BadRequestException(errors=[ErrorDetails(code="already_exists")])
 
         doi = self._create_doi_model(doi=doi, dataset=dataset, version=version, creator_id=user_id)
         
@@ -577,7 +581,7 @@ class DatasetService:
             )
 
         file: DataFileDBModel = next(
-            (file for file in version.files if file.id == file_id), None
+            (file for file in version.files_in if file.id == file_id), None
         )
 
         if file is None:
@@ -588,3 +592,38 @@ class DatasetService:
             object_name=file.storage_file_name,
             original_file_name=file.name,
         )
+        
+    def create_new_version(
+        self,
+        dataset_id: UUID,        
+        user_id: UUID,
+        tenancies: list[str] = [],
+        datafilesPreviouslyUploaded: list[str] = [],
+    ) -> DatasetVersion:
+
+        dataset: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id,
+            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+            version_is_enabled=False,
+        )
+
+        if dataset is None:
+            raise NotFoundException(f"not_found: {dataset_id}")
+        
+        current_version = self._get_current_dataset_version(dataset.versions)
+        if current_version.design_state == DesignState.DRAFT:
+            current_version.is_enabled = False
+            self._version_repository.upsert(current_version)
+            
+        new_version = self._create_new_version(dataset_db=dataset, user_id=user_id)
+        new_version.dataset_id = dataset_id
+        for file_id in datafilesPreviouslyUploaded:
+            new_version.files_in.append(
+                self._data_file_repository.fetch_by_id(id=file_id)
+            )
+        
+        self._version_repository.upsert(dataset_version=new_version)
+        
+        return self._adapt_version(version=new_version)
+        
+        

@@ -7,6 +7,8 @@ from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
+from app.model.doi import Mode
+from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.doi import DOIService
@@ -22,7 +24,7 @@ from app.model.db.dataset import (
     DatasetVersion as DatasetVersionDBModel,
     DataFile as DataFileDBModel,
 )
-from app.model.db.doi import DOI as DOIDb
+from app.model.db.doi import DOI as DOIDBModel
 from app.service.dataset import DatasetService
 from app.model.user import User
 from app.model.doi import (
@@ -40,12 +42,14 @@ class TestDatasetService(unittest.TestCase):
     def setUp(self):
         self.dataset_repository = Mock(spec=DatasetRepository)
         self.dataset_version_repository = Mock(spec=DatasetVersionRepository)
+        self.data_file_repository = Mock(spec=DataFileRepository)
         self.user_service = Mock(spec=UserService)
         self.doi_service = Mock(spec=DOIService)
         self.minio_gateway = Mock(spec=ObjectStorageGateway)
         self.dataset_service = DatasetService(
             repository=self.dataset_repository,
             version_repository=self.dataset_version_repository,
+            data_file_repository=self.data_file_repository,
             user_service=self.user_service,
             doi_service=self.doi_service,
             minio_gateway=self.minio_gateway,
@@ -75,6 +79,21 @@ class TestDatasetService(unittest.TestCase):
         dataset_db = Mock(spec=DatasetDBModel)
         mocked_version = Mock(spec=DatasetVersionDBModel)
         mocked_version.files = [Mock(spec=DataFileDBModel)]
+        mocked_version.files_in = [Mock(spec=DataFileDBModel)]
+        mocked_version.doi = DOIDBModel(
+            mode="MANUAL",
+            state="DRAFT",
+            doi={
+                'data':{
+                    'attributes':{
+                        'titles':[
+                            { 'title': "aaaa"}
+                        ]
+                    }
+                }
+            },
+        )
+        
         dataset_db.versions = [mocked_version]
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_repository.fetch.return_value = dataset_db
@@ -92,6 +111,7 @@ class TestDatasetService(unittest.TestCase):
         dataset_db = Mock(spec=DatasetDBModel)
         mocked_version = Mock(spec=DatasetVersionDBModel)
         mocked_version.files = [Mock(spec=DataFileDBModel)]
+        mocked_version.files_in = [Mock(spec=DataFileDBModel)]
         dataset_db.versions = [mocked_version]
         self.user_service.fetch_by_id.side_effect = NotFoundException("user not found")
 
@@ -133,6 +153,7 @@ class TestDatasetService(unittest.TestCase):
         mocked_version = Mock(spec=DatasetVersionDBModel)
         mocked_version.name = "1"
         mocked_version.files = [Mock(spec=DataFileDBModel)]
+        mocked_version.files_in = [Mock(spec=DataFileDBModel)]
         mocked_version.is_enabled = True
         mocked_version.design_state = DesignState.DRAFT
         mocked_version.doi = None
@@ -167,6 +188,20 @@ class TestDatasetService(unittest.TestCase):
         created_dataset_db = Mock(spec=DatasetDBModel)
         mocked_version = Mock(spec=DatasetVersionDBModel)
         mocked_version.files = [Mock(spec=DataFileDBModel)]
+        mocked_version.files_in = [Mock(spec=DataFileDBModel)]
+        mocked_version.doi = DOIDBModel(
+            mode="MANUAL",
+            state="DRAFT",
+            doi={
+                'data':{
+                    'attributes':{
+                        'titles':[
+                            { 'title': "aaaa"}
+                        ]
+                    }
+                }
+            },
+        )
         created_dataset_db.versions = [mocked_version]
         self.dataset_repository.upsert.return_value = created_dataset_db
 
@@ -487,7 +522,7 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=dataset_id,
             doi_identifier="10.1234/example-doi",
             doi_state="DRAFT",
-            doi=DOIDb(
+            doi=DOIDBModel(
                 identifier="10.1234/example-doi",
                 mode="AUTO",
                 prefix="10.1234",
@@ -590,7 +625,7 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=dataset_id,
             doi_identifier="10.1234/example-doi",
             doi_state="DRAFT",
-            doi=DOIDb(
+            doi=DOIDBModel(
                 identifier="10.1234/example-doi",
                 mode="AUTO",
                 prefix="10.1234",
@@ -872,7 +907,7 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=dataset_id,
             doi_identifier="10.1234/example-doi",
             doi_state="DRAFT",
-            doi=DOIDb(identifier="10.1234/example-doi"),  # DOI already exists
+            doi=DOIDBModel(identifier="10.1234/example-doi"),  # DOI already exists
         )
 
         existing_dataset = DatasetDBModel(
@@ -971,7 +1006,7 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=dataset_id,
             doi_identifier="10.1234/example-doi",
             doi_state="DRAFT",
-            doi=DOIDb(identifier="10.1234/example-doi"),
+            doi=DOIDBModel(identifier="10.1234/example-doi"),
         )
 
         existing_dataset = DatasetDBModel(
@@ -1105,7 +1140,7 @@ class TestDatasetService(unittest.TestCase):
 
         now = datetime.datetime.now()
 
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier="10.1234/example-doi",
             mode=DOIMode.AUTO.name,
             state=DOIState.DRAFT.name,
@@ -1262,7 +1297,7 @@ class TestDatasetService(unittest.TestCase):
 
         now = datetime.datetime.now()
 
-        existing_doi = DOIDb(
+        existing_doi = DOIDBModel(
             identifier="10.1234/example-doi",
             mode=DOIMode.AUTO,
             state=DOIState.DRAFT,

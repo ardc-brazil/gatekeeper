@@ -5,7 +5,7 @@ from app.exception.not_found import NotFoundException
 from app.gateway.doi.doi import DOIGateway
 from app.model.doi import DOI, Mode, State, Event
 from app.repository.doi import DOIRepository
-from app.model.db.doi import DOI as DOIDb
+from app.model.db.doi import DOI as DOIDBModel
 
 
 class DOIService:
@@ -56,7 +56,7 @@ class DOIService:
     def get(self, doi: str) -> DOI:
         return self._doi_gateway.get(doi)
 
-    def get_from_database(self, identifier: str) -> DOIDb:
+    def get_from_database(self, identifier: str) -> DOIDBModel:
         return self._doi_repository.fetch(identifier=identifier)
 
     def create(self, doi: DOI) -> DOI:
@@ -74,7 +74,7 @@ class DOIService:
 
         return doi
 
-    def _get_valid_event_from_state(self, doi: DOIDb, new_state: State) -> Event:
+    def _get_valid_event_from_state(self, doi: DOIDBModel, new_state: State) -> Event:
         if doi.state == State.DRAFT.name and new_state == State.FINDABLE:
             return Event.PUBLISH
         elif doi.state == State.DRAFT.name and new_state == State.REGISTERED:
@@ -87,7 +87,7 @@ class DOIService:
             raise IllegalStateException("invalid_state_transition")
 
     def change_state(self, identifier: str, new_state: State):
-        from_database: DOIDb = self.get_from_database(identifier)
+        from_database: DOIDBModel = self.get_from_database(identifier)
 
         if from_database.mode == Mode.MANUAL.name:
             raise IllegalStateException("manual_doi_cannot_change_state")
@@ -103,7 +103,7 @@ class DOIService:
         self._doi_repository.upsert(doi=from_database)
 
     def delete(self, identifier: str) -> None:
-        existing_doi: DOIDb = self.get_from_database(identifier)
+        existing_doi: DOIDBModel = self.get_from_database(identifier)
 
         if not existing_doi:
             raise NotFoundException(f"not_found: {identifier}")
@@ -120,7 +120,7 @@ class DOIService:
 
     def update_metadata(self, doi: DOI) -> None:
         if doi is not None and doi.mode == Mode.AUTO:
-            from_database: DOIDb = self.get_from_database(doi.identifier)
+            from_database: DOIDBModel = self.get_from_database(doi.identifier)
 
             if from_database is None:
                 raise NotFoundException(f"not_found: {doi.identifier}")

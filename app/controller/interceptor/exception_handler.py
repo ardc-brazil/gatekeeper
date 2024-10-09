@@ -27,14 +27,18 @@ async def unauthorized_exception_handler(request: Request, exc: UnauthorizedExce
 
 
 async def illegal_state_exception_handler(request: Request, exc: IllegalStateException):
-    logger.info(f"Unauthorized exception: {exc}")
+    logger.info(f"Illegal State exception: {exc}")
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 async def bad_request_exception_handler(request: Request, exc: BadRequestException):
     logger.error(f"Bad request exception: {exc}")
-    return JSONResponse(
-        status_code=400, content=[asdict(error) for error in exc.errors]
+    return  JSONResponse(
+        status_code=400, 
+        content={ 
+            "details": "Invalid client input", 
+            "errors": [asdict(error) for error in exc.errors] 
+        }
     )
 
 
