@@ -8,7 +8,6 @@ from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
-from app.model.doi import Mode
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
@@ -36,7 +35,7 @@ from app.model.doi import (
     Creator as DOICreator,
     Publisher as DOIPublisher,
     Mode as DOIMode,
-) 
+)
 from app.adapter import doi as DOIAdapter
 
 
@@ -85,17 +84,9 @@ class TestDatasetService(unittest.TestCase):
         mocked_version.doi = DOIDBModel(
             mode="MANUAL",
             state="DRAFT",
-            doi={
-                'data':{
-                    'attributes':{
-                        'titles':[
-                            { 'title': "aaaa"}
-                        ]
-                    }
-                }
-            },
+            doi={"data": {"attributes": {"titles": [{"title": "aaaa"}]}}},
         )
-        
+
         dataset_db.versions = [mocked_version]
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_repository.fetch.return_value = dataset_db
@@ -194,15 +185,7 @@ class TestDatasetService(unittest.TestCase):
         mocked_version.doi = DOIDBModel(
             mode="MANUAL",
             state="DRAFT",
-            doi={
-                'data':{
-                    'attributes':{
-                        'titles':[
-                            { 'title': "aaaa"}
-                        ]
-                    }
-                }
-            },
+            doi={"data": {"attributes": {"titles": [{"title": "aaaa"}]}}},
         )
         created_dataset_db.versions = [mocked_version]
         self.dataset_repository.upsert.return_value = created_dataset_db
@@ -500,7 +483,11 @@ class TestDatasetService(unittest.TestCase):
         dataset_request = Dataset(
             id=dataset_id,
             name="Updated Dataset",
-            data={"key": "value", "authors": [{"name": "Author One"}], "institution": "Test Institution"},
+            data={
+                "key": "value",
+                "authors": [{"name": "Author One"}],
+                "institution": "Test Institution",
+            },
             tenancy=["tenant1"],
             is_enabled=True,
             created_at=datetime.datetime.now(),
@@ -535,8 +522,13 @@ class TestDatasetService(unittest.TestCase):
                 updated_at=now,
                 created_by=user_id,
                 version_id=uuid4(),
-                doi={"title": "Original Dataset", "creators": [{"name": "Author One"}], "publisher": "Test Institution", "publicationYear": now.year},
-            )
+                doi={
+                    "title": "Original Dataset",
+                    "creators": [{"name": "Author One"}],
+                    "publisher": "Test Institution",
+                    "publicationYear": now.year,
+                },
+            ),
         )
 
         existing_dataset = DatasetDBModel(
@@ -552,7 +544,7 @@ class TestDatasetService(unittest.TestCase):
             versions=[existing_version],
         )
         self.dataset_repository.fetch.return_value = existing_dataset
-    
+
         # Mock the update_metadata method to do nothing (assume success)
         self.doi_service.update_metadata.return_value = None
 
@@ -571,7 +563,14 @@ class TestDatasetService(unittest.TestCase):
         )
         # Verify that the dataset was updated
         self.assertEqual(existing_dataset.name, "Updated Dataset")
-        self.assertEqual(existing_dataset.data, {"key": "value", "authors": [{"name": "Author One"}], "institution": "Test Institution"})
+        self.assertEqual(
+            existing_dataset.data,
+            {
+                "key": "value",
+                "authors": [{"name": "Author One"}],
+                "institution": "Test Institution",
+            },
+        )
         self.assertEqual(existing_dataset.tenancy, ["tenant1"])
         self.assertEqual(existing_dataset.owner_id, user_id)
 
@@ -590,7 +589,12 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=existing_dataset.id,
             dataset_version_id=existing_version.id,
             created_by=user_id,
-            provider_response={'title': 'Original Dataset', 'creators': [{'name': 'Author One'}], 'publisher': 'Test Institution', 'publicationYear': 2024},
+            provider_response={
+                "title": "Original Dataset",
+                "creators": [{"name": "Author One"}],
+                "publisher": "Test Institution",
+                "publicationYear": 2024,
+            },
         )
         self.doi_service.update_metadata.assert_called_once_with(doi=expected_doi)
         self.dataset_repository.upsert.assert_called_once_with(dataset=existing_dataset)
@@ -603,7 +607,11 @@ class TestDatasetService(unittest.TestCase):
         dataset_request = Dataset(
             id=dataset_id,
             name="Updated Dataset",
-            data={"key": "value", "authors": [{"name": "Author One"}], "institution": "Test Institution"},
+            data={
+                "key": "value",
+                "authors": [{"name": "Author One"}],
+                "institution": "Test Institution",
+            },
             tenancy=["tenant1"],
             is_enabled=True,
             created_at=datetime.datetime.now(),
@@ -638,8 +646,13 @@ class TestDatasetService(unittest.TestCase):
                 updated_at=now,
                 created_by=user_id,
                 version_id=uuid4(),
-                doi={"title": "Original Dataset", "creators": [{"name": "Author One"}], "publisher": "Test Institution", "publicationYear": now.year},
-            )
+                doi={
+                    "title": "Original Dataset",
+                    "creators": [{"name": "Author One"}],
+                    "publisher": "Test Institution",
+                    "publicationYear": now.year,
+                },
+            ),
         )
 
         existing_dataset = DatasetDBModel(
@@ -655,7 +668,7 @@ class TestDatasetService(unittest.TestCase):
             versions=[existing_version],
         )
         self.dataset_repository.fetch.return_value = existing_dataset
-        
+
         # Mock the update_metadata method to simulate failure
         self.doi_service.update_metadata.side_effect = Exception("Update failed")
 
@@ -673,7 +686,7 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=dataset_id,
             tenancies=["tenant1"],
         )
-        
+
         expected_doi = DOI(
             identifier="10.1234/example-doi",
             mode=DOIMode.AUTO,
@@ -688,11 +701,16 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=existing_dataset.id,
             dataset_version_id=existing_version.id,
             created_by=user_id,
-            provider_response={'title': 'Original Dataset', 'creators': [{'name': 'Author One'}], 'publisher': 'Test Institution', 'publicationYear': now.year},
+            provider_response={
+                "title": "Original Dataset",
+                "creators": [{"name": "Author One"}],
+                "publisher": "Test Institution",
+                "publicationYear": now.year,
+            },
         )
         self.doi_service.update_metadata.assert_called_once_with(doi=expected_doi)
         self.dataset_repository.upsert.assert_not_called()
-    
+
     def test_get_file_download_url_success(self):
         dataset_id = uuid4()
         version_name = "1"
@@ -703,8 +721,10 @@ class TestDatasetService(unittest.TestCase):
 
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
 
-        existing_file = DataFileDBModel(id=file_id, name="file_name", size_bytes=100, created_at=now, updated_at=now)
-        
+        existing_file = DataFileDBModel(
+            id=file_id, name="file_name", size_bytes=100, created_at=now, updated_at=now
+        )
+
         existing_version = DatasetVersionDBModel(
             id=uuid4(),
             name="1",
@@ -735,16 +755,31 @@ class TestDatasetService(unittest.TestCase):
             versions=[existing_version],
         )
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
         self.data_file_repository.fetch_by_id.return_value = existing_file
 
-        self.minio_gateway.get_pre_signed_url.return_value = "https://example.com/download/file_name"
+        self.minio_gateway.get_pre_signed_url.return_value = (
+            "https://example.com/download/file_name"
+        )
 
-        result = self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
+        result = self.dataset_service.get_file_download_url(
+            dataset_id, version_name, file_id, user_id, tenancies
+        )
 
         self.assertEqual(result, "https://example.com/download/file_name")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, is_enabled=True, tenancies=tenancies, latest_version=False, version_design_state=None, version_is_enabled=True)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_get_file_download_url_dataset_not_found(self):
         dataset_id = uuid4()
@@ -756,8 +791,10 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
-        
+            self.dataset_service.get_file_download_url(
+                dataset_id, version_name, file_id, user_id, tenancies
+            )
+
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
 
     def test_get_file_download_url_version_not_found(self):
@@ -786,9 +823,14 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_version_repository.fetch_version_by_name.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.get_file_download_url(dataset_id, version_name, uuid4(), user_id, tenancies)
+            self.dataset_service.get_file_download_url(
+                dataset_id, version_name, uuid4(), user_id, tenancies
+            )
 
-        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+        self.assertEqual(
+            str(context.exception),
+            f"not_found: {version_name} for dataset {dataset_id}",
+        )
 
     def test_get_file_download_url_file_not_found(self):
         dataset_id = uuid4()
@@ -807,7 +849,7 @@ class TestDatasetService(unittest.TestCase):
             design_state=DesignState.PUBLISHED,
             is_enabled=True,
             created_by=user_id,
-            files=[], # No files in the version
+            files=[],  # No files in the version
             created_at=now,
             updated_at=now,
             dataset_id=dataset_id,
@@ -829,10 +871,14 @@ class TestDatasetService(unittest.TestCase):
             versions=[existing_version],
         )
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.get_file_download_url(dataset_id, version_name, file_id, user_id, tenancies)
+            self.dataset_service.get_file_download_url(
+                dataset_id, version_name, file_id, user_id, tenancies
+            )
 
         self.assertEqual(str(context.exception), f"not_found: {file_id}")
 
@@ -890,18 +936,31 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=existing_dataset.id,
             dataset_version_id=existing_version.id,
             created_by=user_id,
-            provider_response={'title': 'Original Dataset', 'creators': [{'name': 'Author One'}], 'publisher': 'Test Institution', 'publicationYear': 2024},
+            provider_response={
+                "title": "Original Dataset",
+                "creators": [{"name": "Author One"}],
+                "publisher": "Test Institution",
+                "publicationYear": 2024,
+            },
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
         self.doi_service.create.return_value = expected_doi
 
-        result = self.dataset_service.create_doi(dataset_id, version_name, expected_doi, user_id, tenancies)
+        result = self.dataset_service.create_doi(
+            dataset_id, version_name, expected_doi, user_id, tenancies
+        )
 
         self.assertEqual(result, expected_doi)
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
         self.doi_service.create.assert_called_once_with(doi=expected_doi)
 
     def test_create_doi_dataset_not_found(self):
@@ -915,10 +974,14 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+            self.dataset_service.create_doi(
+                dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies
+            )
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
 
     def test_create_doi_version_not_found(self):
         dataset_id = uuid4()
@@ -945,11 +1008,20 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_version_repository.fetch_version_by_name.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+            self.dataset_service.create_doi(
+                dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies
+            )
 
-        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.assertEqual(
+            str(context.exception),
+            f"not_found: {version_name} for dataset {dataset_id}",
+        )
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_create_doi_already_exists(self):
         dataset_id = uuid4()
@@ -973,7 +1045,12 @@ class TestDatasetService(unittest.TestCase):
             dataset_id=dataset_id,
             doi_identifier="10.1234/example-doi",
             doi_state="DRAFT",
-            doi=DOIDBModel(identifier="10.1234/example-doi", mode="DRAFT", created_at=now, updated_at=now),  # DOI already exists
+            doi=DOIDBModel(
+                identifier="10.1234/example-doi",
+                mode="DRAFT",
+                created_at=now,
+                updated_at=now,
+            ),  # DOI already exists
         )
 
         existing_dataset = DatasetDBModel(
@@ -990,14 +1067,22 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
         with self.assertRaises(BadRequestException) as context:
-            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+            self.dataset_service.create_doi(
+                dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies
+            )
 
         self.assertEqual(str(context.exception.errors[0].code), "already_exists")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_create_doi_internal_service_failure(self):
         dataset_id = uuid4()
@@ -1037,17 +1122,25 @@ class TestDatasetService(unittest.TestCase):
             versions=[existing_version],
         )
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
         # Simulate a failure in the DOI service
         self.doi_service.create.side_effect = Exception("DOI service failure")
 
         with self.assertRaises(Exception) as context:
-            self.dataset_service.create_doi(dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies)
+            self.dataset_service.create_doi(
+                dataset_id, version_name, DOI(mode=DOIMode.AUTO), user_id, tenancies
+            )
 
         self.assertEqual(str(context.exception), "DOI service failure")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_change_doi_state_success(self):
         dataset_id = uuid4()
@@ -1090,13 +1183,23 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
-        self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+        self.dataset_service.change_doi_state(
+            dataset_id, version_name, new_state, user_id, tenancies
+        )
 
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
-        self.doi_service.change_state.assert_called_once_with(identifier=existing_version.doi.identifier, new_state=new_state)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
+        self.doi_service.change_state.assert_called_once_with(
+            identifier=existing_version.doi.identifier, new_state=new_state
+        )
 
     def test_change_doi_state_dataset_not_found(self):
         dataset_id = uuid4()
@@ -1110,10 +1213,14 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+            self.dataset_service.change_doi_state(
+                dataset_id, version_name, new_state, user_id, tenancies
+            )
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
 
     def test_change_doi_state_version_not_found(self):
         dataset_id = uuid4()
@@ -1142,11 +1249,20 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_version_repository.fetch_version_by_name.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+            self.dataset_service.change_doi_state(
+                dataset_id, version_name, new_state, user_id, tenancies
+            )
 
-        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.assertEqual(
+            str(context.exception),
+            f"not_found: {version_name} for dataset {dataset_id}",
+        )
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_change_doi_state_doi_not_found(self):
         dataset_id = uuid4()
@@ -1188,14 +1304,24 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.change_doi_state(dataset_id, version_name, new_state, user_id, tenancies)
+            self.dataset_service.change_doi_state(
+                dataset_id, version_name, new_state, user_id, tenancies
+            )
 
-        self.assertEqual(str(context.exception), f"not_found: DOI for version {version_name}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.assertEqual(
+            str(context.exception), f"not_found: DOI for version {version_name}"
+        )
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_get_doi_success(self):
         dataset_id = uuid4()
@@ -1250,13 +1376,21 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
-        result = self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
+        result = self.dataset_service.get_doi(
+            dataset_id, version_name, user_id, tenancies
+        )
 
         self.assertEqual(result, DOIAdapter.database_to_model(doi=existing_doi))
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_get_doi_dataset_not_found(self):
         dataset_id = uuid4()
@@ -1272,7 +1406,9 @@ class TestDatasetService(unittest.TestCase):
             self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
 
     def test_get_doi_version_not_found(self):
         dataset_id = uuid4()
@@ -1302,9 +1438,16 @@ class TestDatasetService(unittest.TestCase):
         with self.assertRaises(NotFoundException) as context:
             self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
 
-        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.assertEqual(
+            str(context.exception),
+            f"not_found: {version_name} for dataset {dataset_id}",
+        )
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_get_doi_doi_not_found(self):
         dataset_id = uuid4()
@@ -1345,14 +1488,22 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
         with self.assertRaises(NotFoundException) as context:
             self.dataset_service.get_doi(dataset_id, version_name, user_id, tenancies)
 
-        self.assertEqual(str(context.exception), f"not_found: DOI for version {version_name}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.assertEqual(
+            str(context.exception), f"not_found: DOI for version {version_name}"
+        )
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_delete_doi_success(self):
         dataset_id = uuid4()
@@ -1401,13 +1552,21 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
         self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
 
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
-        self.doi_service.delete.assert_called_once_with(identifier=existing_doi.identifier)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
+        self.doi_service.delete.assert_called_once_with(
+            identifier=existing_doi.identifier
+        )
 
     def test_delete_doi_dataset_not_found(self):
         dataset_id = uuid4()
@@ -1420,10 +1579,14 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
+            self.dataset_service.delete_doi(
+                dataset_id, version_name, user_id, tenancies
+            )
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
 
     def test_delete_doi_version_not_found(self):
         dataset_id = uuid4()
@@ -1451,11 +1614,20 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_version_repository.fetch_version_by_name.return_value = None
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
+            self.dataset_service.delete_doi(
+                dataset_id, version_name, user_id, tenancies
+            )
 
-        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.assertEqual(
+            str(context.exception),
+            f"not_found: {version_name} for dataset {dataset_id}",
+        )
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_delete_doi_doi_not_found(self):
         dataset_id = uuid4()
@@ -1496,14 +1668,24 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version
+        )
 
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
+            self.dataset_service.delete_doi(
+                dataset_id, version_name, user_id, tenancies
+            )
 
-        self.assertEqual(str(context.exception), f"not_found: DOI for version {version_name}")
-        self.dataset_repository.fetch.assert_called_once_with(dataset_id=dataset_id, tenancies=tenancies)
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(dataset_id=dataset_id, version_name=version_name)
+        self.assertEqual(
+            str(context.exception), f"not_found: DOI for version {version_name}"
+        )
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, tenancies=tenancies
+        )
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+            dataset_id=dataset_id, version_name=version_name
+        )
 
     def test_fetch_dataset_version_success(self):
         dataset_id = uuid4()
@@ -1573,15 +1755,17 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.return_value = existing_dataset
-        self.dataset_version_repository.fetch_version_by_name.return_value = existing_version_2
-        
+        self.dataset_version_repository.fetch_version_by_name.return_value = (
+            existing_version_2
+        )
+
         result = self.dataset_service.fetch_dataset_version(
             dataset_id=dataset_id,
             version_name="2",
             user_id=user_id,
             tenancies=tenancies,
         )
-        
+
         self.dataset_repository.fetch.assert_called_once_with(
             dataset_id=dataset_id,
             tenancies=tenancies,
@@ -1626,7 +1810,7 @@ class TestDatasetService(unittest.TestCase):
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
 
         self.dataset_repository.fetch.return_value = None
-        
+
         with self.assertRaises(NotFoundException) as context:
             self.dataset_service.fetch_dataset_version(
                 dataset_id=dataset_id,
@@ -1634,7 +1818,7 @@ class TestDatasetService(unittest.TestCase):
                 user_id=user_id,
                 tenancies=tenancies,
             )
-        
+
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
 
     def test_fetch_dataset_version_version_not_found(self):
@@ -1650,7 +1834,7 @@ class TestDatasetService(unittest.TestCase):
         mock_dataset = Mock(spec=DatasetDBModel)
         self.dataset_repository.fetch.return_value = mock_dataset
         self.dataset_version_repository.fetch_version_by_name.return_value = None
-        
+
         with self.assertRaises(NotFoundException) as context:
             self.dataset_service.fetch_dataset_version(
                 dataset_id=dataset_id,
@@ -1658,8 +1842,11 @@ class TestDatasetService(unittest.TestCase):
                 user_id=user_id,
                 tenancies=tenancies,
             )
-        
-        self.assertEqual(str(context.exception), f"not_found: {version_name} for dataset {dataset_id}")
+
+        self.assertEqual(
+            str(context.exception),
+            f"not_found: {version_name} for dataset {dataset_id}",
+        )
 
 
 if __name__ == "__main__":

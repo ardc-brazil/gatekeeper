@@ -13,8 +13,4 @@ class DataFileRepository:
 
     def fetch_by_id(self, id: UUID) -> DataFile:
         with self._session_factory() as session:
-            return (
-                session.query(DataFile)
-                .filter(DataFile.id == id)
-                .one_or_none()
-            )
+            return session.query(DataFile).filter(DataFile.id == id).one_or_none()

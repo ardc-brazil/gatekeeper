@@ -4,7 +4,6 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-
 class DataFileResponse(BaseModel):
     id: UUID = Field(..., title="File ID")
     name: str = Field(..., title="Name")
@@ -49,6 +48,7 @@ class DatasetGetResponse(BaseModel):
     )
     design_state: str = Field(..., title="Design state")
 
+
 class DatasetVersionGetResponse(BaseModel):
     id: UUID = Field(..., title="Dataset ID")
     name: str = Field(..., title="Name")
@@ -60,6 +60,7 @@ class DatasetVersionGetResponse(BaseModel):
     updated_at: datetime = Field(..., title="Updated at")
     version: DatasetVersionResponse = Field(..., title="Specific version information")
     design_state: str = Field(..., title="Design state")
+
 
 class PagedDatasetGetResponse(BaseModel):
     content: list[DatasetGetResponse] = Field(..., title="List of data content")
@@ -116,10 +117,14 @@ class DOICreateResponse(BaseModel):
 
 class DataFileDownloadResponse(BaseModel):
     url: str = Field(..., title="Download URL")
-    
+
+
 class DatasetVersionCreateRequest(BaseModel):
-    datafilesPreviouslyUploaded: list[str] = Field([], title="List of data files ids already created to attach to this version")  
-    
+    datafilesPreviouslyUploaded: list[str] = Field(
+        [], title="List of data files ids already created to attach to this version"
+    )
+
+
 class DatasetVersionCreateResponse(BaseModel):
     id: UUID = Field(..., title="Version ID")
     name: str = Field(..., title="Name")

@@ -18,6 +18,7 @@ from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.adapter.doi import model_to_payload
 
+
 class TestDOIService(unittest.TestCase):
     def setUp(self):
         self.mock_gateway = MagicMock(spec=DOIGateway)
@@ -495,7 +496,8 @@ class TestDOIService(unittest.TestCase):
 
         # Verify the update was made in the gateway
         self.mock_gateway.update.assert_called_once_with(
-            doi=model_to_payload(repository=existing_doi_db.prefix, doi=doi), identifier=doi.identifier
+            doi=model_to_payload(repository=existing_doi_db.prefix, doi=doi),
+            identifier=doi.identifier,
         )
 
         # Verify the DOI object was updated in the repository
@@ -558,6 +560,7 @@ class TestDOIService(unittest.TestCase):
         self.assertEqual(str(context.exception), f"not_found: {doi.identifier}")
         self.mock_gateway.update.assert_not_called()
         self.mock_repository.upsert.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

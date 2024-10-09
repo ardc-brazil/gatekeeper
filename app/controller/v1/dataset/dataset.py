@@ -77,7 +77,10 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         else None,
     )
 
-def _adapt_dataset_version_creation(version: DatasetVersion) -> DatasetVersionCreateResponse:
+
+def _adapt_dataset_version_creation(
+    version: DatasetVersion,
+) -> DatasetVersionCreateResponse:
     return _adapt_dataset_version(version=version)
 
 
@@ -96,6 +99,7 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         else None,
         design_state=dataset.design_state.name,
     )
+
 
 def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetGetResponse:
     return DatasetVersionGetResponse(
@@ -421,6 +425,7 @@ async def get_file_download_url(
     )
     return DataFileDownloadResponse(url=file)
 
+
 # POST /datasets/:dataset_id/versions
 @router.post("/{dataset_id}/versions")
 @inject
@@ -429,17 +434,17 @@ async def create_dataset_version(
     dataset_request: DatasetVersionCreateRequest,
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
-    service: DatasetService = Depends(Provide[Container.dataset_service]),    
+    service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DatasetVersionCreateResponse:
-    
     new_version = service.create_new_version(
         dataset_id=dataset_id,
         datafilesPreviouslyUploaded=dataset_request.datafilesPreviouslyUploaded,
         user_id=user_id,
         tenancies=tenancies,
     )
-    
+
     return _adapt_dataset_version_creation(version=new_version)
+
 
 # GET /datasets/:dataset_id/versions/:version
 @router.get("/{dataset_id}/versions/{version_name}")

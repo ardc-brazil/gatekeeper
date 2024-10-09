@@ -101,7 +101,9 @@ class DatasetService:
             else None,
         )
 
-    def _adapt_dataset_version(self, dataset: DatasetDBModel, dataset_version: DatasetVersionDBModel) -> Dataset:
+    def _adapt_dataset_version(
+        self, dataset: DatasetDBModel, dataset_version: DatasetVersionDBModel
+    ) -> Dataset:
         return Dataset(
             id=dataset.id,
             name=dataset.name,
@@ -113,6 +115,7 @@ class DatasetService:
             design_state=dataset.design_state,
             version=self._adapt_version(version=dataset_version),
         )
+
     def _get_current_dataset_version(
         self, versions: list[DatasetVersionDBModel]
     ) -> DatasetVersionDBModel:
@@ -200,7 +203,12 @@ class DatasetService:
             # TODO Should we get the specific version for doi, updated the last doi or update all dois for each version?
             current_version = self._get_current_dataset_version(dataset_db.versions)
             if current_version and current_version.doi is not None:
-                doi = self._create_doi_model(doi=DOIAdapter.database_to_model(current_version.doi), dataset=dataset_db, version=current_version, creator_id=user_id)
+                doi = self._create_doi_model(
+                    doi=DOIAdapter.database_to_model(current_version.doi),
+                    dataset=dataset_db,
+                    version=current_version,
+                    creator_id=user_id,
+                )
                 self._doi_service.update_metadata(doi=doi)
 
         self._repository.upsert(dataset=dataset_db)
@@ -421,7 +429,13 @@ class DatasetService:
             dataset.design_state = DesignState.PUBLISHED
             self._repository.upsert(dataset=dataset)
 
-    def _create_doi_model(self, doi: DOI, dataset: DatasetDBModel, version: DatasetVersionDBModel, creator_id: UUID) -> DOI:
+    def _create_doi_model(
+        self,
+        doi: DOI,
+        dataset: DatasetDBModel,
+        version: DatasetVersionDBModel,
+        creator_id: UUID,
+    ) -> DOI:
         doi.title = DOITitle(title=dataset.name)
 
         doi.creators = [
@@ -464,13 +478,17 @@ class DatasetService:
         )
 
         if version is None:
-            raise NotFoundException(f"not_found: {version_name} for dataset {dataset_id}")
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
 
         if version.doi:
             raise BadRequestException(errors=[ErrorDetails(code="already_exists")])
 
-        doi = self._create_doi_model(doi=doi, dataset=dataset, version=version, creator_id=user_id)
-        
+        doi = self._create_doi_model(
+            doi=doi, dataset=dataset, version=version, creator_id=user_id
+        )
+
         created_doi: DOI = self._doi_service.create(doi=doi)
 
         return created_doi
@@ -604,15 +622,14 @@ class DatasetService:
             object_name=file.storage_file_name,
             original_file_name=file.name,
         )
-        
+
     def create_new_version(
         self,
-        dataset_id: UUID,        
+        dataset_id: UUID,
         user_id: UUID,
         tenancies: list[str] = [],
         datafilesPreviouslyUploaded: list[str] = [],
     ) -> DatasetVersion:
-
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -621,23 +638,23 @@ class DatasetService:
 
         if dataset is None:
             raise NotFoundException(f"not_found: {dataset_id}")
-        
+
         current_version = self._get_current_dataset_version(dataset.versions)
         if current_version.design_state == DesignState.DRAFT:
             current_version.is_enabled = False
             self._version_repository.upsert(current_version)
-            
+
         new_version = self._create_new_version(dataset_db=dataset, user_id=user_id)
         new_version.dataset_id = dataset_id
         for file_id in datafilesPreviouslyUploaded:
             new_version.files_in.append(
                 self._data_file_repository.fetch_by_id(id=file_id)
             )
-        
+
         self._version_repository.upsert(dataset_version=new_version)
-        
+
         return self._adapt_version(version=new_version)
-    
+
     def fetch_dataset_version(
         self,
         dataset_id: UUID,
@@ -663,4 +680,3 @@ class DatasetService:
             )
 
         return self._adapt_dataset_version(dataset=dataset, dataset_version=version)
-        
