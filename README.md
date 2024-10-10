@@ -140,7 +140,7 @@ make ENV_FILE_PATH={env_file_path} docker-deployment
 ### Accessing the application in prod
 
 * Frontend: `https://datamap.pcs.usp.br/`
-* Backend: `https://datamap.pcs.usp.br/api/v1/docs`
+* Backend: `https://datamap.pcs.usp.br/api/docs`
 * pgAdmin: `http://datamap.pcs.usp.br/pgadmin`
 * MIN.io: `https://datamap.pcs.usp.br/minio/ui/`
 * TUSd: `https://datamap.pcs.usp.br/files/`

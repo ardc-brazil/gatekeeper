@@ -122,7 +122,7 @@ class Container(containers.DeclarativeContainer):
         config.MINIO_URL,
         access_key=config.MINIO_ACCESS_KEY,
         secret_key=config.MINIO_SECRET_KEY,
-        secure=False,
+        secure=config.MINIO_USE_SSL,
         # Set a default region to prevent the client from attempting to connect
         # to MinIO to auto-detect the region before generating presigned URLs.
         # For more details, refer to: https://github.com/minio/minio-py/issues/759#issuecomment-490277280

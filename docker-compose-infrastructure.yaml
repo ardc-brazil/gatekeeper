@@ -32,7 +32,7 @@ services:
         - gatekeeper_gatekeeper-network
     hostname: minio
     volumes:
-      - "../data-storage:/storage/"
+      - storage:/storage/
   
   tusd:
     image: tusproject/tusd:v2.4
@@ -48,6 +48,14 @@ services:
       - minio
     networks:
       - gatekeeper_gatekeeper-network
+
+volumes:
+  storage:
+    driver: local
+    driver_opts:
+      device: ${STORAGE_DOCKER_VOLUME}
+      o: bind
+      type: local
 
 networks:
   gatekeeper_gatekeeper-network:
