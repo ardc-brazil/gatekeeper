@@ -68,7 +68,7 @@ class DatasetService:
         )
 
     def _calculate_files_size_in_bytes(self, files: list[DataFileDBModel]) -> int:
-        return sum([file.size_bytes for file in files])
+        return sum([file.size_bytes or 0 for file in files])
     
     def _calculate_files_count(self, files: list[DataFileDBModel]) -> int:
         return len(files)
