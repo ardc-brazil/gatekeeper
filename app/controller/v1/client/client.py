@@ -9,6 +9,7 @@ from app.controller.v1.client.resource import (
     ClientGetResponse,
     ClientUpdateRequest,
 )
+from app.model.client import Client
 from app.service.client import ClientService
 
 router = APIRouter(
@@ -24,10 +25,10 @@ router = APIRouter(
 async def get_all(
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> list[ClientGetResponse]:
-    clients = service.fetch_all()
+    clients: list[Client] = service.fetch_all()
     return [
         ClientGetResponse(
-            key=client["key"], name=client["name"], is_enabled=client["is_enabled"]
+            key=client.key, name=client.name, is_enabled=client.is_enabled
         )
         for client in clients
     ]
@@ -41,10 +42,10 @@ async def get_by_key(
     response: Response,
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> ClientGetResponse:
-    client = service.fetch(key)
+    client: list[Client] = service.fetch(key)
     if client is not None:
         return ClientGetResponse(
-            key=client["key"], name=client["name"], is_enabled=client["is_enabled"]
+            key=client.key, name=client.name, is_enabled=client.is_enabled
         )
     else:
         response.status_code = 404
