@@ -67,6 +67,12 @@ class DatasetService:
             created_by=file.created_by,
         )
 
+    def _calculate_files_size_in_bytes(self, files: list[DataFileDBModel]) -> int:
+        return sum([file.size_bytes or 0 for file in files])
+    
+    def _calculate_files_count(self, files: list[DataFileDBModel]) -> int:
+        return len(files)
+    
     def _adapt_version(self, version: DatasetVersionDBModel) -> DatasetVersion:
         return DatasetVersion(
             id=version.id,
@@ -79,6 +85,23 @@ class DatasetService:
             design_state=version.design_state,
             files=[self._adapt_file(file=file) for file in version.files],
             files_in=[self._adapt_file(file=file) for file in version.files_in],
+            files_size_in_bytes=self._calculate_files_size_in_bytes(version.files_in),
+            files_count=self._calculate_files_count(version.files_in),
+            doi=DOIAdapter.database_to_model(doi=version.doi) if version.doi else None,
+        )
+
+    def _adapt_minimal_version(self, version: DatasetVersionDBModel) -> DatasetVersion:
+        return DatasetVersion(
+            id=version.id,
+            name=version.name,
+            description=version.description,
+            created_at=version.created_at,
+            updated_at=version.updated_at,
+            created_by=version.created_by,
+            is_enabled=version.is_enabled,
+            design_state=version.design_state,
+            files_size_in_bytes=self._calculate_files_size_in_bytes(version.files_in),
+            files_count=self._calculate_files_count(version.files_in),
             doi=DOIAdapter.database_to_model(doi=version.doi) if version.doi else None,
         )
 
@@ -100,6 +123,26 @@ class DatasetService:
             if current_version is not None
             else None,
         )
+
+    def _adapt_minimal_dataset(self, dataset: DatasetDBModel) -> Dataset:
+        current_version = self._get_current_dataset_version(versions=dataset.versions)
+        return Dataset(
+            id=dataset.id,
+            name=dataset.name,
+            data=dataset.data,
+            is_enabled=dataset.is_enabled,
+            created_at=dataset.created_at,
+            updated_at=dataset.updated_at,
+            tenancy=dataset.tenancy,
+            design_state=dataset.design_state,
+            versions=[
+                self._adapt_minimal_version(version=version) for version in dataset.versions
+            ],
+            current_version=self._adapt_minimal_version(version=current_version)
+            if current_version is not None
+            else None,
+        )
+
 
     def _adapt_dataset_version(
         self, dataset: DatasetDBModel, dataset_version: DatasetVersionDBModel
@@ -373,6 +416,9 @@ class DatasetService:
 
         if res is None:
             return []
+        
+        if query.minimal:
+            return [self._adapt_minimal_dataset(dataset=dataset) for dataset in res]
 
         return [self._adapt_dataset(dataset=dataset) for dataset in res]
 

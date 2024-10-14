@@ -33,6 +33,19 @@ class DatasetVersionResponse(BaseModel):
     doi: Optional[DOIResponse] = Field(None, title="DOI")
     created_at: datetime = Field(..., title="Created at")
     updated_at: datetime = Field(..., title="Updated at")
+    files_size_in_bytes: int = Field(None, title="Size in bytes of total files")
+    files_count: int = Field(None, title="Number of files")
+
+class MinimalDatasetVersionResponse(BaseModel):
+    id: UUID = Field(..., title="Version ID")
+    name: str = Field(..., title="Name")
+    design_state: str = Field(..., title="Design state")
+    is_enabled: bool = Field(..., title="Is enabled")
+    files_size_in_bytes: int = Field(..., title="Size in bytes of total files")
+    files_count: int = Field(..., title="Number of files")
+    doi: Optional[DOIResponse] = Field(None, title="DOI")
+    created_at: datetime = Field(..., title="Created at")
+    updated_at: datetime = Field(..., title="Updated at")
 
 
 class DatasetGetResponse(BaseModel):
@@ -51,6 +64,21 @@ class DatasetGetResponse(BaseModel):
     design_state: str = Field(..., title="Design state")
 
 
+class MinimalDatasetGetResponse(BaseModel):
+    id: UUID = Field(..., title="Dataset ID")
+    name: str = Field(..., title="Name")
+    # TODO: Maybe `data` should be a str to be compatible with old version
+    data: dict = Field(..., title="Dataset information in JSON format")
+    tenancy: str = Field(..., title="Tenancy")
+    is_enabled: bool = Field(..., title="Is enabled")
+    created_at: datetime = Field(..., title="Created at")
+    updated_at: datetime = Field(..., title="Updated at")
+    versions: list[MinimalDatasetVersionResponse] = Field([], title="Version information")
+    current_version: Optional[MinimalDatasetVersionResponse] = Field(
+        None, title="Current version information"
+    )
+    design_state: str = Field(..., title="Design state")
+
 class DatasetVersionGetResponse(BaseModel):
     id: UUID = Field(..., title="Dataset ID")
     name: str = Field(..., title="Name")
@@ -67,7 +95,6 @@ class DatasetVersionGetResponse(BaseModel):
 class PagedDatasetGetResponse(BaseModel):
     content: list[DatasetGetResponse] = Field(..., title="List of data content")
     size: int = Field(..., title="The size of the content")
-
 
 class DatasetUpdateRequest(BaseModel):
     name: str = Field(..., title="Name")

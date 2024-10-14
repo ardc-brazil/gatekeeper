@@ -78,9 +78,11 @@ class TestDatasetService(unittest.TestCase):
         user_id = uuid4()
         tenancies = ["tenancy1"]
         dataset_db = Mock(spec=DatasetDBModel)
+        file = Mock(spec=DataFileDBModel)
+        file.size_bytes = 0
         mocked_version = Mock(spec=DatasetVersionDBModel)
-        mocked_version.files = [Mock(spec=DataFileDBModel)]
-        mocked_version.files_in = [Mock(spec=DataFileDBModel)]
+        mocked_version.files = [file]
+        mocked_version.files_in = [file]
         mocked_version.doi = DOIDBModel(
             mode="MANUAL",
             state="DRAFT",
@@ -178,10 +180,12 @@ class TestDatasetService(unittest.TestCase):
         dataset.name = "test"
         dataset.data = {}
         user_id = uuid4()
+        file = Mock(spec=DataFileDBModel)
+        file.size_bytes = 0
         created_dataset_db = Mock(spec=DatasetDBModel)
         mocked_version = Mock(spec=DatasetVersionDBModel)
-        mocked_version.files = [Mock(spec=DataFileDBModel)]
-        mocked_version.files_in = [Mock(spec=DataFileDBModel)]
+        mocked_version.files = [file]
+        mocked_version.files_in = [file]
         mocked_version.doi = DOIDBModel(
             mode="MANUAL",
             state="DRAFT",
@@ -1795,6 +1799,8 @@ class TestDatasetService(unittest.TestCase):
                 updated_at=now,
                 created_by=user_id,
                 files=[],
+                files_count=0,
+                files_size_in_bytes=0,
                 doi=DOIAdapter.database_to_model(doi=existing_doi),
             ),
         )
