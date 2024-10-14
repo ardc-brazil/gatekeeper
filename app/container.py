@@ -157,6 +157,7 @@ class Container(containers.DeclarativeContainer):
         user_service=user_service,
         doi_service=doi_service,
         minio_gateway=minio_gateway,
+        tenancy_service=tenancy_service,
         dataset_bucket=config.MINIO_DATASET_BUCKET,
     )
 
