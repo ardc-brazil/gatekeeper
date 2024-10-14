@@ -81,6 +81,7 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         files_count=version.files_count,
     )
 
+
 def _adapt_minimal_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
     return DatasetVersionResponse(
         id=version.id,
@@ -123,6 +124,7 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         design_state=dataset.design_state.name,
     )
 
+
 def _adapt_minimal_dataset(dataset: Dataset) -> DatasetGetResponse:
     return DatasetGetResponse(
         id=dataset.id,
@@ -132,12 +134,15 @@ def _adapt_minimal_dataset(dataset: Dataset) -> DatasetGetResponse:
         is_enabled=dataset.is_enabled,
         created_at=dataset.created_at,
         updated_at=dataset.updated_at,
-        versions=[_adapt_minimal_dataset_version(version) for version in dataset.versions],
+        versions=[
+            _adapt_minimal_dataset_version(version) for version in dataset.versions
+        ],
         current_version=_adapt_minimal_dataset_version(dataset.current_version)
         if dataset.current_version is not None
         else None,
         design_state=dataset.design_state.name,
     )
+
 
 def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetGetResponse:
     return DatasetVersionGetResponse(
@@ -192,7 +197,7 @@ async def get_datasets(
     if minimal:
         content = [_adapt_minimal_dataset(dataset) for dataset in datasets]
         return PagedDatasetGetResponse(content=content, size=len(content))
-    
+
     content = [_adapt_dataset(dataset) for dataset in datasets]
     return PagedDatasetGetResponse(content=content, size=len(content))
 

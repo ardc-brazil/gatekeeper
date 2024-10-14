@@ -8,10 +8,12 @@ from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
+from app.model.tenancy import Tenancy
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.doi import DOIService
+from app.service.tenancy import TenancyService
 from app.service.user import UserService
 from app.model.dataset import (
     Dataset,
@@ -47,6 +49,7 @@ class TestDatasetService(unittest.TestCase):
         self.user_service = Mock(spec=UserService)
         self.doi_service = Mock(spec=DOIService)
         self.minio_gateway = Mock(spec=ObjectStorageGateway)
+        self.tenancy_service = Mock(spec=TenancyService)
         self.dataset_service = DatasetService(
             repository=self.dataset_repository,
             version_repository=self.dataset_version_repository,
@@ -54,6 +57,7 @@ class TestDatasetService(unittest.TestCase):
             user_service=self.user_service,
             doi_service=self.doi_service,
             minio_gateway=self.minio_gateway,
+            tenancy_service=self.tenancy_service,
             dataset_bucket="dataset_bucket",
         )
 
@@ -434,6 +438,34 @@ class TestDatasetService(unittest.TestCase):
         expected_tenancies = ["a", "b"]
 
         self.user_service.fetch_by_id.return_value = self.mock_user(given_tenancies)
+
+        # when
+        actual = self.dataset_service._determine_tenancies(
+            user_id=given_user_id, tenancies=given_tenancies
+        )
+
+        # then
+        self.assertEqual(actual, expected_tenancies)
+
+    def mock_tenancy(self, name, is_enabled):
+        # Mocking a tenancy object with the given name and enabled status
+        tenancy = Mock(Tenancy)
+        tenancy.name = name
+        tenancy.is_enabled = is_enabled
+        return tenancy
+
+    def test__determine_tenancies_disabled_tenancy(self):
+        # given
+        given_user_id = "7DC7479E-9DCD-4519-BEC8-6CBA708A7B10"
+        given_tenancies = ["a", "b"]
+        expected_tenancies = ["a"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(given_tenancies)
+        self.tenancy_service.fetch.side_effect = lambda name: (
+            self.mock_tenancy(name, is_enabled=True)
+            if name == "a"
+            else self.mock_tenancy(name, is_enabled=False)
+        )
 
         # when
         actual = self.dataset_service._determine_tenancies(

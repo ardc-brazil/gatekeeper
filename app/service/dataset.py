@@ -17,6 +17,7 @@ from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.service.doi import DOIService
+from app.service.tenancy import TenancyService
 from app.service.user import UserService
 from app.model.dataset import (
     Dataset,
@@ -42,6 +43,7 @@ class DatasetService:
         user_service: UserService,
         doi_service: DOIService,
         minio_gateway: ObjectStorageGateway,
+        tenancy_service: TenancyService,
         dataset_bucket: str,
     ):
         self._logger = logging.getLogger("service:DatasetService")
@@ -52,6 +54,7 @@ class DatasetService:
         self._minio_gateway = minio_gateway
         self._dataset_bucket = dataset_bucket
         self._data_file_repository = data_file_repository
+        self._tenancy_service = tenancy_service
 
     def _adapt_file(self, file: DataFileDBModel) -> DataFile:
         return DataFile(
@@ -69,10 +72,10 @@ class DatasetService:
 
     def _calculate_files_size_in_bytes(self, files: list[DataFileDBModel]) -> int:
         return sum([file.size_bytes or 0 for file in files])
-    
+
     def _calculate_files_count(self, files: list[DataFileDBModel]) -> int:
         return len(files)
-    
+
     def _adapt_version(self, version: DatasetVersionDBModel) -> DatasetVersion:
         return DatasetVersion(
             id=version.id,
@@ -136,13 +139,13 @@ class DatasetService:
             tenancy=dataset.tenancy,
             design_state=dataset.design_state,
             versions=[
-                self._adapt_minimal_version(version=version) for version in dataset.versions
+                self._adapt_minimal_version(version=version)
+                for version in dataset.versions
             ],
             current_version=self._adapt_minimal_version(version=current_version)
             if current_version is not None
             else None,
         )
-
 
     def _adapt_dataset_version(
         self, dataset: DatasetDBModel, dataset_version: DatasetVersionDBModel
@@ -186,7 +189,13 @@ class DatasetService:
         if not tenancies:
             tenancies = user.tenancies
 
-        # TODO check for enabled tenancy, if is not enabled, remove from list
+        # Check if tenancy is enabled
+        for tenancy in tenancies:
+            database_tenancy = self._tenancy_service.fetch(name=tenancy)
+
+            if not database_tenancy or not database_tenancy.is_enabled:
+                tenancies.remove(tenancy)
+
         if not set(tenancies).issubset(set(user.tenancies)):
             logging.warning(
                 f"user {user_id} trying to query with unauthorized tenancy: {tenancies}"
@@ -416,7 +425,7 @@ class DatasetService:
 
         if res is None:
             return []
-        
+
         if query.minimal:
             return [self._adapt_minimal_dataset(dataset=dataset) for dataset in res]
 
