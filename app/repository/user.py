@@ -43,7 +43,7 @@ class UserRepository:
                 )
                 .filter(
                     provider_alias.name == provider_name,
-                    Provider.reference == reference,
+                    provider_alias.reference == reference,
                     User.is_enabled == is_enabled,
                 )
                 .first()
