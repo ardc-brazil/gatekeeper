@@ -72,10 +72,10 @@ class DatasetService:
 
     def _calculate_files_size_in_bytes(self, files: list[DataFileDBModel]) -> int:
         return sum([file.size_bytes or 0 for file in files])
-    
+
     def _calculate_files_count(self, files: list[DataFileDBModel]) -> int:
         return len(files)
-    
+
     def _adapt_version(self, version: DatasetVersionDBModel) -> DatasetVersion:
         return DatasetVersion(
             id=version.id,
@@ -139,13 +139,13 @@ class DatasetService:
             tenancy=dataset.tenancy,
             design_state=dataset.design_state,
             versions=[
-                self._adapt_minimal_version(version=version) for version in dataset.versions
+                self._adapt_minimal_version(version=version)
+                for version in dataset.versions
             ],
             current_version=self._adapt_minimal_version(version=current_version)
             if current_version is not None
             else None,
         )
-
 
     def _adapt_dataset_version(
         self, dataset: DatasetDBModel, dataset_version: DatasetVersionDBModel
@@ -425,7 +425,7 @@ class DatasetService:
 
         if res is None:
             return []
-        
+
         if query.minimal:
             return [self._adapt_minimal_dataset(dataset=dataset) for dataset in res]
 

@@ -453,7 +453,7 @@ class TestDatasetService(unittest.TestCase):
         tenancy.name = name
         tenancy.is_enabled = is_enabled
         return tenancy
-    
+
     def test__determine_tenancies_disabled_tenancy(self):
         # given
         given_user_id = "7DC7479E-9DCD-4519-BEC8-6CBA708A7B10"
@@ -462,7 +462,8 @@ class TestDatasetService(unittest.TestCase):
 
         self.user_service.fetch_by_id.return_value = self.mock_user(given_tenancies)
         self.tenancy_service.fetch.side_effect = lambda name: (
-            self.mock_tenancy(name, is_enabled=True) if name == "a" 
+            self.mock_tenancy(name, is_enabled=True)
+            if name == "a"
             else self.mock_tenancy(name, is_enabled=False)
         )
 

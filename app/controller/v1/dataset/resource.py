@@ -36,6 +36,7 @@ class DatasetVersionResponse(BaseModel):
     files_size_in_bytes: int = Field(None, title="Size in bytes of total files")
     files_count: int = Field(None, title="Number of files")
 
+
 class MinimalDatasetVersionResponse(BaseModel):
     id: UUID = Field(..., title="Version ID")
     name: str = Field(..., title="Name")
@@ -73,11 +74,14 @@ class MinimalDatasetGetResponse(BaseModel):
     is_enabled: bool = Field(..., title="Is enabled")
     created_at: datetime = Field(..., title="Created at")
     updated_at: datetime = Field(..., title="Updated at")
-    versions: list[MinimalDatasetVersionResponse] = Field([], title="Version information")
+    versions: list[MinimalDatasetVersionResponse] = Field(
+        [], title="Version information"
+    )
     current_version: Optional[MinimalDatasetVersionResponse] = Field(
         None, title="Current version information"
     )
     design_state: str = Field(..., title="Design state")
+
 
 class DatasetVersionGetResponse(BaseModel):
     id: UUID = Field(..., title="Dataset ID")
@@ -95,6 +99,7 @@ class DatasetVersionGetResponse(BaseModel):
 class PagedDatasetGetResponse(BaseModel):
     content: list[DatasetGetResponse] = Field(..., title="List of data content")
     size: int = Field(..., title="The size of the content")
+
 
 class DatasetUpdateRequest(BaseModel):
     name: str = Field(..., title="Name")
