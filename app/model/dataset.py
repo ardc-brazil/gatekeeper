@@ -38,6 +38,8 @@ class DatasetVersion:
     # TODO: deprecate files in favor to files_in
     files: list[DataFile] = field(default_factory=lambda: [])
     files_in: list[DataFile] = field(default_factory=lambda: [])
+    files_size_in_bytes: int = None
+    files_count: int = None
     doi: DOI = None
 
 
@@ -55,6 +57,8 @@ class Dataset:
     version: DatasetVersion = None
     created_at: datetime = None
     updated_at: datetime = None
+    file_size_in_bytes: int = None
+    file_count: int = None
 
 
 @dataclass
@@ -68,3 +72,4 @@ class DatasetQuery:
     include_disabled: bool = False
     version: str = None
     design_state: str = None
+    minimal: bool = False

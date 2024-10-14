@@ -77,6 +77,27 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         else None,
         created_at=version.created_at,
         updated_at=version.updated_at,
+        files_size_in_bytes=version.files_size_in_bytes,
+        files_count=version.files_count,
+    )
+
+def _adapt_minimal_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
+    return DatasetVersionResponse(
+        id=version.id,
+        name=version.name,
+        design_state=version.design_state.name,
+        is_enabled=version.is_enabled,
+        doi=DOIResponse(
+            identifier=version.doi.identifier,
+            state=version.doi.state.name,
+            mode=version.doi.mode.name,
+        )
+        if version.doi is not None
+        else None,
+        created_at=version.created_at,
+        updated_at=version.updated_at,
+        files_size_in_bytes=version.files_size_in_bytes,
+        files_count=version.files_count,
     )
 
 
@@ -102,6 +123,21 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         design_state=dataset.design_state.name,
     )
 
+def _adapt_minimal_dataset(dataset: Dataset) -> DatasetGetResponse:
+    return DatasetGetResponse(
+        id=dataset.id,
+        name=dataset.name,
+        data=dataset.data,
+        tenancy=dataset.tenancy,
+        is_enabled=dataset.is_enabled,
+        created_at=dataset.created_at,
+        updated_at=dataset.updated_at,
+        versions=[_adapt_minimal_dataset_version(version) for version in dataset.versions],
+        current_version=_adapt_minimal_dataset_version(dataset.current_version)
+        if dataset.current_version is not None
+        else None,
+        design_state=dataset.design_state.name,
+    )
 
 def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetGetResponse:
     return DatasetVersionGetResponse(
@@ -130,6 +166,7 @@ async def get_datasets(
     include_disabled: bool = False,
     design_state: str = None,
     version: str = None,
+    minimal: bool = False,
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
@@ -145,11 +182,17 @@ async def get_datasets(
         include_disabled=include_disabled,
         version=version,
         design_state=design_state,
+        minimal=minimal,
     )
+
     datasets: list[Dataset] = service.search_datasets(
         query=query, user_id=user_id, tenancies=tenancies
     )
 
+    if minimal:
+        content = [_adapt_minimal_dataset(dataset) for dataset in datasets]
+        return PagedDatasetGetResponse(content=content, size=len(content))
+    
     content = [_adapt_dataset(dataset) for dataset in datasets]
     return PagedDatasetGetResponse(content=content, size=len(content))
 
