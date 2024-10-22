@@ -5,6 +5,7 @@ from app.model.doi import (
     Mode as ModeModel,
     Creator as DOICreator,
     Title as DOITitle,
+    Publisher as DOIPublisher,
 )
 from app.model.db.doi import DOI as DOIDBModel
 from app.gateway.doi.resource import (
@@ -14,6 +15,7 @@ from app.gateway.doi.resource import (
     Creator as DOIPayloadCreator,
     Title as DOIPayloadTitle,
     Types as DOIPayloadTypes,
+    Publisher as DOIPayloadPublisher,
 )
 
 
@@ -32,7 +34,7 @@ def database_to_model(doi: DOIDBModel) -> DOIModel:
         identifier=doi.identifier,
         title=DOITitle(title=titles[0].get("title")) if titles else None,
         creators=[DOICreator(name=creator.get("name")) for creator in creators],
-        publisher=publisher,
+        publisher=DOIPublisher(publisher=publisher),
         publication_year=publication_year,
         resource_type=resource_type,
         url=doi.url,
@@ -56,13 +58,15 @@ def model_to_payload(repository: str, doi: DOIModel) -> DOIPayload:
         else None
     )
 
+    publisher = DOIPayloadPublisher(name=doi.publisher.publisher) if doi.publisher else None
+
     return DOIPayload(
         data=DOIPayloadData(
             attributes=DOIPayloadAttributes(
                 prefix=repository,
                 creators=creators,
                 titles=titles,
-                publisher=doi.publisher,
+                publisher=publisher,
                 publicationYear=doi.publication_year,
                 url=doi.url,
                 types=resource_type,
@@ -77,7 +81,7 @@ def database_to_payload(doi: DOIDBModel) -> DOIPayload:
     attributes = data.get("attributes", {})
     titles = attributes.get("titles", [{}])
     creators = attributes.get("creators", [{}])
-    publisher = attributes.get("publisher", {})
+    publisher = attributes.get("publisher", "")
     publication_year = attributes.get("published", {})
     types = attributes.get("types", {})
     resource_type = types.get("resourceTypeGeneral", {})
@@ -90,7 +94,7 @@ def database_to_payload(doi: DOIDBModel) -> DOIPayload:
                     DOIPayloadCreator(name=creator.get("name")) for creator in creators
                 ],
                 titles=[DOIPayloadTitle(title=title.get("title")) for title in titles],
-                publisher=publisher,
+                publisher=DOIPayloadPublisher(name=publisher),
                 publicationYear=publication_year,
                 url=doi.url,
                 types=DOIPayloadTypes(resourceTypeGeneral=resource_type),
@@ -101,7 +105,7 @@ def database_to_payload(doi: DOIDBModel) -> DOIPayload:
 
 def change_state_to_payload(doi: DOIDBModel, event: EventModel) -> DOIPayload:
     payload: DOIPayload = database_to_payload(doi)
-    payload.data.attributes.event = event.name
+    payload.data.attributes.event = event.name.lower()
 
     return payload
 

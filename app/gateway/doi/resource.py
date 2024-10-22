@@ -24,11 +24,15 @@ class Types:
 
 
 @dataclass
+class Publisher:
+    name: str
+
+@dataclass
 class Attributes:
     prefix: str = None
     creators: List[Creator] = None
     titles: List[Title] = None
-    publisher: str = None
+    publisher: Publisher = None
     publicationYear: int = None
     url: str = None
     types: Types = None

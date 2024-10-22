@@ -11,6 +11,7 @@ from app.model.doi import (
     Event,
     Title as TitleModel,
     Creator as CreatorModel,
+    Publisher as PublisherModel,
 )
 from app.model.db.doi import DOI as DOIDBModel
 from app.exception.bad_request import BadRequestException
@@ -253,7 +254,7 @@ class TestDOIService(unittest.TestCase):
             mode=Mode.AUTO,
             title=TitleModel(title="Test DOI"),
             creators=[CreatorModel(name="Creator One")],
-            publisher="Test Publisher",
+            publisher=PublisherModel(publisher="Test Publisher"),
             publication_year=2024,
             resource_type="Text",
             url="https://example.com/doi",
@@ -291,7 +292,7 @@ class TestDOIService(unittest.TestCase):
             mode=Mode.AUTO,
             title=TitleModel(title="Test DOI"),
             creators=[CreatorModel(name="Creator One")],
-            publisher="Test Publisher",
+            publisher=PublisherModel(publisher="Test Publisher"),
             publication_year=2024,
             resource_type="Text",
             url="https://example.com/doi",
@@ -466,7 +467,7 @@ class TestDOIService(unittest.TestCase):
             mode=Mode.AUTO,
             title=TitleModel(title="Updated DOI"),
             creators=[CreatorModel(name="Creator One")],
-            publisher="Updated Publisher",
+            publisher=PublisherModel("Updated Publisher"),
             publication_year=2024,
             resource_type="Text",
             url="https://example.com/doi",

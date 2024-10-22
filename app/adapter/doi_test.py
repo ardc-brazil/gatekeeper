@@ -45,7 +45,7 @@ class TestDOIAdapter(unittest.TestCase):
         self.assertEqual(len(result.creators), 2)
         self.assertEqual(result.creators[0].name, "Creator One")
         self.assertEqual(result.creators[1].name, "Creator Two")
-        self.assertEqual(result.publisher, "Test Publisher")
+        self.assertEqual(result.publisher.publisher, "Test Publisher")
         self.assertEqual(result.publication_year, 2024)
         self.assertEqual(result.resource_type, "Text")
         self.assertEqual(result.url, "https://example.com/doi")
@@ -88,7 +88,7 @@ class TestDOIAdapter(unittest.TestCase):
         self.assertEqual(payload.data.attributes.creators[0].name, "Creator One")
         self.assertEqual(payload.data.attributes.creators[1].name, "Creator Two")
         self.assertEqual(payload.data.attributes.titles[0].title, "Test DOI")
-        self.assertEqual(payload.data.attributes.publisher, "Test Publisher")
+        self.assertEqual(payload.data.attributes.publisher.name, "Test Publisher")
         self.assertEqual(payload.data.attributes.publicationYear, 2024)
         self.assertEqual(payload.data.attributes.url, "https://example.com/doi")
         self.assertEqual(payload.data.attributes.types.resourceTypeGeneral, "Text")
@@ -111,7 +111,7 @@ class TestDOIAdapter(unittest.TestCase):
         event = EventModel.PUBLISH
         payload = change_state_to_payload(self.database_doi, event)
 
-        self.assertEqual(payload.data.attributes.event, event.name)
+        self.assertEqual(payload.data.attributes.event, event.name.lower())
 
     def test_model_to_database(self):
         model = database_to_model(self.database_doi)
