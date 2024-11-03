@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Response
 from dependency_injector.wiring import inject, Provide
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
+from app.controller.interceptor.authorization import authorize
 from app.controller.v1.client.resource import (
     ClientCreateRequest,
     ClientCreateResponse,
@@ -20,7 +21,7 @@ router = APIRouter(
 
 
 # GET /clients
-@router.get("/")
+@router.get("/", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def get_all(
     service: ClientService = Depends(Provide[Container.client_service]),
@@ -35,7 +36,7 @@ async def get_all(
 
 
 # GET /clients/{key}
-@router.get("/{key}", dependencies=[Depends(authenticate)])
+@router.get("/{key}", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def get_by_key(
     key: UUID,
@@ -53,7 +54,7 @@ async def get_by_key(
 
 
 # PUT /clients/{key}
-@router.put("/{key}")
+@router.put("/{key}", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def update_by_key(
     key: UUID,
@@ -65,7 +66,7 @@ async def update_by_key(
 
 
 # POST /clients
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def create(
     payload: ClientCreateRequest,
@@ -76,7 +77,7 @@ async def create(
 
 
 # DELETE /clients/{key}
-@router.delete("/{key}", status_code=204)
+@router.delete("/{key}", status_code=204, dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def delete(
     key: UUID,
@@ -87,7 +88,7 @@ async def delete(
 
 
 # POST /clients/{key}/enable
-@router.post("/{key}/enable")
+@router.post("/{key}/enable", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def enable(
     key: UUID,
