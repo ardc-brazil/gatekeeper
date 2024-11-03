@@ -3,6 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.container import Container
+from app.controller.interceptor.authentication import authenticate
+from app.controller.interceptor.authorization import authorize
 from app.controller.v1.user.resource import (
     UserCreateResponse,
     UserEnforceRequest,
@@ -46,7 +48,7 @@ def _adapt_post_response(user_id: UUID) -> UserCreateResponse:
 
 
 # GET /users
-@router.get("/")
+@router.get("/", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def search(
     email: str = None,
@@ -59,7 +61,7 @@ async def search(
 
 
 # GET /users/{id}
-@router.get("/{id}")
+@router.get("/{id}", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def get(
     id: UUID,
@@ -71,7 +73,7 @@ async def get(
 
 
 # POST /users
-@router.post("/")
+@router.post("/", dependencies=[Depends(authenticate)])
 @inject
 async def create(
     payload: UserCreateRequest,
@@ -90,7 +92,7 @@ async def create(
 
 
 # PUT /users/{id}
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def update(
     id: UUID,
@@ -102,7 +104,7 @@ async def update(
 
 
 # DELETE /users/{id}
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def delete(
     id: UUID,
@@ -113,7 +115,7 @@ async def delete(
 
 
 # PUT /users/{id}/enable
-@router.put("/{id}/enable")
+@router.put("/{id}/enable", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def enable(
     id: UUID,
@@ -124,7 +126,7 @@ async def enable(
 
 
 # PUT /users/{id}/roles
-@router.put("/{id}/roles")
+@router.put("/{id}/roles", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def add_roles(
     id: UUID,
@@ -136,7 +138,7 @@ async def add_roles(
 
 
 # DELETE /users/{id}/roles
-@router.delete("/{id}/roles")
+@router.delete("/{id}/roles", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def remove_roles(
     id: UUID,
@@ -148,7 +150,7 @@ async def remove_roles(
 
 
 # PUT /users/{id}/providers
-@router.put("/{id}/providers")
+@router.put("/{id}/providers", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def add_provider(
     id: UUID,
@@ -160,7 +162,7 @@ async def add_provider(
 
 
 # DELETE /users/{id}/providers
-@router.delete("/{id}/providers")
+@router.delete("/{id}/providers", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def remove_provider(
     id: UUID,
@@ -173,7 +175,7 @@ async def remove_provider(
 
 
 # GET /users/providers/{provider}/{reference}
-@router.get("/providers/{provider}/{reference}")
+@router.get("/providers/{provider}/{reference}", dependencies=[Depends(authenticate)])
 @inject
 async def get_by_provider_reference(
     provider: str,
@@ -188,7 +190,7 @@ async def get_by_provider_reference(
 
 
 # POST /users/{id}/tenancies
-@router.post("/{id}/tenancies")
+@router.post("/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def add_tenancy(
     id: UUID,
@@ -200,7 +202,7 @@ async def add_tenancy(
 
 
 # DELETE /users/{id}/tenancies
-@router.delete("/{id}/tenancies")
+@router.delete("/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def remove_tenancy(
     id: UUID,
@@ -212,7 +214,7 @@ async def remove_tenancy(
 
 
 # POST /users/{id}/enforce
-@router.post("/{id}/enforce")
+@router.post("/{id}/enforce", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def enforce(
     id: UUID,
@@ -226,7 +228,7 @@ async def enforce(
 
 
 # POST /force-policy-reload
-@router.post("/force-policy-reload")
+@router.post("/force-policy-reload", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
 async def force_policy_reload(
     service: UserService = Depends(Provide[Container.user_service]),
