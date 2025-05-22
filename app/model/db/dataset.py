@@ -117,8 +117,8 @@ class DataFile(Base):
     )
     name = Column(String(1024), nullable=False)
     size_bytes = Column(Integer, nullable=False)
-    extension = Column(String(64), nullable=True)
-    format = Column(String(64), nullable=True)
+    extension = Column(String(512), nullable=True)
+    format = Column(String(512), nullable=True)
     storage_file_name = Column(String(1024), nullable=True)
     storage_path = Column(String(2048), nullable=True)
     created_at = Column(
