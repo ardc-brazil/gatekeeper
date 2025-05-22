@@ -61,20 +61,20 @@ python-env:
 	@echo "Check more about it on https://code.visualstudio.com/docs/python/environments#_creating-environments"
 
 python-pip-install:
-	pip install -r requirements.txt
+	pip3 install -r requirements.txt
 
 python-pip-freeze:
-	pip freeze > requirements.txt
+	pip3 freeze > requirements.txt
 
 python-run:
 	uvicorn app.main:fastAPIApp --host 0.0.0.0 --port 9092 --reload
 
 # Database commands
 db-upgrade:
-	alembic upgrade head
+	python3 -m alembic upgrade head
 
 db-create-migration: # Usage: make MESSAGE="Add tenancy column to datasets" db-create-migration
-	alembic revision --autogenerate -m "$(MESSAGE)"
+	python3 -m alembic revision --autogenerate -m "$(MESSAGE)"
 
 db-downgrade:
-	alembic downgrade -1
+	python3 -m alembic downgrade -1
