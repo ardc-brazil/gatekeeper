@@ -8,7 +8,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
-    Integer,
+    BigInteger,
     UniqueConstraint,
     Table,
 )
@@ -116,7 +116,7 @@ class DataFile(Base):
         server_default=sqlalchemy.text("gen_random_uuid()"),
     )
     name = Column(String(1024), nullable=False)
-    size_bytes = Column(Integer, nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
     extension = Column(String(512), nullable=True)
     format = Column(String(512), nullable=True)
     storage_file_name = Column(String(1024), nullable=True)
