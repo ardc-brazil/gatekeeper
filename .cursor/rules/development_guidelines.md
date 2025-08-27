@@ -201,7 +201,7 @@ docker logs <container_name>
 
 ### 10. Code Review Checklist
 
-* Always suggest me a PR description based on .github/pull_request_template.md if existing. If not, you can suggest any type of PR description based on the changes.
+* Always suggest me a PR description in **markdown** based on .github/pull_request_template.md if existing. If not, you can suggest any type of PR description based on the changes.
 
 #### Before Submitting PR
 - [ ] Feature branch is up to date with main
