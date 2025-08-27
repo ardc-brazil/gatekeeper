@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
-from app.model.dataset import DesignState
+from app.model.dataset import DesignState, VisibilityStatus
 
 
 version_data_file_association = Table(
@@ -58,6 +58,7 @@ class Dataset(Base):
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     tenancy = Column(String(256), nullable=True)
     design_state = Column(Enum(DesignState), nullable=True)
+    visibility = Column(Enum(VisibilityStatus), nullable=True)
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
 
