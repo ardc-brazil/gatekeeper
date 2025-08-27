@@ -1,3 +1,10 @@
+---
+description: Development guidelines for features or fixes
+globs:
+alwaysApply: true
+---
+
+
 # Development Guidelines
 
 ## Development Loop & Validation
