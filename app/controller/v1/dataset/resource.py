@@ -180,13 +180,29 @@ class DatasetVersionInfo(BaseModel):
     created_at: Optional[str] = Field(None, title="Created at ISO format")
 
 
+class FileExtensionSummary(BaseModel):
+    """Summary of files by extension"""
+    extension: str = Field(..., title="File extension (e.g., '.csv', '.json')")
+    count: int = Field(..., title="Number of files with this extension")
+    total_size_bytes: int = Field(..., title="Total size in bytes for this extension")
+
+
+class FilesSummary(BaseModel):
+    """Summary of dataset files"""
+    total_files: int = Field(..., title="Total number of files")
+    total_size_bytes: int = Field(..., title="Total size of all files in bytes")
+    extensions_breakdown: list[FileExtensionSummary] = Field(..., title="Breakdown by file extension")
+
+
 class DatasetSnapshotResponse(BaseModel):
     """Response for specific version snapshot"""
     dataset_id: str = Field(..., title="Dataset ID")
     version_name: str = Field(..., title="Version name")
     doi_identifier: Optional[str] = Field(None, title="DOI identifier")
+    doi_link: Optional[str] = Field(None, title="DOI URL link")
     doi_state: Optional[str] = Field(None, title="DOI state")
     publication_date: Optional[str] = Field(None, title="Publication date ISO format")
+    files_summary: FilesSummary = Field(..., title="Summary of dataset files")
     data: dict = Field(..., title="Dataset metadata (untyped)")
 
 
@@ -195,7 +211,9 @@ class DatasetLatestSnapshotResponse(BaseModel):
     dataset_id: str = Field(..., title="Dataset ID")
     version_name: str = Field(..., title="Version name")
     doi_identifier: Optional[str] = Field(None, title="DOI identifier")
+    doi_link: Optional[str] = Field(None, title="DOI URL link")
     doi_state: Optional[str] = Field(None, title="DOI state")
     publication_date: Optional[str] = Field(None, title="Publication date ISO format")
+    files_summary: FilesSummary = Field(..., title="Summary of dataset files")
     data: dict = Field(..., title="Dataset metadata (untyped)")
     versions: list[DatasetVersionInfo] = Field(..., title="All published versions")

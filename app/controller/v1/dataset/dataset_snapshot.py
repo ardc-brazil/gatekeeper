@@ -26,19 +26,23 @@ def _adapt_snapshot_response(snapshot_data: dict) -> DatasetSnapshotResponse:
     dataset_id = snapshot_data.get("dataset_id")
     version_name = snapshot_data.get("version_name")
     doi_identifier = snapshot_data.get("doi_identifier")
+    doi_link = snapshot_data.get("doi_link")
     doi_state = snapshot_data.get("doi_state")
     publication_date = snapshot_data.get("publication_date")
+    files_summary = snapshot_data.get("files_summary", {})
     
     # Create a copy for data without the typed fields
     data = {k: v for k, v in snapshot_data.items() 
-            if k not in ["dataset_id", "version_name", "doi_identifier", "doi_state", "publication_date", "versions"]}
+            if k not in ["dataset_id", "version_name", "doi_identifier", "doi_link", "doi_state", "publication_date", "files_summary", "versions"]}
     
     return DatasetSnapshotResponse(
         dataset_id=dataset_id,
         version_name=version_name,
         doi_identifier=doi_identifier,
+        doi_link=doi_link,
         doi_state=doi_state,
         publication_date=publication_date,
+        files_summary=files_summary,
         data=data,
     )
 
@@ -49,8 +53,10 @@ def _adapt_latest_snapshot_response(snapshot_data: dict) -> DatasetLatestSnapsho
     dataset_id = snapshot_data.get("dataset_id")
     version_name = snapshot_data.get("version_name")
     doi_identifier = snapshot_data.get("doi_identifier")
+    doi_link = snapshot_data.get("doi_link")
     doi_state = snapshot_data.get("doi_state")
     publication_date = snapshot_data.get("publication_date")
+    files_summary = snapshot_data.get("files_summary", {})
     versions_raw = snapshot_data.get("versions", [])
     
     # Convert versions to typed objects
@@ -67,14 +73,16 @@ def _adapt_latest_snapshot_response(snapshot_data: dict) -> DatasetLatestSnapsho
     
     # Create a copy for data without the typed fields
     data = {k: v for k, v in snapshot_data.items() 
-            if k not in ["dataset_id", "version_name", "doi_identifier", "doi_state", "publication_date", "versions"]}
+            if k not in ["dataset_id", "version_name", "doi_identifier", "doi_link", "doi_state", "publication_date", "files_summary", "versions"]}
     
     return DatasetLatestSnapshotResponse(
         dataset_id=dataset_id,
         version_name=version_name,
         doi_identifier=doi_identifier,
+        doi_link=doi_link,
         doi_state=doi_state,
         publication_date=publication_date,
+        files_summary=files_summary,
         data=data,
         versions=versions,
     )

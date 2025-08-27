@@ -2396,9 +2396,18 @@ class TestDatasetService(unittest.TestCase):
             "dataset_id": str(dataset_id),
             "version_name": "v2.0",
             "doi_identifier": "10.1234/test",
+            "doi_link": "https://doi.org/10.1234/test",
             "doi_state": "FINDABLE",
             "publication_date": "2024-01-01T00:00:00",
             "title": "Test Dataset",
+            "files_summary": {
+                "total_files": 2,
+                "total_size_bytes": 1024,
+                "extensions_breakdown": [
+                    {"extension": ".csv", "count": 1, "total_size_bytes": 512},
+                    {"extension": ".json", "count": 1, "total_size_bytes": 512}
+                ]
+            },
             "versions": [
                 {
                     "id": str(uuid4()),
@@ -2456,9 +2465,17 @@ class TestDatasetService(unittest.TestCase):
             "dataset_id": str(dataset_id),
             "version_name": version_name,
             "doi_identifier": "10.1234/test",
+            "doi_link": "https://doi.org/10.1234/test",
             "doi_state": "FINDABLE",
             "publication_date": "2024-01-01T00:00:00",
-            "title": "Test Dataset"
+            "title": "Test Dataset",
+            "files_summary": {
+                "total_files": 1,
+                "total_size_bytes": 256,
+                "extensions_breakdown": [
+                    {"extension": ".txt", "count": 1, "total_size_bytes": 256}
+                ]
+            }
         }
         
         # Mock MinIO to return JSON bytes
@@ -2501,6 +2518,66 @@ class TestDatasetService(unittest.TestCase):
             self.dataset_service.get_dataset_version_snapshot(dataset_id, version_name)
         
         self.assertIn("Corrupted snapshot data", str(context.exception))
+
+    def test_create_dataset_json_snapshot_file_summary(self):
+        # Arrange
+        dataset = Mock()
+        dataset.id = uuid4()
+        dataset.data = {"title": "Test Dataset"}
+        
+        version = Mock()
+        version.name = "v1.0"
+        version.created_at = datetime.datetime(2024, 1, 1)
+        version.doi = Mock()
+        version.doi.identifier = "10.1234/test"
+        version.doi.state = "FINDABLE"
+        
+        # Mock files with different extensions and sizes
+        file1 = Mock()
+        file1.name = "data.csv"
+        file1.size_bytes = 1024
+        
+        file2 = Mock()
+        file2.name = "metadata.json"
+        file2.size_bytes = 512
+        
+        file3 = Mock()
+        file3.name = "report.csv"
+        file3.size_bytes = 2048
+        
+        file4 = Mock()
+        file4.name = "readme"  # No extension
+        file4.size_bytes = 256
+        
+        version.files_in = [file1, file2, file3, file4]
+        
+        # Act
+        result = self.dataset_service._create_dataset_json_snapshot(dataset, version)
+        
+        # Assert
+        self.assertIn("files_summary", result)
+        summary = result["files_summary"]
+        
+        self.assertEqual(summary["total_files"], 4)
+        self.assertEqual(summary["total_size_bytes"], 3840)  # 1024 + 512 + 2048 + 256
+        
+        # Check extensions breakdown
+        extensions = summary["extensions_breakdown"]
+        self.assertEqual(len(extensions), 3)  # .csv, .json, (no extension)
+        
+        # Find each extension
+        csv_ext = next(e for e in extensions if e["extension"] == ".csv")
+        json_ext = next(e for e in extensions if e["extension"] == ".json")
+        no_ext = next(e for e in extensions if e["extension"] == "(no extension)")
+        
+        self.assertEqual(csv_ext["count"], 2)
+        self.assertEqual(csv_ext["total_size_bytes"], 3072)  # 1024 + 2048
+        
+        self.assertEqual(json_ext["count"], 1)
+        self.assertEqual(json_ext["total_size_bytes"], 512)
+        
+        self.assertEqual(no_ext["count"], 1)
+        self.assertEqual(no_ext["total_size_bytes"], 256)
 
 
 if __name__ == "__main__":

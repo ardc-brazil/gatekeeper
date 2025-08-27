@@ -812,9 +812,53 @@ class DatasetService:
             "dataset_id": str(dataset.id),
             "version_name": version.name,
             "doi_identifier": version.doi.identifier if version.doi else None,
+            "doi_link": f"https://doi.org/{version.doi.identifier}" if version.doi else None,
             "doi_state": version.doi.state if version.doi else None,
             "publication_date": version.created_at.isoformat() if version.created_at else None,
         })
+        
+        # Add datafiles summary
+        files = version.files_in or []
+        
+        # Calculate extension breakdown
+        extension_stats = {}
+        total_files = len(files)
+        total_size = 0
+        
+        for file in files:
+            # Extract file extension (including dot)
+            file_extension = "." + file.name.split(".")[-1] if "." in file.name else ""
+            if not file_extension or file_extension == ".":
+                file_extension = "(no extension)"
+            
+            # Initialize stats for this extension if not exists
+            if file_extension not in extension_stats:
+                extension_stats[file_extension] = {"count": 0, "total_size_bytes": 0}
+            
+            # Update stats
+            extension_stats[file_extension]["count"] += 1
+            file_size = file.size_bytes or 0
+            extension_stats[file_extension]["total_size_bytes"] += file_size
+            total_size += file_size
+        
+        # Convert to list format
+        extensions_breakdown = [
+            {
+                "extension": ext,
+                "count": stats["count"],
+                "total_size_bytes": stats["total_size_bytes"]
+            }
+            for ext, stats in extension_stats.items()
+        ]
+        
+        # Sort by count descending, then by extension name
+        extensions_breakdown.sort(key=lambda x: (-x["count"], x["extension"]))
+        
+        snapshot["files_summary"] = {
+            "total_files": total_files,
+            "total_size_bytes": total_size,
+            "extensions_breakdown": extensions_breakdown
+        }
         
         # Add versions list for -latest.json files
         if include_versions_list:
