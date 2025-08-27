@@ -60,6 +60,94 @@ class TestObjectStorageGateway(unittest.TestCase):
 
         self.assertEqual(url, expected_url)
 
+    def test_put_file_default_content_type(self):
+        bucket = "test-bucket"
+        obj_name = "test-file.json"
+        file_data = b'{"test": "data"}'
+        
+        self.gateway.put_file(
+            bucket_name=bucket,
+            object_name=obj_name,
+            file_data=file_data
+        )
+        
+        self.mock_minio_client.put_object.assert_called_once()
+        call_args = self.mock_minio_client.put_object.call_args
+        
+        self.assertEqual(call_args[1]["bucket_name"], bucket)
+        self.assertEqual(call_args[1]["object_name"], obj_name)
+        self.assertEqual(call_args[1]["length"], len(file_data))
+        self.assertEqual(call_args[1]["content_type"], "application/octet-stream")
+        
+        # Verify the data stream contains correct data
+        data_arg = call_args[1]["data"]
+        self.assertEqual(data_arg.read(), file_data)
+
+    def test_put_file_custom_content_type(self):
+        bucket = "test-bucket"
+        obj_name = "test-file.json"
+        file_data = b'{"test": "data"}'
+        content_type = "application/json"
+        
+        self.gateway.put_file(
+            bucket_name=bucket,
+            object_name=obj_name,
+            file_data=file_data,
+            content_type=content_type
+        )
+        
+        self.mock_minio_client.put_object.assert_called_once()
+        call_args = self.mock_minio_client.put_object.call_args
+        
+        self.assertEqual(call_args[1]["bucket_name"], bucket)
+        self.assertEqual(call_args[1]["object_name"], obj_name)
+        self.assertEqual(call_args[1]["length"], len(file_data))
+        self.assertEqual(call_args[1]["content_type"], content_type)
+        
+        # Verify the data stream contains correct data
+        data_arg = call_args[1]["data"]
+        self.assertEqual(data_arg.read(), file_data)
+
+    def test_get_file_success(self):
+        bucket = "test-bucket"
+        obj_name = "test-file.json"
+        expected_data = b'{"test": "data"}'
+        
+        # Mock the MinIO response
+        mock_response = MagicMock()
+        mock_response.read.return_value = expected_data
+        self.mock_minio_client.get_object.return_value = mock_response
+        
+        result = self.gateway.get_file(
+            bucket_name=bucket,
+            object_name=obj_name
+        )
+        
+        self.mock_minio_client.get_object.assert_called_once_with(
+            bucket_name=bucket,
+            object_name=obj_name
+        )
+        mock_response.read.assert_called_once()
+        mock_response.close.assert_called_once()
+        mock_response.release_conn.assert_called_once()
+        self.assertEqual(result, expected_data)
+
+    def test_get_file_not_found(self):
+        bucket = "test-bucket"
+        obj_name = "missing-file.json"
+        
+        # Mock MinIO to raise an exception (any exception represents not found)
+        self.mock_minio_client.get_object.side_effect = Exception("NoSuchKey")
+        
+        with self.assertRaises(FileNotFoundError) as context:
+            self.gateway.get_file(
+                bucket_name=bucket,
+                object_name=obj_name
+            )
+        
+        self.assertIn("Object not found", str(context.exception))
+        self.assertIn(f"{bucket}/{obj_name}", str(context.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

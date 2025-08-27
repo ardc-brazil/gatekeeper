@@ -34,6 +34,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.client.client",
             "app.controller.v1.dataset.dataset",
             "app.controller.v1.dataset.dataset_filter",
+            "app.controller.v1.dataset.dataset_snapshot",
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",

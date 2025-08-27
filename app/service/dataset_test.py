@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import datetime
+import json
 import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
@@ -1943,6 +1944,563 @@ class TestDatasetService(unittest.TestCase):
         )
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].visibility, VisibilityStatus.PUBLIC)
+
+    def test_get_latest_published_version_success(self):
+        # Arrange
+        dataset_id = uuid4()
+        tenancies = ["tenant1"]
+        
+        # Create dataset with multiple versions
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        dataset.tenancy = tenancies[0]
+        dataset.versions = []
+        
+        # Create versions with different created_at dates
+        version1 = DatasetVersionDBModel()
+        version1.id = uuid4()
+        version1.name = "v1.0"
+        version1.is_enabled = True
+        version1.created_at = datetime.datetime(2024, 1, 1)
+        version1.doi = DOIDBModel()
+        version1.doi.identifier = "10.1234/doi1"
+        
+        version2 = DatasetVersionDBModel()
+        version2.id = uuid4()
+        version2.name = "v2.0"
+        version2.is_enabled = True
+        version2.created_at = datetime.datetime(2024, 2, 1)  # Later date
+        version2.doi = DOIDBModel()
+        version2.doi.identifier = "10.1234/doi2"
+        
+        version3 = DatasetVersionDBModel()
+        version3.id = uuid4()
+        version3.name = "v3.0"
+        version3.is_enabled = True
+        version3.created_at = datetime.datetime(2024, 1, 15)  # Middle date
+        version3.doi = None  # No DOI - should be excluded
+        
+        dataset.versions = [version1, version2, version3]
+        
+        # Act
+        result = self.dataset_service._get_latest_published_version(dataset)
+        
+        # Assert
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, version2.id)
+        self.assertEqual(result.name, "v2.0")
+
+    def test_get_latest_published_version_no_published_versions(self):
+        # Arrange
+        dataset = DatasetDBModel()
+        dataset.versions = []
+        
+        version1 = DatasetVersionDBModel()
+        version1.is_enabled = True
+        version1.doi = None  # No DOI
+        
+        version2 = DatasetVersionDBModel()
+        version2.is_enabled = False
+        version2.doi = DOIDBModel()  # Has DOI but disabled
+        
+        dataset.versions = [version1, version2]
+        
+        # Act
+        result = self.dataset_service._get_latest_published_version(dataset)
+        
+        # Assert
+        self.assertIsNone(result)
+
+    def test_update_dataset_visibility_success(self):
+        # Arrange
+        dataset = DatasetDBModel()
+        dataset.id = uuid4()
+        dataset.visibility = VisibilityStatus.PRIVATE
+        
+        self.dataset_repository.upsert.return_value = dataset
+        
+        # Act
+        self.dataset_service._update_dataset_visibility(dataset)
+        
+        # Assert
+        self.assertEqual(dataset.visibility, VisibilityStatus.PUBLIC)
+        self.dataset_repository.upsert.assert_called_once_with(dataset)
+
+    def test_create_dataset_json_snapshot_without_versions_list(self):
+        # Arrange
+        dataset = DatasetDBModel()
+        dataset.id = uuid4()
+        dataset.data = {"title": "Test Dataset", "description": "A test dataset"}
+        
+        version = DatasetVersionDBModel()
+        version.name = "v1.0"
+        version.created_at = datetime.datetime(2024, 1, 1)
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+        version.doi.state = DOIState.FINDABLE.value
+        
+        # Act
+        result = self.dataset_service._create_dataset_json_snapshot(
+            dataset, version, include_versions_list=False
+        )
+        
+        # Assert
+        self.assertEqual(result["title"], "Test Dataset")
+        self.assertEqual(result["description"], "A test dataset")
+        self.assertEqual(result["dataset_id"], str(dataset.id))
+        self.assertEqual(result["version_name"], "v1.0")
+        self.assertEqual(result["doi_identifier"], "10.1234/test")
+        self.assertEqual(result["doi_state"], DOIState.FINDABLE.value)
+        self.assertIsNotNone(result["publication_date"])
+        self.assertNotIn("versions", result)
+
+    def test_create_dataset_json_snapshot_with_versions_list(self):
+        # Arrange
+        dataset = DatasetDBModel()
+        dataset.id = uuid4()
+        dataset.data = {"title": "Test Dataset"}
+        dataset.versions = []
+        
+        # Create current version
+        current_version = DatasetVersionDBModel()
+        current_version.id = uuid4()
+        current_version.name = "v2.0"
+        current_version.is_enabled = True
+        current_version.created_at = datetime.datetime(2024, 2, 1)
+        current_version.doi = DOIDBModel()
+        current_version.doi.identifier = "10.1234/current"
+        current_version.doi.state = DOIState.FINDABLE.value
+        current_version.doi.mode = DOIMode.AUTO.value
+        
+        # Create older version
+        older_version = DatasetVersionDBModel()
+        older_version.id = uuid4()
+        older_version.name = "v1.0"
+        older_version.is_enabled = True
+        older_version.created_at = datetime.datetime(2024, 1, 1)
+        older_version.doi = DOIDBModel()
+        older_version.doi.identifier = "10.1234/old"
+        older_version.doi.state = DOIState.FINDABLE.value
+        older_version.doi.mode = DOIMode.MANUAL.value
+        
+        dataset.versions = [current_version, older_version]
+        
+        # Act
+        result = self.dataset_service._create_dataset_json_snapshot(
+            dataset, current_version, include_versions_list=True
+        )
+        
+        # Assert
+        self.assertIn("versions", result)
+        self.assertEqual(len(result["versions"]), 2)
+        
+        # Check versions are ordered by created_at desc (most recent first)
+        self.assertEqual(result["versions"][0]["name"], "v2.0")
+        self.assertEqual(result["versions"][0]["doi_state"], DOIState.FINDABLE.value)
+        self.assertEqual(result["versions"][1]["name"], "v1.0")
+        self.assertEqual(result["versions"][1]["doi_state"], "FINDABLE")  # MANUAL mode = FINDABLE
+
+    @patch('app.service.dataset.json.dumps')
+    def test_publish_dataset_snapshot_success(self, mock_json_dumps):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        dataset.data = {"title": "Test Dataset"}
+        dataset.visibility = VisibilityStatus.PRIVATE
+        
+        version = DatasetVersionDBModel()
+        version.id = uuid4()
+        version.name = version_name
+        version.created_at = datetime.datetime(2024, 1, 1)
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+        
+        dataset.versions = [version]
+        
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.dataset_repository.upsert.return_value = dataset
+        
+        # Mock JSON dumps to return predictable bytes
+        mock_json_dumps.return_value = '{"test": "data"}'
+        
+        # Act
+        self.dataset_service._publish_dataset_snapshot(
+            dataset_id, version_name, user_id, tenancies
+        )
+        
+        # Assert
+        self.dataset_repository.fetch.assert_called_once()
+        self.dataset_version_repository.fetch_version_by_name.assert_called_once()
+        
+        # Verify dataset visibility was updated
+        self.assertEqual(dataset.visibility, VisibilityStatus.PUBLIC)
+        self.dataset_repository.upsert.assert_called_once_with(dataset)
+        
+        # Verify MinIO calls
+        self.assertEqual(self.minio_gateway.put_file.call_count, 2)  # version + latest
+        
+        # Check version snapshot call
+        version_call = self.minio_gateway.put_file.call_args_list[0]
+        self.assertEqual(version_call[1]["bucket_name"], "datamap")
+        self.assertEqual(version_call[1]["object_name"], f"snapshots/{dataset_id}-{version_name}.json")
+        self.assertEqual(version_call[1]["content_type"], "application/json")
+        
+        # Check latest snapshot call
+        latest_call = self.minio_gateway.put_file.call_args_list[1]
+        self.assertEqual(latest_call[1]["bucket_name"], "datamap")
+        self.assertEqual(latest_call[1]["object_name"], f"snapshots/{dataset_id}-latest.json")
+        self.assertEqual(latest_call[1]["content_type"], "application/json")
+
+    def test_publish_dataset_snapshot_dataset_not_found(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        
+        self.dataset_repository.fetch.return_value = None
+        
+        # Act & Assert
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service._publish_dataset_snapshot(
+                dataset_id, version_name, user_id, tenancies
+            )
+        
+        self.assertIn(str(dataset_id), str(context.exception))
+
+    def test_publish_dataset_snapshot_version_not_found(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = None
+        
+        # Act & Assert
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service._publish_dataset_snapshot(
+                dataset_id, version_name, user_id, tenancies
+            )
+        
+        self.assertIn(version_name, str(context.exception))
+
+    def test_change_doi_state_triggers_publication_on_findable(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        new_state = DOIState.FINDABLE
+        
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+        
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        
+        # Mock the publication method
+        with patch.object(self.dataset_service, '_publish_dataset_snapshot') as mock_publish:
+            # Act
+            self.dataset_service.change_doi_state(
+                dataset_id, version_name, new_state, user_id, tenancies
+            )
+            
+            # Assert
+            self.doi_service.change_state.assert_called_once_with(
+                identifier=version.doi.identifier,
+                new_state=new_state
+            )
+            mock_publish.assert_called_once_with(
+                dataset_id=dataset_id,
+                version_name=version_name,
+                user_id=user_id,
+                tenancies=tenancies
+            )
+
+    def test_change_doi_state_no_publication_on_non_findable(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        new_state = DOIState.REGISTERED  # Not FINDABLE
+        
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+        
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        
+        # Mock the publication method
+        with patch.object(self.dataset_service, '_publish_dataset_snapshot') as mock_publish:
+            # Act
+            self.dataset_service.change_doi_state(
+                dataset_id, version_name, new_state, user_id, tenancies
+            )
+            
+            # Assert
+            self.doi_service.change_state.assert_called_once_with(
+                identifier=version.doi.identifier,
+                new_state=new_state
+            )
+            mock_publish.assert_not_called()
+
+    def test_create_doi_triggers_publication_on_manual_mode(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        
+        doi = DOI(
+            mode=DOIMode.MANUAL,
+            identifier="10.1234/manual",
+            title=DOITitle(title="Test DOI")
+        )
+        
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        dataset.name = "Test Dataset"
+        dataset.data = {"authors": [{"name": "Test Author"}]}
+        dataset.created_at = datetime.datetime(2024, 1, 1)
+        
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = None  # No existing DOI
+        
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.doi_service.create.return_value = doi
+        
+        # Mock the publication method
+        with patch.object(self.dataset_service, '_publish_dataset_snapshot') as mock_publish:
+            # Act
+            result = self.dataset_service.create_doi(
+                dataset_id, version_name, doi, user_id, tenancies
+            )
+            
+            # Assert
+            self.doi_service.create.assert_called_once()
+            mock_publish.assert_called_once_with(
+                dataset_id=dataset_id,
+                version_name=version_name,
+                user_id=user_id,
+                tenancies=tenancies
+            )
+            self.assertEqual(result, doi)
+
+    def test_create_doi_no_publication_on_auto_mode(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        
+        doi = DOI(
+            mode=DOIMode.AUTO,  # Not MANUAL
+            identifier="10.1234/auto",
+            title=DOITitle(title="Test DOI")
+        )
+        
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        dataset.name = "Test Dataset"
+        dataset.data = {"authors": [{"name": "Test Author"}]}
+        dataset.created_at = datetime.datetime(2024, 1, 1)
+        
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = None  # No existing DOI
+        
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.doi_service.create.return_value = doi
+        
+        # Mock the publication method
+        with patch.object(self.dataset_service, '_publish_dataset_snapshot') as mock_publish:
+            # Act
+            result = self.dataset_service.create_doi(
+                dataset_id, version_name, doi, user_id, tenancies
+            )
+            
+            # Assert
+            self.doi_service.create.assert_called_once()
+            mock_publish.assert_not_called()
+            self.assertEqual(result, doi)
+
+    def test_publication_error_does_not_fail_doi_operations(self):
+        # Test for change_doi_state
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        new_state = DOIState.FINDABLE
+        
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+        
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        
+        # Mock publication to raise exception
+        with patch.object(self.dataset_service, '_publish_dataset_snapshot') as mock_publish:
+            mock_publish.side_effect = Exception("Publication failed")
+            
+            # Act - should not raise exception
+            self.dataset_service.change_doi_state(
+                dataset_id, version_name, new_state, user_id, tenancies
+            )
+            
+            # Assert
+            self.doi_service.change_state.assert_called_once_with(
+                identifier=version.doi.identifier,
+                new_state=new_state
+            )
+            mock_publish.assert_called_once()
+
+    def test_get_dataset_latest_snapshot_success(self):
+        # Arrange
+        dataset_id = uuid4()
+        expected_snapshot = {
+            "dataset_id": str(dataset_id),
+            "version_name": "v2.0",
+            "doi_identifier": "10.1234/test",
+            "doi_state": "FINDABLE",
+            "publication_date": "2024-01-01T00:00:00",
+            "title": "Test Dataset",
+            "versions": [
+                {
+                    "id": str(uuid4()),
+                    "name": "v2.0",
+                    "doi_identifier": "10.1234/test",
+                    "doi_state": "FINDABLE",
+                    "created_at": "2024-01-01T00:00:00"
+                }
+            ]
+        }
+        
+        # Mock MinIO to return JSON bytes
+        json_bytes = json.dumps(expected_snapshot).encode('utf-8')
+        self.minio_gateway.get_file.return_value = json_bytes
+        
+        # Act
+        result = self.dataset_service.get_dataset_latest_snapshot(dataset_id)
+        
+        # Assert
+        self.minio_gateway.get_file.assert_called_once_with(
+            bucket_name="datamap",
+            object_name=f"snapshots/{dataset_id}-latest.json"
+        )
+        self.assertEqual(result, expected_snapshot)
+
+    def test_get_dataset_latest_snapshot_not_found(self):
+        # Arrange
+        dataset_id = uuid4()
+        self.minio_gateway.get_file.side_effect = FileNotFoundError("Object not found")
+        
+        # Act & Assert
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_dataset_latest_snapshot(dataset_id)
+        
+        self.assertIn("Latest snapshot not found", str(context.exception))
+        self.assertIn(str(dataset_id), str(context.exception))
+
+    def test_get_dataset_latest_snapshot_invalid_json(self):
+        # Arrange
+        dataset_id = uuid4()
+        invalid_json_bytes = b'{"invalid": json}'  # Missing closing brace
+        self.minio_gateway.get_file.return_value = invalid_json_bytes
+        
+        # Act & Assert
+        with self.assertRaises(IllegalStateException) as context:
+            self.dataset_service.get_dataset_latest_snapshot(dataset_id)
+        
+        self.assertIn("Corrupted snapshot data", str(context.exception))
+
+    def test_get_dataset_version_snapshot_success(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        expected_snapshot = {
+            "dataset_id": str(dataset_id),
+            "version_name": version_name,
+            "doi_identifier": "10.1234/test",
+            "doi_state": "FINDABLE",
+            "publication_date": "2024-01-01T00:00:00",
+            "title": "Test Dataset"
+        }
+        
+        # Mock MinIO to return JSON bytes
+        json_bytes = json.dumps(expected_snapshot).encode('utf-8')
+        self.minio_gateway.get_file.return_value = json_bytes
+        
+        # Act
+        result = self.dataset_service.get_dataset_version_snapshot(dataset_id, version_name)
+        
+        # Assert
+        self.minio_gateway.get_file.assert_called_once_with(
+            bucket_name="datamap",
+            object_name=f"snapshots/{dataset_id}-{version_name}.json"
+        )
+        self.assertEqual(result, expected_snapshot)
+
+    def test_get_dataset_version_snapshot_not_found(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        self.minio_gateway.get_file.side_effect = FileNotFoundError("Object not found")
+        
+        # Act & Assert
+        with self.assertRaises(NotFoundException) as context:
+            self.dataset_service.get_dataset_version_snapshot(dataset_id, version_name)
+        
+        self.assertIn("Snapshot not found", str(context.exception))
+        self.assertIn(str(dataset_id), str(context.exception))
+        self.assertIn(version_name, str(context.exception))
+
+    def test_get_dataset_version_snapshot_invalid_json(self):
+        # Arrange
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        invalid_json_bytes = b'{"invalid": json}'  # Missing closing brace
+        self.minio_gateway.get_file.return_value = invalid_json_bytes
+        
+        # Act & Assert
+        with self.assertRaises(IllegalStateException) as context:
+            self.dataset_service.get_dataset_version_snapshot(dataset_id, version_name)
+        
+        self.assertIn("Corrupted snapshot data", str(context.exception))
 
 
 if __name__ == "__main__":

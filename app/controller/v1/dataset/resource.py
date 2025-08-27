@@ -169,3 +169,33 @@ class DatasetVersionCreateResponse(BaseModel):
     is_enabled: bool = Field(..., title="Is enabled")
     files_in: list[DataFileResponse] = Field([], title="List of data files")
     doi: Optional[DOIResponse] = Field(None, title="DOI")
+
+
+class DatasetVersionInfo(BaseModel):
+    """Version information for snapshot responses"""
+    id: str = Field(..., title="Version ID")
+    name: str = Field(..., title="Version name")
+    doi_identifier: Optional[str] = Field(None, title="DOI identifier")
+    doi_state: Optional[str] = Field(None, title="DOI state")
+    created_at: Optional[str] = Field(None, title="Created at ISO format")
+
+
+class DatasetSnapshotResponse(BaseModel):
+    """Response for specific version snapshot"""
+    dataset_id: str = Field(..., title="Dataset ID")
+    version_name: str = Field(..., title="Version name")
+    doi_identifier: Optional[str] = Field(None, title="DOI identifier")
+    doi_state: Optional[str] = Field(None, title="DOI state")
+    publication_date: Optional[str] = Field(None, title="Publication date ISO format")
+    data: dict = Field(..., title="Dataset metadata (untyped)")
+
+
+class DatasetLatestSnapshotResponse(BaseModel):
+    """Response for latest snapshot with versions list"""
+    dataset_id: str = Field(..., title="Dataset ID")
+    version_name: str = Field(..., title="Version name")
+    doi_identifier: Optional[str] = Field(None, title="DOI identifier")
+    doi_state: Optional[str] = Field(None, title="DOI state")
+    publication_date: Optional[str] = Field(None, title="Publication date ISO format")
+    data: dict = Field(..., title="Dataset metadata (untyped)")
+    versions: list[DatasetVersionInfo] = Field(..., title="All published versions")
