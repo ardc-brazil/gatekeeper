@@ -1,0 +1,351 @@
+---
+description: Architure overview
+globs:
+alwaysApply: true
+---
+
+## Overview
+Gatekeeper is a FastAPI-based backend service for DataMap, providing dataset management, DOI services, and user authentication with a clean layered architecture.
+
+## Architecture Layers
+
+### 1. Controllers (API Layer)
+- **Location**: `app/controller/v1/`
+- **Responsibility**: HTTP request/response handling, validation, authentication
+- **Patterns**:
+  - Use FastAPI routers with proper prefixing
+  - Apply authentication/authorization interceptors
+  - Delegate business logic to services
+  - Use dependency injection with `@inject`
+
+```python
+@router.post("/", response_model=DatasetCreateResponse)
+@inject
+def create_dataset(
+    request: DatasetCreateRequest,
+    service: DatasetService = Depends(Provide[Container.dataset_service])
+):
+    return service.create(request)
+```
+
+### 2. Services (Business Logic Layer)
+- **Location**: `app/service/`
+- **Responsibility**: Business rules, orchestration, validation
+- **Patterns**:
+  - Single responsibility principle
+  - Use repositories for data access
+  - Handle business exceptions
+  - Validate business rules before persistence
+
+```python
+def create(self, request: DatasetCreateRequest) -> Dataset:
+    # Business validation
+    self._validate_dataset(request)
+    
+    # Create domain model
+    dataset = self._create_domain_model(request)
+    
+    # Persist through repository
+    return self._repository.create(dataset)
+```
+
+### 3. Repositories (Data Access Layer)
+- **Location**: `app/repository/`
+- **Responsibility**: Database operations, data persistence
+- **Patterns**:
+  - Database-agnostic interface
+  - Use SQLAlchemy session context manager
+  - Handle database-specific exceptions
+  - Implement proper transaction management
+
+```python
+def create(self, dataset: Dataset) -> Dataset:
+    with self._session_factory() as session:
+        db_model = self._to_db_model(dataset)
+        session.add(db_model)
+        session.commit()
+        session.refresh(db_model)
+        return self._to_domain_model(db_model)
+```
+
+### 4. Models (Domain Layer)
+- **Location**: `app/model/`
+- **Responsibility**: Domain entities, value objects, business rules
+- **Patterns**:
+  - Use dataclasses for immutability
+  - Separate domain models from DB models
+  - Use enums for constrained values
+  - Implement validation logic in models
+
+```python
+@dataclass
+class Dataset:
+    name: str
+    data: dict
+    id: UUID = None
+    is_enabled: bool = None
+    owner_id: UUID = None
+    tenancy: str = None
+    design_state: DesignState = None
+```
+
+## Key Design Patterns
+
+### 1. Dependency Injection
+- **Container**: Centralized dependency management
+- **Wiring**: Automatic dependency resolution in FastAPI
+- **Benefits**: Testability, loose coupling, configuration management
+
+### 2. Repository Pattern
+- **Abstraction**: Data access interface
+- **Implementation**: SQLAlchemy-specific implementation
+- **Benefits**: Database independence, easier testing
+
+### 3. Adapter Pattern
+- **Purpose**: Transform between different data formats
+- **Usage**: Domain models ↔ Database models ↔ External APIs
+- **Example**: DOI service payload transformation
+
+### 4. Interceptor Pattern
+- **Purpose**: Cross-cutting concerns (auth, logging, validation)
+- **Implementation**: FastAPI dependencies
+- **Benefits**: Separation of concerns, reusability
+
+## Database Design
+
+### 1. Migration Strategy
+- **Tool**: Alembic
+- **Commands**:
+  ```bash
+  make MESSAGE="Add new column" db-create-migration
+  make db-upgrade
+  make db-downgrade
+  ```
+
+### 2. Session Management
+- **Pattern**: Context manager with automatic rollback
+- **Benefits**: Resource cleanup, error handling
+- **Usage**: Always use `with db.session() as session:`
+
+### 3. Model Separation
+- **Domain Models**: Business entities (`app/model/`)
+- **Database Models**: SQLAlchemy ORM (`app/model/db/`)
+- **Adapters**: Transformation between layers
+
+## Security Architecture
+
+### 1. Authentication
+- **Method**: Custom authentication interceptor
+- **Token**: File upload tokens, JWT tokens
+- **Validation**: Header-based authentication
+
+### 2. Authorization
+- **Framework**: Casbin RBAC
+- **Policy**: SQL-based policy storage
+- **Auto-reload**: Every 5 seconds
+
+### 3. Tenancy
+- **Pattern**: Multi-tenant architecture
+- **Validation**: Header-based tenancy parsing
+- **Isolation**: Database-level tenancy filtering
+
+## External Integrations
+
+### 1. DOI Service
+- **Purpose**: Digital Object Identifier management
+- **Modes**: Manual (user-provided) and Auto (service-generated)
+- **States**: DRAFT → REGISTERED → FINDABLE
+
+### 2. Object Storage (MinIO)
+- **Purpose**: File storage for datasets
+- **Integration**: S3-compatible API
+- **Buckets**: Separate buckets per tenancy
+
+## Development Guidelines
+
+### Code Style & Standards
+- **Type Hints**: Use type hints everywhere (Python 3.12+)
+- **Naming**: Follow existing conventions: snake_case for functions/variables, PascalCase for classes
+- **Models**: Use dataclasses for domain models, avoid manual `__init__` methods
+- **Inheritance**: Prefer composition over inheritance
+- **Dependencies**: Use dependency injection wiring for FastAPI dependencies
+
+### FastAPI Best Practices
+- **Dependency Injection**: Use `@inject` decorator for dependency injection in controllers
+- **Interceptors**: Apply authentication/authorization interceptors consistently
+- **Validation**: Use Pydantic models for request/response validation
+- **REST**: Follow RESTful conventions for endpoint naming
+- **Error Handling**: Include proper error handling with custom exceptions
+- **Documentation**: Leverage FastAPI's automatic OpenAPI/Swagger generation
+
+### Database & Migrations
+- **Migrations**: Use Alembic for all schema changes
+- **Commands**:
+  ```bash
+  make MESSAGE="description" db-create-migration
+  make db-upgrade
+  ```
+- **Sessions**: Use SQLAlchemy session context manager from Database class
+- **Queries**: Prefer explicit joins over lazy loading
+
+### Testing Strategy
+- **Framework**: Use pytest for testing
+- **Mocking**: Mock external dependencies (MinIO, DOI service)
+- **Layering**: Test each layer independently
+- **Dependencies**: Use dependency injection for test doubles
+- **File Organization**: Keep test files contiguous to source files (e.g., `doi.py` → `doi_test.py`)
+- **Mocking**: Use unittest.mock for mocking in tests
+
+### Error Handling
+- **Exceptions**: Use custom exception classes from `app.exception.*`
+- **Logging**: Log errors with appropriate log levels
+- **Responses**: Return consistent error responses
+- **Transactions**: Handle database rollbacks properly
+
+### Security Guidelines
+- **Tenancy**: Always validate tenancy headers
+- **Authorization**: Use Casbin for authorization decisions
+- **File Uploads**: Validate file uploads and storage paths
+- **Input Validation**: Sanitize user inputs
+
+### File Organization
+- **Modularity**: Keep related functionality in the same module
+- **Imports**: Use `__init__.py` files for clean imports
+- **Structure**: Follow the existing directory structure
+- **Endpoints**: Group related endpoints under common router prefixes
+
+### Performance Considerations
+- **Database**: Use database indexes for common queries
+- **Pagination**: Implement pagination for large datasets
+- **Caching**: Cache frequently accessed data when appropriate
+- **Async**: Use synchronous operations (no async for now)
+
+### Dependencies & Configuration
+- **Requirements**: Add new dependencies to requirements.txt
+- **Versions**: Use specific version pins for production stability
+- **Documentation**: Document any new external service integrations
+
+## Development Workflow
+
+### Local Development
+```bash
+# Start database only
+make docker-run-db
+
+# Run application
+make python-run
+
+# Install dependencies
+make python-pip-install
+```
+
+### Database Operations
+```bash
+# Create migration
+make MESSAGE="Add new column" db-create-migration
+
+# Apply migrations
+make db-upgrade
+
+# Rollback migration
+make db-downgrade
+```
+
+### Docker Operations
+```bash
+# Build and run full stack
+make docker-deployment
+
+# Run only database
+make docker-run-db
+
+# Stop all services
+make docker-stop
+```
+
+## Code Quality & Standards
+
+### Linting & Formatting
+- **Linter**: Use Ruff for linting (already configured)
+- **Style**: Follow PEP 8 style guidelines
+- **Names**: Use meaningful variable and function names
+- **Functions**: Keep functions focused and single-purpose
+- **Documentation**: Document complex business logic with clear comments
+
+### Logging Standards
+- **Framework**: Use structured logging with appropriate log levels
+- **Levels**:
+  - INFO: Normal operations
+  - WARNING: Recoverable issues
+  - ERROR: Failures
+- **Context**: Use context managers for database sessions
+
+## Configuration Management
+
+### Environment-based Configuration
+- **Files**: `local.env`, `staging.env`
+- **Loading**: Pydantic settings with validation
+- **Secrets**: Environment variables for sensitive data
+
+### Validation
+- **Schema**: Pydantic models with field validation
+- **Types**: Strong typing for all configuration
+- **Defaults**: Sensible defaults with override capability
+
+## Monitoring & Observability
+
+### Logging
+- **Framework**: Python logging
+- **Levels**: INFO, WARNING, ERROR
+- **Context**: Request correlation, user context
+
+### Health Checks
+- **Database**: Connection health
+- **External Services**: DOI service, MinIO availability
+- **Response**: JSON health status
+
+## Deployment
+
+### Containerization
+- **Base**: Python 3.12 slim image
+- **Multi-stage**: Development and production builds
+- **Compose**: Local development environment
+
+### Environment Separation
+- **Local**: Docker Compose with hot reload
+- **Production**: Containerized deployment
+- **Configuration**: Environment-specific settings
+
+## Best Practices
+
+### Error Handling
+- **Custom Exceptions**: Domain-specific error types
+- **HTTP Status**: Appropriate status codes
+- **User Messages**: Clear, actionable error messages
+
+### Performance
+- **Database**: Proper indexing, query optimization
+- **Caching**: Strategic caching for expensive operations
+- **Pagination**: Large dataset handling
+
+### Testing
+- **Unit Tests**: Service and repository layer
+- **Integration Tests**: API endpoints
+- **Mocking**: External service dependencies
+
+## Future Considerations
+
+### Async Support
+- **Current**: Synchronous operations
+- **Future**: Async/await for I/O operations
+- **Migration**: Gradual async adoption
+
+### Monitoring
+- **Metrics**: Application metrics collection
+- **Tracing**: Distributed tracing
+- **Alerting**: Proactive monitoring
+
+### Scaling
+- **Horizontal**: Multiple service instances
+- **Database**: Read replicas, connection pooling
+- **Caching**: Redis for session and data caching
