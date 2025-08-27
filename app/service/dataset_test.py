@@ -1246,10 +1246,14 @@ class TestDatasetService(unittest.TestCase):
             dataset_id, version_name, new_state, user_id, tenancies
         )
 
-        self.dataset_repository.fetch.assert_called_once_with(
+        # Verify dataset repository was called twice (DOI operation + publication)
+        self.assertEqual(self.dataset_repository.fetch.call_count, 2)
+        self.dataset_repository.fetch.assert_called_with(
             dataset_id=dataset_id, tenancies=tenancies
         )
-        self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
+        # Version repository is also called twice (DOI operation + publication)
+        self.assertEqual(self.dataset_version_repository.fetch_version_by_name.call_count, 2)
+        self.dataset_version_repository.fetch_version_by_name.assert_called_with(
             dataset_id=dataset_id, version_name=version_name
         )
         self.doi_service.change_state.assert_called_once_with(
@@ -2107,7 +2111,9 @@ class TestDatasetService(unittest.TestCase):
         version_name = "v1.0"
         user_id = uuid4()
         tenancies = ["tenant1"]
-        
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
         dataset = DatasetDBModel()
         dataset.id = dataset_id
         dataset.data = {"title": "Test Dataset"}
@@ -2117,9 +2123,11 @@ class TestDatasetService(unittest.TestCase):
         version.id = uuid4()
         version.name = version_name
         version.created_at = datetime.datetime(2024, 1, 1)
+        version.is_enabled = True
         version.doi = DOIDBModel()
         version.doi.identifier = "10.1234/test"
-        
+        version.files_in = []  # Add files_in to avoid None issues
+
         dataset.versions = [version]
         
         self.dataset_repository.fetch.return_value = dataset
@@ -2163,7 +2171,8 @@ class TestDatasetService(unittest.TestCase):
         version_name = "v1.0"
         user_id = uuid4()
         tenancies = ["tenant1"]
-        
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_repository.fetch.return_value = None
         
         # Act & Assert
@@ -2180,7 +2189,9 @@ class TestDatasetService(unittest.TestCase):
         version_name = "v1.0"
         user_id = uuid4()
         tenancies = ["tenant1"]
-        
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+
         dataset = DatasetDBModel()
         dataset.id = dataset_id
         
