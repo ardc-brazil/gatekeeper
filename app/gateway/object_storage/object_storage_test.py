@@ -148,6 +148,49 @@ class TestObjectStorageGateway(unittest.TestCase):
         self.assertIn("Object not found", str(context.exception))
         self.assertIn(f"{bucket}/{obj_name}", str(context.exception))
 
+    def test_get_file_successful_cleanup_after_read_failure(self):
+        bucket = "test-bucket"
+        obj_name = "test-file.json"
+        
+        # Mock the MinIO response where read fails but cleanup succeeds
+        mock_response = MagicMock()
+        mock_response.read.side_effect = Exception("Read failed")
+        self.mock_minio_client.get_object.return_value = mock_response
+        
+        # Should raise FileNotFoundError for the read exception
+        with self.assertRaises(FileNotFoundError) as context:
+            self.gateway.get_file(
+                bucket_name=bucket,
+                object_name=obj_name
+            )
+        
+        self.assertIn("Object not found", str(context.exception))
+        # Verify cleanup methods were called
+        mock_response.close.assert_called_once()
+        mock_response.release_conn.assert_called_once()
+
+    def test_get_file_cleanup_exception_handling(self):
+        bucket = "test-bucket"
+        obj_name = "test-file.json"
+        
+        # Mock the MinIO response where cleanup methods fail
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"test data"
+        mock_response.close.side_effect = Exception("Close failed")
+        mock_response.release_conn.side_effect = Exception("Release failed")
+        self.mock_minio_client.get_object.return_value = mock_response
+        
+        # Should still return data successfully despite cleanup failures
+        result = self.gateway.get_file(
+            bucket_name=bucket,
+            object_name=obj_name
+        )
+        
+        self.assertEqual(result, b"test data")
+        # Verify cleanup was attempted
+        mock_response.close.assert_called_once()
+        # release_conn won't be called if close fails
+
 
 if __name__ == "__main__":
     unittest.main()

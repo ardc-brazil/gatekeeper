@@ -827,8 +827,9 @@ class DatasetService:
         
         for file in files:
             # Extract file extension (including dot)
-            file_extension = "." + file.name.split(".")[-1] if "." in file.name else ""
-            if not file_extension or file_extension == ".":
+            if "." in file.name and len(file.name.split(".")) > 1:
+                file_extension = "." + file.name.split(".")[-1]
+            else:
                 file_extension = "(no extension)"
             
             # Initialize stats for this extension if not exists
@@ -866,7 +867,7 @@ class DatasetService:
             for v in dataset.versions:
                 if v.is_enabled and v.doi is not None:
                     # For MANUAL DOIs, state should be FINDABLE
-                    doi_state = "FINDABLE" if v.doi.mode == DOIMode.MANUAL else v.doi.state
+                    doi_state = "FINDABLE" if hasattr(v.doi, 'mode') and v.doi.mode == DOIMode.MANUAL else v.doi.state
                     versions_info.append({
                         "id": str(v.id),
                         "name": v.name,

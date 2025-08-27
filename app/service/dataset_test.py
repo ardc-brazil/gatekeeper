@@ -2549,7 +2549,15 @@ class TestDatasetService(unittest.TestCase):
         file4.name = "readme"  # No extension
         file4.size_bytes = 256
         
-        version.files_in = [file1, file2, file3, file4]
+        file5 = Mock()
+        file5.name = "data.backup.csv"  # Multiple dots
+        file5.size_bytes = 512
+        
+        file6 = Mock()
+        file6.name = ".hidden"  # Starts with dot
+        file6.size_bytes = 128
+        
+        version.files_in = [file1, file2, file3, file4, file5, file6]
         
         # Act
         result = self.dataset_service._create_dataset_json_snapshot(dataset, version)
@@ -2558,25 +2566,29 @@ class TestDatasetService(unittest.TestCase):
         self.assertIn("files_summary", result)
         summary = result["files_summary"]
         
-        self.assertEqual(summary["total_files"], 4)
-        self.assertEqual(summary["total_size_bytes"], 3840)  # 1024 + 512 + 2048 + 256
+        self.assertEqual(summary["total_files"], 6)
+        self.assertEqual(summary["total_size_bytes"], 4480)  # 1024 + 512 + 2048 + 256 + 512 + 128
         
         # Check extensions breakdown
         extensions = summary["extensions_breakdown"]
-        self.assertEqual(len(extensions), 3)  # .csv, .json, (no extension)
+        self.assertEqual(len(extensions), 4)  # .csv, .json, .hidden, (no extension)
         
         # Find each extension
         csv_ext = next(e for e in extensions if e["extension"] == ".csv")
         json_ext = next(e for e in extensions if e["extension"] == ".json")
+        hidden_ext = next(e for e in extensions if e["extension"] == ".hidden")
         no_ext = next(e for e in extensions if e["extension"] == "(no extension)")
         
-        self.assertEqual(csv_ext["count"], 2)
-        self.assertEqual(csv_ext["total_size_bytes"], 3072)  # 1024 + 2048
+        self.assertEqual(csv_ext["count"], 3)  # data.csv, report.csv, data.backup.csv
+        self.assertEqual(csv_ext["total_size_bytes"], 3584)  # 1024 + 2048 + 512
         
         self.assertEqual(json_ext["count"], 1)
         self.assertEqual(json_ext["total_size_bytes"], 512)
         
-        self.assertEqual(no_ext["count"], 1)
+        self.assertEqual(hidden_ext["count"], 1)  # .hidden
+        self.assertEqual(hidden_ext["total_size_bytes"], 128)
+        
+        self.assertEqual(no_ext["count"], 1)  # readme only
         self.assertEqual(no_ext["total_size_bytes"], 256)
 
 

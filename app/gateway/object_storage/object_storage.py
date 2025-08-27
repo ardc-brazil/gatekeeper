@@ -66,6 +66,7 @@ class ObjectStorageGateway:
         Raises:
             FileNotFoundError: If the object doesn't exist
         """
+        response = None
         try:
             response = self._minio_client.get_object(
                 bucket_name=bucket_name,
@@ -78,6 +79,10 @@ class ObjectStorageGateway:
             raise FileNotFoundError(f"Object not found: {bucket_name}/{object_name}") from e
         finally:
             # Ensure response is closed to free resources
-            if 'response' in locals():
-                response.close()
-                response.release_conn()
+            if response is not None:
+                try:
+                    response.close()
+                    response.release_conn()
+                except Exception:
+                    # Ignore cleanup errors to avoid masking the original exception
+                    pass
