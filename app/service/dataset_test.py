@@ -629,7 +629,7 @@ class TestDatasetService(unittest.TestCase):
                 "title": "Original Dataset",
                 "creators": [{"name": "Author One"}],
                 "publisher": "Test Institution",
-                "publicationYear": 2024,
+                "publicationYear": now.year,
             },
         )
         self.doi_service.update_metadata.assert_called_once_with(doi=expected_doi)
@@ -976,7 +976,7 @@ class TestDatasetService(unittest.TestCase):
                 "title": "Original Dataset",
                 "creators": [{"name": "Author One"}],
                 "publisher": "Test Institution",
-                "publicationYear": 2024,
+                "publicationYear": now.year,
             },
         )
 
