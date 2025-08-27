@@ -63,6 +63,7 @@ class DatasetGetResponse(BaseModel):
         None, title="Current version information"
     )
     design_state: str = Field(..., title="Design state")
+    visibility: Optional[str] = Field(None, title="Visibility status")
 
 
 class MinimalDatasetGetResponse(BaseModel):
@@ -94,6 +95,7 @@ class DatasetVersionGetResponse(BaseModel):
     updated_at: datetime = Field(..., title="Updated at")
     version: DatasetVersionResponse = Field(..., title="Specific version information")
     design_state: str = Field(..., title="Design state")
+    visibility: Optional[str] = Field(None, title="Visibility status")
 
 
 class PagedDatasetGetResponse(BaseModel):
@@ -123,6 +125,7 @@ class DatasetCreateResponse(BaseModel):
     current_version: DatasetVersionResponse = Field(
         None, title="Current version information"
     )
+    visibility: Optional[str] = Field(None, title="Visibility status")
 
 
 class DOIErrorResponse(BaseModel):

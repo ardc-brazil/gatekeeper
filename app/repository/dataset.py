@@ -115,6 +115,9 @@ class DatasetRepository:
             if query_params.design_state is not None:
                 query = query.filter(Dataset.design_state == query_params.design_state)
 
+            if query_params.visibility is not None:
+                query = query.filter(Dataset.visibility == query_params.visibility)
+
             if query_params.full_text is not None:
                 search_term = f"%{query_params.full_text}%"
                 query = query.filter(

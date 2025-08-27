@@ -119,6 +119,7 @@ class DatasetService:
             updated_at=dataset.updated_at,
             tenancy=dataset.tenancy,
             design_state=dataset.design_state,
+            visibility=dataset.visibility,
             versions=[
                 self._adapt_version(version=version) for version in dataset.versions
             ],
@@ -138,6 +139,7 @@ class DatasetService:
             updated_at=dataset.updated_at,
             tenancy=dataset.tenancy,
             design_state=dataset.design_state,
+            visibility=dataset.visibility,
             versions=[
                 self._adapt_minimal_version(version=version)
                 for version in dataset.versions
@@ -159,6 +161,7 @@ class DatasetService:
             updated_at=dataset.updated_at,
             tenancy=dataset.tenancy,
             design_state=dataset.design_state,
+            visibility=dataset.visibility,
             version=self._adapt_version(version=dataset_version),
         )
 

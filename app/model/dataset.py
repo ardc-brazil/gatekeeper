@@ -11,6 +11,16 @@ class DesignState(enum.Enum):
     PUBLISHED = "published"
 
 
+class VisibilityStatus(enum.Enum):
+    """
+    Determines the visibility status of a Dataset.
+    """
+    # Only authenticated and authorized users can access it
+    PRIVATE = 1
+    # Dataset metadata is disclosed for public access
+    PUBLIC = 2
+
+
 @dataclass
 class DataFile:
     name: str
@@ -52,6 +62,7 @@ class Dataset:
     owner_id: UUID = None
     tenancy: str = None
     design_state: DesignState = None
+    visibility: VisibilityStatus = None
     versions: list[DatasetVersion] = field(default_factory=lambda: [])
     current_version: DatasetVersion = None
     version: DatasetVersion = None
@@ -72,4 +83,5 @@ class DatasetQuery:
     include_disabled: bool = False
     version: str = None
     design_state: str = None
+    visibility: str = None
     minimal: bool = False
