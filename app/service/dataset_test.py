@@ -21,6 +21,7 @@ from app.model.dataset import (
     DataFile,
     DatasetVersion,
     DesignState,
+    VisibilityStatus,
 )
 from app.model.db.dataset import (
     Dataset as DatasetDBModel,
@@ -92,6 +93,7 @@ class TestDatasetService(unittest.TestCase):
             state="DRAFT",
             doi={"data": {"attributes": {"titles": [{"title": "aaaa"}]}}},
         )
+        mocked_version.visibility = VisibilityStatus.PUBLIC
 
         dataset_db.versions = [mocked_version]
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
@@ -156,6 +158,7 @@ class TestDatasetService(unittest.TestCase):
         mocked_version.is_enabled = True
         mocked_version.design_state = DesignState.DRAFT
         mocked_version.doi = None
+        mocked_version.visibility = None
 
         dataset_db.versions = [mocked_version]
 
@@ -195,6 +198,7 @@ class TestDatasetService(unittest.TestCase):
             state="DRAFT",
             doi={"data": {"attributes": {"titles": [{"title": "aaaa"}]}}},
         )
+        created_dataset_db.visibility = None
         created_dataset_db.versions = [mocked_version]
         self.dataset_repository.upsert.return_value = created_dataset_db
 
@@ -360,6 +364,7 @@ class TestDatasetService(unittest.TestCase):
                 tenancy="dataset.tenancy",
                 owner_id="user_id",
                 versions=[case.given_version],
+                visibility=None,
             )
 
             dataset_request = Dataset(
@@ -403,6 +408,7 @@ class TestDatasetService(unittest.TestCase):
             dataset_db.tenancy = "dataset.tenancy"
             dataset_db.owner_id = "user_id"
             dataset_db.versions = []
+            dataset_db.visibility = None
 
             last_version_number = case.given_versions
             for i in range(last_version_number):
@@ -529,6 +535,7 @@ class TestDatasetService(unittest.TestCase):
             created_at=datetime.datetime.now(),
             updated_at=datetime.datetime.now(),
             design_state=DesignState.PUBLISHED,
+            visibility=None,
             versions=[],
             current_version=None,
         )
@@ -576,6 +583,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -653,6 +661,7 @@ class TestDatasetService(unittest.TestCase):
             created_at=datetime.datetime.now(),
             updated_at=datetime.datetime.now(),
             design_state=DesignState.PUBLISHED,
+            visibility=None,
             versions=[],
             current_version=None,
         )
@@ -700,6 +709,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -787,6 +797,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -851,6 +862,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[],
         )
@@ -903,6 +915,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -953,6 +966,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1037,6 +1051,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[],
         )
@@ -1098,6 +1113,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1154,6 +1170,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1214,6 +1231,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1277,6 +1295,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[],
         )
@@ -1335,6 +1354,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1407,6 +1427,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1464,6 +1485,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[],
         )
@@ -1519,6 +1541,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1583,6 +1606,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1642,6 +1666,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[],
         )
@@ -1699,6 +1724,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version],
         )
@@ -1786,6 +1812,7 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             tenancy=["tenant1"],
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=user_id,
             versions=[existing_version_1, existing_version_2],
         )
@@ -1820,6 +1847,7 @@ class TestDatasetService(unittest.TestCase):
             created_at=now,
             updated_at=now,
             design_state=DesignState.DRAFT,
+            visibility=None,
             owner_id=None,
             version=DatasetVersion(
                 id=existing_version_2.id,
@@ -1885,6 +1913,36 @@ class TestDatasetService(unittest.TestCase):
             str(context.exception),
             f"not_found: {version_name} for dataset {dataset_id}",
         )
+
+    def test_search_datasets_with_visibility_filter(self):
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+        query = DatasetQuery(visibility="PUBLIC")
+
+        mock_dataset = Mock(spec=DatasetDBModel)
+        mock_dataset.id = uuid4()
+        mock_dataset.name = "Test Dataset"
+        mock_dataset.data = {}
+        mock_dataset.is_enabled = True
+        mock_dataset.created_at = datetime.datetime.now()
+        mock_dataset.updated_at = datetime.datetime.now()
+        mock_dataset.tenancy = tenancies
+        mock_dataset.design_state = DesignState.DRAFT
+        mock_dataset.visibility = VisibilityStatus.PUBLIC
+        mock_dataset.versions = []
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.search.return_value = [mock_dataset]
+
+        result = self.dataset_service.search_datasets(
+            query=query, user_id=user_id, tenancies=tenancies
+        )
+
+        self.dataset_repository.search.assert_called_once_with(
+            query_params=query, tenancies=tenancies
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].visibility, VisibilityStatus.PUBLIC)
 
 
 if __name__ == "__main__":

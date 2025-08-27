@@ -83,4 +83,5 @@ class DatasetQuery:
     include_disabled: bool = False
     version: str = None
     design_state: str = None
+    visibility: str = None
     minimal: bool = False

@@ -122,6 +122,7 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         if dataset.current_version is not None
         else None,
         design_state=dataset.design_state.name,
+        visibility=dataset.visibility.name if dataset.visibility is not None else None,
     )
 
 
@@ -141,10 +142,11 @@ def _adapt_minimal_dataset(dataset: Dataset) -> DatasetGetResponse:
         if dataset.current_version is not None
         else None,
         design_state=dataset.design_state.name,
+        visibility=dataset.visibility.name if dataset.visibility is not None else None,
     )
 
 
-def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetGetResponse:
+def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetVersionGetResponse:
     return DatasetVersionGetResponse(
         id=dataset.id,
         name=dataset.name,
@@ -155,6 +157,7 @@ def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetGetResponse:
         updated_at=dataset.updated_at,
         version=_adapt_dataset_version(dataset.version),
         design_state=dataset.design_state.name,
+        visibility=dataset.visibility.name if dataset.visibility is not None else None,
     )
 
 
@@ -171,6 +174,7 @@ async def get_datasets(
     include_disabled: bool = False,
     design_state: str = None,
     version: str = None,
+    visibility: str = None,
     minimal: bool = False,
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
@@ -187,6 +191,7 @@ async def get_datasets(
         include_disabled=include_disabled,
         version=version,
         design_state=design_state,
+        visibility=visibility,
         minimal=minimal,
     )
 
@@ -294,6 +299,7 @@ async def create_dataset(
         tenancy=created.tenancy,
         versions=[_adapt_dataset_version(version) for version in created.versions],
         current_version=_adapt_dataset_version(created.current_version),
+        visibility=created.visibility.name if created.visibility is not None else None,
     )
 
 
