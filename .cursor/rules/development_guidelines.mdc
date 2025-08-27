@@ -98,13 +98,13 @@ mypy app/
 #### Migration Workflow
 ```bash
 # Create new migration
-make MESSAGE="Add new column to datasets" db-create-migration
+make ENV_FILE_PATH=local.env MESSAGE="Add new column to datasets" db-create-migration
 
 # Apply migrations
-make db-upgrade
+make ENV_FILE_PATH=local.env db-upgrade
 
 # Rollback last migration
-make db-downgrade
+make ENV_FILE_PATH=local.env db-downgrade
 
 # Check migration status
 alembic current
@@ -122,7 +122,7 @@ alembic history
 #### Endpoint Testing
 ```bash
 # Start application
-make python-run
+make ENV_FILE_PATH=local.env python-run
 
 # Test endpoints manually
 curl -X GET "http://localhost:9092/api/health"
@@ -185,13 +185,13 @@ curl -X POST "http://localhost:9092/api/datasets" \
 #### Local Environment
 ```bash
 # Start full stack
-make docker-deployment
+make ENV_FILE_PATH=local.env docker-deployment
 
 # Start database only
-make docker-run-db
+make ENV_FILE_PATH=local.env docker-run-db
 
 # Run application locally
-make python-run
+make ENV_FILE_PATH=local.env python-run
 
 # Check service health
 docker ps
@@ -247,12 +247,12 @@ pytest --cov=app.service.doi app/service/doi_test.py
 #### Database Issues
 ```bash
 # Check database connection
-make docker-run-db
+make ENV_FILE_PATH=local.env docker-run-db
 
 # Reset database (development only)
 docker-compose -f docker-compose-database.yaml down -v
-make docker-run-db
-make db-upgrade
+make ENV_FILE_PATH=local.env docker-run-db
+make ENV_FILE_PATH=local.env db-upgrade
 ```
 
 #### Linting Issues
@@ -280,26 +280,26 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-make python-pip-install
+ENV_FILE_PATH=local.env python-pip-install
 
 # Start database
-make docker-run-db
+make ENV_FILE_PATH=local.env docker-run-db
 
 # Apply migrations
-make db-upgrade
+make ENV_FILE_PATH=local.env db-upgrade
 
 # Run application
-make python-run
+make ENV_FILE_PATH=local.env python-run
 ```
 
 #### Daily Development
 ```bash
 # Start work
 git pull origin main
-make docker-run-db
+make ENV_FILE_PATH=local.env docker-run-db
 
 # During development
-make python-run  # In one terminal
+make ENV_FILE_PATH=local.env python-run  # In one terminal
 # Make changes and test
 
 # Before committing
