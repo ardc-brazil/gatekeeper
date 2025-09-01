@@ -11,6 +11,11 @@ alwaysApply: true
 
 ### 1. Feature Development Workflow
 
+#### ALWAYS
+
+**SHOW ME A PLAN OF WHAT YOU ARE GOING TO DO AND IMPLEMENT, DO NOT IMPLEMENT IT RIGHT AWAY UNTIL I REVIEW THE CHANGES PROPOSED**
+**ALWAYS ASK ME IF YOU ARE IN DOUBT**
+
 #### Before Starting
 1. **Check if you aren't already in a different branch than main**
 2. **Pull latest changes**: `git pull origin main`
