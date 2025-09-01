@@ -563,7 +563,7 @@ class DatasetService:
             except Exception as e:
                 # Log the error but don't fail the DOI creation
                 self._logger.error(
-                    f"DOI created successfully but dataset publication failed for {dataset_id}-{version_name}: {str(e)}"
+                    f"DOI created successfully but dataset snapshot publication failed for {dataset_id}-{version_name}: {str(e)}"
                 )
 
         return created_doi
@@ -867,7 +867,7 @@ class DatasetService:
             for v in dataset.versions:
                 if v.is_enabled and v.doi is not None:
                     # For MANUAL DOIs, state should be FINDABLE
-                    doi_state = "FINDABLE" if hasattr(v.doi, 'mode') and v.doi.mode == DOIMode.MANUAL else v.doi.state
+                    doi_state = DOIState.FINDABLE if hasattr(v.doi, 'mode') and v.doi.mode == DOIMode.MANUAL else v.doi.state
                     versions_info.append({
                         "id": str(v.id),
                         "name": v.name,
