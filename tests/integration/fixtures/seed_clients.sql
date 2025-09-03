@@ -70,3 +70,4 @@ VALUES (
 -- Assign roles to the test user (for full API access)
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'admin', NULL, NULL, NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'clients_admin', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', '/api/v1/datasets/.*/enable', 'PUT', 'allow', NULL, NULL);
