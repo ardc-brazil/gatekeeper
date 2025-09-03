@@ -14,6 +14,7 @@ class IntegrationTestConfig:
         self.api_secret = os.getenv("INTEGRATION_API_SECRET", "g*aZkbWom3deiAX-vtoT")
         self.user_id = os.getenv("INTEGRATION_USER_ID", "cbb0a683-630f-4b86-8b45-91b90a6fce1c")
         self.tenancy = os.getenv("INTEGRATION_TENANCY", "datamap/production/data-amazon")
+        self.file_upload_token_secret = os.getenv("FILE_UPLOAD_TOKEN_SECRET", "fake_secret_for_jwt_token")
         
         # WireMock configuration - handle both container and host modes
         doi_base_url = os.getenv("DOI_BASE_URL", "http://localhost:8083")
