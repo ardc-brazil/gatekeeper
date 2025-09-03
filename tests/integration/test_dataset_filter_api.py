@@ -212,9 +212,7 @@ class TestDatasetFilterEndpoints:
         # Act - Make multiple requests
         responses = []
         for _ in range(3):
-            response = http_client.get(
-                "/datasets/filters", headers=valid_headers
-            )
+            response = http_client.get("/datasets/filters", headers=valid_headers)
             responses.append(response)
 
         # Assert - All should be successful and identical
@@ -236,9 +234,7 @@ class TestDatasetFilterEndpoints:
         assert_status_code(response, 200)
 
         # Act & Assert - With extra path segments
-        response = http_client.get(
-            "/datasets/filters/extra", headers=valid_headers
-        )
+        response = http_client.get("/datasets/filters/extra", headers=valid_headers)
         assert_status_code(response, 404)
 
     def test_get_filters_content_type(self, http_client, valid_headers):
