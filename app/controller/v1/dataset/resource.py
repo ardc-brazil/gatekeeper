@@ -173,6 +173,7 @@ class DatasetVersionCreateResponse(BaseModel):
 
 class DatasetVersionInfo(BaseModel):
     """Version information for snapshot responses"""
+
     id: str = Field(..., title="Version ID")
     name: str = Field(..., title="Version name")
     doi_identifier: Optional[str] = Field(None, title="DOI identifier")
@@ -182,6 +183,7 @@ class DatasetVersionInfo(BaseModel):
 
 class FileExtensionSummary(BaseModel):
     """Summary of files by extension"""
+
     extension: str = Field(..., title="File extension (e.g., '.csv', '.json')")
     count: int = Field(..., title="Number of files with this extension")
     total_size_bytes: int = Field(..., title="Total size in bytes for this extension")
@@ -189,13 +191,17 @@ class FileExtensionSummary(BaseModel):
 
 class FilesSummary(BaseModel):
     """Summary of dataset files"""
+
     total_files: int = Field(..., title="Total number of files")
     total_size_bytes: int = Field(..., title="Total size of all files in bytes")
-    extensions_breakdown: list[FileExtensionSummary] = Field(..., title="Breakdown by file extension")
+    extensions_breakdown: list[FileExtensionSummary] = Field(
+        ..., title="Breakdown by file extension"
+    )
 
 
 class DatasetSnapshotResponse(BaseModel):
     """Response for specific version snapshot"""
+
     dataset_id: str = Field(..., title="Dataset ID")
     version_name: str = Field(..., title="Version name")
     doi_identifier: Optional[str] = Field(None, title="DOI identifier")
@@ -208,6 +214,7 @@ class DatasetSnapshotResponse(BaseModel):
 
 class DatasetLatestSnapshotResponse(BaseModel):
     """Response for latest snapshot with versions list"""
+
     dataset_id: str = Field(..., title="Dataset ID")
     version_name: str = Field(..., title="Version name")
     doi_identifier: Optional[str] = Field(None, title="DOI identifier")

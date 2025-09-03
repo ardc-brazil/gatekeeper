@@ -1,0 +1,43 @@
+{
+  "data": {
+    "id": "10.82978.UPDATED",
+    "type": "dois",
+    "attributes": {
+      "doi": "10.82978/UPDATED",
+      "prefix": "10.82978",
+      "suffix": "UPDATED",
+      "identifiers": [],
+      "alternateIdentifiers": [],
+      "creators": [
+        {
+          "name": "Updated Creator",
+          "nameType": "Personal"
+        }
+      ],
+      "titles": [
+        {
+          "title": "Updated Dataset"
+        }
+      ],
+      "publisher": "DataMap",
+      "publicationYear": 2024,
+      "types": {
+        "resourceTypeGeneral": "Dataset"
+      },
+      "url": "https://example.org/updated-dataset",
+      "created": "2024-01-01T12:00:00Z",
+      "registered": "2024-01-01T12:00:00Z",
+      "published": "{{now format='yyyy-MM-dd'}}T{{now format='HH:mm:ss'}}Z",
+      "updated": "{{now format='yyyy-MM-dd'}}T{{now format='HH:mm:ss'}}Z",
+      "state": "findable"
+    },
+    "relationships": {
+      "client": {
+        "data": {
+          "id": "mock.client",
+          "type": "clients"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "DELETE",
+    "urlPathPattern": "/dois/([^/]+)/([^/]+)",
+    "headers": {
+      "Authorization": {
+        "matches": "Basic .*"
+      }
+    }
+  },
+  "response": {
+    "status": 204
+  }
+}

@@ -550,7 +550,7 @@ class DatasetService:
         )
 
         created_doi: DOI = self._doi_service.create(doi=doi)
-        
+
         # If this is a MANUAL DOI, publish the dataset snapshot immediately
         if doi.mode == DOIMode.MANUAL:
             try:
@@ -558,7 +558,7 @@ class DatasetService:
                     dataset_id=dataset_id,
                     version_name=version_name,
                     user_id=user_id,
-                    tenancies=tenancies
+                    tenancies=tenancies,
                 )
             except Exception as e:
                 # Log the error but don't fail the DOI creation
@@ -601,7 +601,7 @@ class DatasetService:
             identifier=version.doi.identifier,
             new_state=new_state,
         )
-        
+
         # If DOI is being published (changed to FINDABLE), publish the dataset snapshot
         if new_state == DOIState.FINDABLE:
             try:
@@ -609,7 +609,7 @@ class DatasetService:
                     dataset_id=dataset_id,
                     version_name=version_name,
                     user_id=user_id,
-                    tenancies=tenancies
+                    tenancies=tenancies,
                 )
             except Exception as e:
                 # Log the error but don't fail the DOI state change
@@ -772,19 +772,22 @@ class DatasetService:
 
         return self._adapt_dataset_version(dataset=dataset, dataset_version=version)
 
-    def _get_latest_published_version(self, dataset: DatasetDBModel) -> DatasetVersionDBModel:
+    def _get_latest_published_version(
+        self, dataset: DatasetDBModel
+    ) -> DatasetVersionDBModel:
         """
         Get the latest published version of a dataset based on max(created_at).
         Returns the version with the most recent created_at that has a published DOI.
         """
         published_versions = [
-            version for version in dataset.versions
+            version
+            for version in dataset.versions
             if version.is_enabled and version.doi is not None
         ]
-        
+
         if not published_versions:
             return None
-        
+
         # Sort by created_at descending and return the first (latest)
         return max(published_versions, key=lambda v: v.created_at)
 
@@ -796,98 +799,108 @@ class DatasetService:
         self._repository.upsert(dataset)
 
     def _create_dataset_json_snapshot(
-        self, 
-        dataset: DatasetDBModel, 
-        version: DatasetVersionDBModel, 
-        include_versions_list: bool = False
+        self,
+        dataset: DatasetDBModel,
+        version: DatasetVersionDBModel,
+        include_versions_list: bool = False,
     ) -> dict:
         """
         Create a JSON snapshot of the dataset metadata for public consumption.
         """
         # Start with the base dataset data
         snapshot = dict(dataset.data) if dataset.data else {}
-        
+
         # Add version-specific metadata
-        snapshot.update({
-            "dataset_id": str(dataset.id),
-            "version_name": version.name,
-            "doi_identifier": version.doi.identifier if version.doi else None,
-            "doi_link": f"https://doi.org/{version.doi.identifier}" if version.doi else None,
-            "doi_state": version.doi.state if version.doi else None,
-            "publication_date": version.created_at.isoformat() if version.created_at else None,
-        })
-        
+        snapshot.update(
+            {
+                "dataset_id": str(dataset.id),
+                "version_name": version.name,
+                "doi_identifier": version.doi.identifier if version.doi else None,
+                "doi_link": f"https://doi.org/{version.doi.identifier}"
+                if version.doi
+                else None,
+                "doi_state": version.doi.state if version.doi else None,
+                "publication_date": version.created_at.isoformat()
+                if version.created_at
+                else None,
+            }
+        )
+
         # Add datafiles summary
         files = version.files_in or []
-        
+
         # Calculate extension breakdown
         extension_stats = {}
         total_files = len(files)
         total_size = 0
-        
+
         for file in files:
             # Extract file extension (including dot)
             if "." in file.name and len(file.name.split(".")) > 1:
                 file_extension = "." + file.name.split(".")[-1]
             else:
                 file_extension = "(no extension)"
-            
+
             # Initialize stats for this extension if not exists
             if file_extension not in extension_stats:
                 extension_stats[file_extension] = {"count": 0, "total_size_bytes": 0}
-            
+
             # Update stats
             extension_stats[file_extension]["count"] += 1
             file_size = file.size_bytes or 0
             extension_stats[file_extension]["total_size_bytes"] += file_size
             total_size += file_size
-        
+
         # Convert to list format
         extensions_breakdown = [
             {
                 "extension": ext,
                 "count": stats["count"],
-                "total_size_bytes": stats["total_size_bytes"]
+                "total_size_bytes": stats["total_size_bytes"],
             }
             for ext, stats in extension_stats.items()
         ]
-        
+
         # Sort by count descending, then by extension name
         extensions_breakdown.sort(key=lambda x: (-x["count"], x["extension"]))
-        
+
         snapshot["files_summary"] = {
             "total_files": total_files,
             "total_size_bytes": total_size,
-            "extensions_breakdown": extensions_breakdown
+            "extensions_breakdown": extensions_breakdown,
         }
-        
+
         # Add versions list for -latest.json files
         if include_versions_list:
             versions_info = []
             for v in dataset.versions:
                 if v.is_enabled and v.doi is not None:
                     # For MANUAL DOIs, state should be FINDABLE
-                    doi_state = DOIState.FINDABLE if hasattr(v.doi, 'mode') and v.doi.mode == DOIMode.MANUAL else v.doi.state
-                    versions_info.append({
-                        "id": str(v.id),
-                        "name": v.name,
-                        "doi_identifier": v.doi.identifier,
-                        "doi_state": doi_state,
-                        "created_at": v.created_at.isoformat() if v.created_at else None,
-                    })
-            
+                    doi_state = (
+                        DOIState.FINDABLE
+                        if hasattr(v.doi, "mode") and v.doi.mode == DOIMode.MANUAL
+                        else v.doi.state
+                    )
+                    versions_info.append(
+                        {
+                            "id": str(v.id),
+                            "name": v.name,
+                            "doi_identifier": v.doi.identifier,
+                            "doi_state": doi_state,
+                            "created_at": v.created_at.isoformat()
+                            if v.created_at
+                            else None,
+                        }
+                    )
+
             # Sort by created_at descending (most recent first)
             versions_info.sort(key=lambda x: x["created_at"], reverse=True)
             snapshot["versions"] = versions_info
-        
+
         return snapshot
 
     def _publish_dataset_snapshot(
-        self, 
-        dataset_id: UUID, 
-        version_name: str, 
-        user_id: UUID, 
-        tenancies: list[str]
+        self, dataset_id: UUID, version_name: str, user_id: UUID, tenancies: list[str]
     ) -> None:
         """
         Publish dataset snapshot by updating visibility and creating JSON files in object storage.
@@ -897,52 +910,60 @@ class DatasetService:
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
         )
-        
+
         if dataset is None:
             raise NotFoundException(f"not_found: {dataset_id}")
-        
+
         # Find the specific version
         version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(
             dataset_id=dataset_id, version_name=version_name
         )
-        
+
         if version is None:
-            raise NotFoundException(f"not_found: {version_name} for dataset {dataset_id}")
-        
+            raise NotFoundException(
+                f"not_found: {version_name} for dataset {dataset_id}"
+            )
+
         try:
             # Step 1: Update dataset visibility to PUBLIC
             self._update_dataset_visibility(dataset)
-            
+
             # Step 2: Create and store versioned snapshot
-            version_snapshot = self._create_dataset_json_snapshot(dataset, version, include_versions_list=False)
-            version_json_bytes = json.dumps(version_snapshot, indent=2).encode('utf-8')
-            
+            version_snapshot = self._create_dataset_json_snapshot(
+                dataset, version, include_versions_list=False
+            )
+            version_json_bytes = json.dumps(version_snapshot, indent=2).encode("utf-8")
+
             version_object_name = f"snapshots/{dataset_id}-{version_name}.json"
             self._minio_gateway.put_file(
                 bucket_name="datamap",
                 object_name=version_object_name,
                 file_data=version_json_bytes,
-                content_type="application/json"
+                content_type="application/json",
             )
-            
+
             # Step 3: Determine if this is the latest published version and create/update latest snapshot
             latest_version = self._get_latest_published_version(dataset)
             if latest_version and latest_version.id == version.id:
-                latest_snapshot = self._create_dataset_json_snapshot(dataset, version, include_versions_list=True)
-                latest_json_bytes = json.dumps(latest_snapshot, indent=2).encode('utf-8')
-                
+                latest_snapshot = self._create_dataset_json_snapshot(
+                    dataset, version, include_versions_list=True
+                )
+                latest_json_bytes = json.dumps(latest_snapshot, indent=2).encode(
+                    "utf-8"
+                )
+
                 latest_object_name = f"snapshots/{dataset_id}-latest.json"
                 self._minio_gateway.put_file(
                     bucket_name="datamap",
                     object_name=latest_object_name,
                     file_data=latest_json_bytes,
-                    content_type="application/json"
+                    content_type="application/json",
                 )
-            
+
             self._logger.info(
                 f"Successfully published dataset snapshot for {dataset_id}-{version_name}"
             )
-            
+
         except Exception as e:
             self._logger.error(
                 f"Failed to publish dataset snapshot for {dataset_id}-{version_name}: {str(e)}"
@@ -953,54 +974,60 @@ class DatasetService:
     def get_dataset_latest_snapshot(self, dataset_id: UUID) -> dict:
         """
         Retrieve the latest dataset snapshot from object storage.
-        
+
         Args:
             dataset_id: The dataset ID
-            
+
         Returns:
             dict: The snapshot data
-            
+
         Raises:
             NotFoundException: If the snapshot doesn't exist
         """
         object_name = f"snapshots/{dataset_id}-latest.json"
-        
+
         try:
             file_bytes = self._minio_gateway.get_file(
-                bucket_name="datamap",
-                object_name=object_name
+                bucket_name="datamap", object_name=object_name
             )
-            return json.loads(file_bytes.decode('utf-8'))
+            return json.loads(file_bytes.decode("utf-8"))
         except FileNotFoundError:
-            raise NotFoundException(f"Latest snapshot not found for dataset {dataset_id}")
+            raise NotFoundException(
+                f"Latest snapshot not found for dataset {dataset_id}"
+            )
         except json.JSONDecodeError as e:
             self._logger.error(f"Invalid JSON in snapshot {object_name}: {str(e)}")
-            raise IllegalStateException(f"Corrupted snapshot data for dataset {dataset_id}")
+            raise IllegalStateException(
+                f"Corrupted snapshot data for dataset {dataset_id}"
+            )
 
     def get_dataset_version_snapshot(self, dataset_id: UUID, version_name: str) -> dict:
         """
         Retrieve a specific dataset version snapshot from object storage.
-        
+
         Args:
             dataset_id: The dataset ID
             version_name: The version name
-            
+
         Returns:
             dict: The snapshot data
-            
+
         Raises:
             NotFoundException: If the snapshot doesn't exist
         """
         object_name = f"snapshots/{dataset_id}-{version_name}.json"
-        
+
         try:
             file_bytes = self._minio_gateway.get_file(
-                bucket_name="datamap",
-                object_name=object_name
+                bucket_name="datamap", object_name=object_name
             )
-            return json.loads(file_bytes.decode('utf-8'))
+            return json.loads(file_bytes.decode("utf-8"))
         except FileNotFoundError:
-            raise NotFoundException(f"Snapshot not found for dataset {dataset_id} version {version_name}")
+            raise NotFoundException(
+                f"Snapshot not found for dataset {dataset_id} version {version_name}"
+            )
         except json.JSONDecodeError as e:
             self._logger.error(f"Invalid JSON in snapshot {object_name}: {str(e)}")
-            raise IllegalStateException(f"Corrupted snapshot data for dataset {dataset_id} version {version_name}")
+            raise IllegalStateException(
+                f"Corrupted snapshot data for dataset {dataset_id} version {version_name}"
+            )

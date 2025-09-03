@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/dois",
+    "headers": {
+      "Content-Type": {
+        "equalTo": "application/vnd.api+json"
+      },
+      "Authorization": {
+        "matches": "Basic .*"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.data.type",
+        "equalTo": "dois"
+      },
+      {
+        "matchesJsonPath": "$.data.attributes.prefix"
+      }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/vnd.api+json"
+    },
+    "bodyFileName": "doi-created-response.json",
+    "transformers": ["response-template"]
+  }
+}

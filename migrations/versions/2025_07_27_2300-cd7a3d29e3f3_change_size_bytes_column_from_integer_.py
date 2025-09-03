@@ -5,6 +5,7 @@ Revises: increase_extension_column_size
 Create Date: 2025-07-27 23:00:13.221098
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -12,8 +13,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'cd7a3d29e3f3'
-down_revision: Union[str, None] = 'increase_extension_column_size'
+revision: str = "cd7a3d29e3f3"
+down_revision: Union[str, None] = "increase_extension_column_size"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -25,7 +26,7 @@ def upgrade() -> None:
         "size_bytes",
         existing_type=sa.Integer(),
         type_=sa.BigInteger(),
-        existing_nullable=False
+        existing_nullable=False,
     )
     # ### end Alembic commands ###
 
@@ -37,6 +38,6 @@ def downgrade() -> None:
         "size_bytes",
         existing_type=sa.BigInteger(),
         type_=sa.Integer(),
-        existing_nullable=False
+        existing_nullable=False,
     )
     # ### end Alembic commands ###

@@ -58,7 +58,9 @@ def model_to_payload(repository: str, doi: DOIModel) -> DOIPayload:
         else None
     )
 
-    publisher = DOIPayloadPublisher(name=doi.publisher.publisher) if doi.publisher else None
+    publisher = (
+        DOIPayloadPublisher(name=doi.publisher.publisher) if doi.publisher else None
+    )
 
     return DOIPayload(
         data=DOIPayloadData(

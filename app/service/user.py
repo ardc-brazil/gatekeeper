@@ -24,7 +24,7 @@ class UserService:
             id=user.id,
             name=user.name,
             email=user.email,
-            roles=user.roles,
+            roles=user.roles if hasattr(user, "roles") else [],
             is_enabled=user.is_enabled,
             providers=[
                 UserProvider(name=provider.name, reference=provider.reference)
@@ -82,13 +82,20 @@ class UserService:
 
         return user_id
 
-    def update(self, id: UUID, name: str, email: str) -> None:
+    def update(self, id: UUID, name: str, email: str) -> User:
         user: UserDBModel = self._repository.fetch_by_id(id=id)
         if user is None:
             raise NotFoundException(f"not_found: {id}")
+
         user.name = name
         user.email = email
-        self._repository.upsert(user=user)
+
+        updated_user = self._repository.upsert(user)
+        # Set roles attribute for the adapted user
+        updated_user.roles = self._casbin_enforcer.get_roles_for_user(
+            str(updated_user.id)
+        )
+        return self.__adapt_user(updated_user)
 
     def add_roles(self, id: UUID, roles: list[str]) -> None:
         user: UserDBModel = self._repository.fetch_by_id(id=id)

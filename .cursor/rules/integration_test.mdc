@@ -1,0 +1,493 @@
+---
+description: Integration Test Architecture and Patterns
+globs:
+- tests/integration/**
+alwaysApply: true
+---
+
+# Integration Test Architecture
+
+## Overview
+
+The integration test suite provides end-to-end API contract validation using isolated Docker containers with mocked external dependencies. This approach replaces complex controller unit tests with comprehensive HTTP-level testing.
+
+## Architecture Principles
+
+### 1. **Isolated Test Environment**
+- **Separate Containers**: All services run with `_test_integration` suffix to avoid conflicts
+- **Port Isolation**: Different ports from development environment (Gatekeeper: 9094, MinIO: 9002/9003, etc.)
+- **Volume Isolation**: Separate Docker volumes (`storage_test_integration`, etc.)
+- **Database Isolation**: Fresh database with seeded test data
+
+### 2. **Mock External Dependencies**
+- **WireMock for DOI Service**: Mock DataCite API with predefined responses
+- **Real Internal Services**: Database, MinIO, authentication - all real for authentic behavior
+- **Simplified Dependencies**: Focus mocking only on external APIs, not internal infrastructure
+
+### 3. **Simple Assertion Strategy**
+- **Status Code Validation**: Exact HTTP status codes (`assert_status_code(response, 404)`)
+- **Exact Response Matching**: Full JSON body validation (`assert_response_matches_dict`)
+- **Minimal Field Validation**: Check only essential fields (`assert_response_contains_fields`)
+- **No Complex Schema Validation**: Avoid over-complicated assertion patterns
+
+## Directory Structure
+
+```
+tests/integration/
+├── config.py                    # Test configuration management
+├── conftest.py                  # Pytest fixtures and setup
+├── fixtures/
+│   ├── auth.py                  # Authentication fixtures
+│   ├── dataset.py               # Dataset creation fixtures
+│   └── seed_clients.sql         # Database seeding script
+├── utils/
+│   ├── assertions.py            # Simple assertion helpers
+│   └── http_client.py           # HTTP client wrapper
+├── wiremock/
+│   ├── mappings/                # WireMock API mappings
+│   │   ├── doi-post-create.json
+│   │   ├── doi-get-success.json
+│   │   └── ...
+│   └── __files/                 # WireMock response bodies
+│       ├── doi-created.json
+│       └── ...
+└── test_*.py                    # Actual test files
+```
+
+## Configuration Management
+
+### Environment-Based Configuration
+```python
+class IntegrationTestConfig:
+    def __init__(self):
+        self.base_url = os.getenv("INTEGRATION_BASE_URL", "http://localhost:9094")
+        self.api_key = os.getenv("INTEGRATION_API_KEY", "...")
+        self.environment = os.getenv("ENVIRONMENT", "integration-test")
+```
+
+### Multi-Environment Support
+- **Local Development**: Direct pytest execution with running containers
+- **CI/CD**: Full container lifecycle management
+- **Debug Mode**: Individual test execution with persistent containers
+
+## Test Data Management
+
+### Database Seeding
+```sql
+-- tests/integration/fixtures/seed_clients.sql
+-- Comprehensive seed data including:
+INSERT INTO clients (key, secret, name, is_enabled) VALUES (...);
+INSERT INTO users (id, name, email, is_enabled) VALUES (...);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES (...);
+```
+
+### Test Data Strategy
+- **Empty Database Assumption**: Tests create their own data via API calls
+- **Isolated Test Data**: Each test manages its own dataset lifecycle
+- **Cleanup Strategy**: Database reset between test runs (not between individual tests)
+- **Seeded Authentication**: Pre-configured test client and user for API access
+
+### Authentication Fixtures
+```python
+def valid_headers():
+    return {
+        "X-Api-Key": config.api_key,
+        "X-Api-Secret": config.api_secret,
+        "X-User-Id": config.user_id,
+        "X-Datamap-Tenancies": config.tenancy
+    }
+```
+
+## WireMock Integration
+
+### Mock Strategy
+- **External APIs Only**: Mock DOI service, keep internal services real
+- **Predefined Responses**: Static JSON files for consistent test behavior
+- **Multiple Scenarios**: Success, failure, and edge case responses
+- **Container Integration**: WireMock runs as part of the test stack
+
+### WireMock Configuration
+```json
+{
+  "request": {
+    "method": "POST",
+    "url": "/dois"
+  },
+  "response": {
+    "status": 201,
+    "bodyFileName": "doi-created.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}
+```
+
+## Assertion Patterns
+
+### 1. **Simple Status Validation**
+```python
+def test_endpoint_not_found(http_client, no_auth_headers):
+    response = http_client.get("/nonexistent", headers=no_auth_headers)
+    assert_status_code(response, 404)
+    assert_response_matches_dict(response, {"detail": "Not Found"})
+```
+
+### 2. **Exact Response Matching**
+```python
+def test_exact_error_response(http_client):
+    response = http_client.get("/datasets/invalid-uuid/snapshot")
+    assert_status_code(response, 422)
+    # Don't validate exact 422 content - FastAPI validation is complex
+    assert_json_response(response)  # Just ensure valid JSON
+```
+
+### 3. **Field-Specific Validation**
+```python
+def test_success_response_fields(http_client, dataset_fixture):
+    dataset = dataset_fixture.create_test_dataset()
+    response = http_client.get(f"/datasets/{dataset['id']}/snapshot")
+    
+    assert_status_code(response, 200)
+    assert_response_contains_fields(response, {
+        "dataset_id": dataset["id"],
+        "version_name": dataset["current_version"]["name"]
+    })
+```
+
+## Test Execution Workflow
+
+### 1. **Container Lifecycle Management**
+```bash
+# Full integration test workflow
+make ENV_FILE_PATH=integration-test.env integration-test-full
+
+# Steps performed:
+# 1. Start isolated containers (docker-compose-integration-test.yaml)
+# 2. Run database migrations (docker exec alembic upgrade head)
+# 3. Seed test data (docker exec psql -f seed_clients.sql)
+# 4. Execute tests (pytest tests/integration/)
+# 5. Cleanup containers (docker compose down)
+```
+
+### 2. **Development Testing**
+```bash
+# Start containers manually
+make ENV_FILE_PATH=integration-test.env integration-test-up
+
+# Run specific tests
+make ENV_FILE_PATH=integration-test.env TEST_PATH=tests/integration/test_dataset_snapshot.py integration-test-run-specific
+
+# Stop containers
+make ENV_FILE_PATH=integration-test.env integration-test-down
+```
+
+### 3. **Health Check Validation**
+```python
+@pytest.fixture(scope="session", autouse=True)
+def verify_services_running():
+    """Ensure all required services are running before tests."""
+    # Check Gatekeeper API
+    response = requests.get(f"{config.base_url}/api/v1/health-check/")
+    assert response.status_code == 200
+    
+    # Check WireMock
+    response = requests.get(f"{config.wiremock_url}/__admin/health")
+    assert response.status_code == 200
+```
+
+## Best Practices for Future Development
+
+### 1. **Test Design Principles**
+
+#### **Focus on API Contract**
+- Test HTTP status codes, not implementation details
+- Validate response structure, not internal business logic
+- Test authentication/authorization boundaries
+- Verify error message consistency
+
+#### **Simple Assertions**
+```python
+# ✅ GOOD: Simple, clear assertions
+assert_status_code(response, 404)
+assert_response_matches_dict(response, {"detail": "Snapshot not found"})
+
+# ❌ AVOID: Complex schema validation
+assert_response_schema_valid(response, complex_schema_definition)
+```
+
+#### **Isolated Test Cases**
+```python
+# ✅ GOOD: Self-contained test
+def test_dataset_creation(http_client, valid_headers):
+    response = http_client.post("/datasets", json=test_data, headers=valid_headers)
+    assert_status_code(response, 201)
+
+# ❌ AVOID: Tests depending on other tests
+def test_dataset_update_depends_on_creation(http_client):
+    # Assumes dataset was created in previous test
+```
+
+### 2. **Test Data Management**
+
+#### **API-Driven Data Creation**
+```python
+# ✅ GOOD: Create test data via API
+def test_dataset_operations(http_client, valid_headers, dataset_fixture):
+    dataset = dataset_fixture.create_test_dataset()  # API call
+    response = http_client.get(f"/datasets/{dataset['id']}", headers=valid_headers)
+    assert_status_code(response, 200)
+
+# ❌ AVOID: Direct database manipulation in tests
+def test_with_direct_db_insert(db_session):
+    db_session.execute("INSERT INTO datasets ...")  # Too low-level
+```
+
+#### **Fixture Reusability**
+```python
+# ✅ GOOD: Reusable, configurable fixtures
+@pytest.fixture
+def dataset_fixture(http_client, valid_headers):
+    return DatasetTestFixture(http_client, valid_headers)
+
+class DatasetTestFixture:
+    def create_test_dataset(self, name="Test Dataset", **overrides):
+        data = {"name": name, "data": {}, **overrides}
+        response = self.http_client.post("/datasets", json=data, headers=self.headers)
+        return response.json()
+```
+
+### 3. **Mock Management**
+
+#### **External Services Only**
+```python
+# ✅ GOOD: Mock external APIs (DOI service)
+# WireMock handles DataCite API calls
+
+# ✅ GOOD: Use real internal services
+# PostgreSQL, MinIO, Authentication - all real for authentic testing
+
+# ❌ AVOID: Mocking internal application components
+# Don't mock services, repositories, or business logic
+```
+
+#### **Predictable Mock Responses**
+```json
+// ✅ GOOD: Simple, predictable WireMock responses
+{
+  "request": {"method": "POST", "url": "/dois"},
+  "response": {
+    "status": 201,
+    "bodyFileName": "doi-created.json"
+  }
+}
+
+// ❌ AVOID: Complex, dynamic mock logic
+{
+  "request": {
+    "method": "POST", 
+    "bodyPatterns": [{"matchesJsonPath": "$.data.attributes.titles[0].title"}]
+  },
+  "response": {
+    "status": 201,
+    "transformers": ["complex-response-transformer"]
+  }
+}
+```
+
+### 4. **Error Testing Patterns**
+
+#### **Test All Error Scenarios**
+```python
+class TestDatasetSnapshotErrors:
+    def test_not_found_returns_404(self, http_client):
+        response = http_client.get("/datasets/nonexistent-id/snapshot")
+        assert_status_code(response, 404)
+        assert_response_matches_dict(response, {"detail": "Snapshot not found"})
+    
+    def test_invalid_uuid_returns_422(self, http_client):
+        response = http_client.get("/datasets/invalid-uuid/snapshot")
+        assert_status_code(response, 422)
+        # Don't validate exact 422 message - FastAPI validation is complex
+        assert_json_response(response)  # Just ensure it's valid JSON
+    
+    def test_unauthorized_returns_401(self, http_client):
+        response = http_client.post("/datasets", json={})  # No headers
+        assert_status_code(response, 401)
+        assert_response_matches_dict(response, {"detail": "Unauthorized"})
+```
+
+#### **Edge Case Coverage**
+```python
+def test_special_characters_in_version_name(self, http_client):
+    """Test handling of special characters in URL parameters."""
+    dataset_id = "valid-uuid"
+    special_versions = ["v1.0-beta", "v1.0_alpha", "v1.0%20test"]
+    
+    for version_name in special_versions:
+        response = http_client.get(f"/datasets/{dataset_id}/versions/{version_name}/snapshot")
+        # Should handle gracefully, not crash
+        assert response.status_code in [200, 404]  # Valid responses
+```
+
+### 5. **Performance Considerations**
+
+#### **Test Execution Speed**
+- **Container Reuse**: Start containers once per test session
+- **Parallel Execution**: Run tests in parallel when possible
+- **Selective Testing**: Support running specific test files/classes
+- **Health Check Caching**: Cache service availability checks
+
+#### **Resource Management**
+```python
+# ✅ GOOD: Efficient resource usage
+@pytest.fixture(scope="session")  # Reuse across all tests
+def http_client():
+    return HTTPTestClient(config.base_url)
+
+# ✅ GOOD: Cleanup when necessary
+@pytest.fixture
+def temporary_dataset(dataset_fixture):
+    dataset = dataset_fixture.create_test_dataset()
+    yield dataset
+    # Cleanup handled by database reset, not individual cleanup
+```
+
+### 6. **Debugging and Maintenance**
+
+#### **Clear Test Names**
+```python
+# ✅ GOOD: Descriptive test names
+def test_get_dataset_snapshot_returns_404_for_nonexistent_dataset():
+def test_post_dataset_with_invalid_data_returns_422_validation_error():
+def test_authenticated_user_can_access_own_dataset_snapshot():
+
+# ❌ AVOID: Vague test names
+def test_dataset_snapshot():
+def test_error_case():
+def test_success():
+```
+
+#### **Debugging Support**
+```python
+# ✅ GOOD: Debugging helpers
+def test_with_debug_info(http_client, dataset_fixture):
+    dataset = dataset_fixture.create_test_dataset()
+    response = http_client.get(f"/datasets/{dataset['id']}/snapshot")
+    
+    if response.status_code != 200:
+        print(f"DEBUG: Response status: {response.status_code}")
+        print(f"DEBUG: Response body: {response.text}")
+    
+    assert_status_code(response, 200)
+```
+
+#### **Test Documentation**
+```python
+def test_dataset_visibility_filter(self, http_client, valid_headers):
+    """
+    Test that dataset search respects visibility filters.
+    
+    This test verifies:
+    1. Public datasets are visible to all users
+    2. Private datasets are only visible to owners
+    3. Visibility filter parameter works correctly
+    
+    Related API: GET /datasets?visibility=public|private
+    """
+```
+
+## Migration from Unit Tests
+
+### When to Use Integration Tests vs Unit Tests
+
+#### **Integration Tests for:**
+- **API Contract Validation**: HTTP status codes, response formats
+- **Authentication/Authorization**: Header validation, permission checks
+- **End-to-End Workflows**: Complete request/response cycles
+- **External Service Integration**: Mocked third-party API interactions
+
+#### **Unit Tests for:**
+- **Business Logic**: Service layer algorithms and validations
+- **Data Transformations**: Adapter functions and data mapping
+- **Utility Functions**: Helper methods and pure functions
+- **Gateway Logic**: External service client wrappers
+
+### Replacing Controller Tests
+
+```python
+# ❌ OLD: Complex controller unit test with mocking
+@patch('app.controller.v1.dataset.Container.dataset_service')
+def test_controller_with_complex_mocking(mock_service):
+    app = FastAPI()
+    app.include_router(router)
+    mock_service.return_value.get_dataset.return_value = mock_data
+    client = TestClient(app)
+    # Complex dependency injection mocking...
+
+# ✅ NEW: Simple integration test
+def test_get_dataset_endpoint(http_client, dataset_fixture, valid_headers):
+    dataset = dataset_fixture.create_test_dataset()
+    response = http_client.get(f"/datasets/{dataset['id']}", headers=valid_headers)
+    assert_status_code(response, 200)
+    assert_response_contains_fields(response, {"id": dataset["id"]})
+```
+
+## Command Reference
+
+### Development Commands
+```bash
+# Start integration test environment
+make ENV_FILE_PATH=integration-test.env integration-test-up
+
+# Run all integration tests
+make ENV_FILE_PATH=integration-test.env integration-test-run
+
+# Run specific test file
+make ENV_FILE_PATH=integration-test.env TEST_PATH=tests/integration/test_dataset_snapshot.py integration-test-run-specific
+
+# View container logs
+make ENV_FILE_PATH=integration-test.env integration-test-logs
+
+# Clean up environment
+make ENV_FILE_PATH=integration-test.env integration-test-down
+```
+
+### Full Workflow Commands
+```bash
+# Complete test cycle (recommended for CI/CD)
+make ENV_FILE_PATH=integration-test.env integration-test-full
+
+# Unit tests (fast, no external dependencies)
+make ENV_FILE_PATH=local.env unit-test
+
+# All unit tests (requires database)
+make ENV_FILE_PATH=local.env unit-test-all
+```
+
+## Future Enhancements
+
+### 1. **Test Coverage Expansion**
+- Add integration tests for all major API endpoints
+- Cover complex authentication scenarios
+- Test file upload/download workflows
+- Validate DOI lifecycle operations
+
+### 2. **Mock Enhancement**
+- Add more WireMock scenarios for edge cases
+- Include network failure simulations
+- Add response delay testing for timeout validation
+
+### 3. **CI/CD Integration**
+- Parallel test execution
+- Test result reporting
+- Performance regression detection
+- Automatic test data cleanup
+
+### 4. **Advanced Assertions**
+- Response time validation
+- Memory usage monitoring
+- Database state verification helpers
+- Log message validation
+
+This integration test architecture provides a solid foundation for reliable, maintainable API testing while avoiding the complexity of heavily mocked unit tests. Focus on simplicity, clarity, and real-world API behavior validation.

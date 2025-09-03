@@ -54,10 +54,10 @@ class UserRepository:
     def upsert(self, user: User) -> User:
         try:
             with self._session_factory() as session:
-                session.add(user)
+                merged_user = session.merge(user)
                 session.commit()
-                session.refresh(user)
-            return user
+                session.refresh(merged_user)
+            return merged_user
         except IntegrityError:
             raise ConflictException(f"user_already_exists: {user.email}")
 

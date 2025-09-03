@@ -157,12 +157,14 @@ async def add_provider(
     payload: UserProviderAddRequest,
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> None:
-    service.add_provider(id=id, provider=payload.provider, reference=payload.reference)
+    service.add_provider(id=id, provider=payload.name, reference=payload.reference)
     return {}
 
 
 # DELETE /users/{id}/providers
-@router.delete("/{id}/providers", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.delete(
+    "/{id}/providers", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def remove_provider(
     id: UUID,
@@ -190,7 +192,9 @@ async def get_by_provider_reference(
 
 
 # POST /users/{id}/tenancies
-@router.post("/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.post(
+    "/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def add_tenancy(
     id: UUID,
@@ -202,14 +206,16 @@ async def add_tenancy(
 
 
 # DELETE /users/{id}/tenancies
-@router.delete("/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.delete(
+    "/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def remove_tenancy(
     id: UUID,
     payload: UserTenanciesRequest,
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> None:
-    service.remove_tenancies(id=id, tenancies=payload.tenancies)
+    service.remove_tenancies(user_id=id, tenancies=payload.tenancies)
     return {}
 
 
@@ -222,13 +228,15 @@ async def enforce(
     service: UserService = Depends(Provide[Container.user_service]),
 ) -> UserEnforceResponse:
     is_authorized: bool = service.enforce(
-        id=id, resource=payload.resource, action=payload.action
+        user_id=id, resource=payload.resource, action=payload.action
     )
     return UserEnforceResponse(is_authorized=is_authorized)
 
 
 # POST /force-policy-reload
-@router.post("/force-policy-reload", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.post(
+    "/force-policy-reload", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def force_policy_reload(
     service: UserService = Depends(Provide[Container.user_service]),
