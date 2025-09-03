@@ -25,8 +25,10 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_write', '/api/v1/tenancies/.*/enable', 'PUT', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_admin', '/api/v1/tenancies', '(POST|PUT|GET|DELETE)', 'allow', NULL, NULL);
 
--- Apply RBAC data (from rbac_data.sql) 
-INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES ('g', 'admin', '/api/v1/*', '(GET|POST|PUT|DELETE)');
+-- Client API policies (admin-only)
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'clients_read', '/api/v1/clients', 'GET', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'clients_write', '/api/v1/clients', '(GET|POST|PUT|DELETE)', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'clients_admin', '/api/v1/clients', '(GET|POST|PUT|DELETE)', 'allow', NULL, NULL);
 
 -- Insert test client
 INSERT INTO clients (key, secret, name, is_enabled, created_at, updated_at) 
@@ -65,5 +67,6 @@ VALUES (
     'datamap/production/data-amazon'
 ) ON CONFLICT (user_id, tenancy) DO NOTHING;
 
--- Assign datasets_write role to the test user  
-INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'datasets_write', NULL, NULL, NULL, NULL);
+-- Assign roles to the test user (for full API access)
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'admin', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'clients_admin', NULL, NULL, NULL, NULL);

@@ -26,6 +26,18 @@ def dataset_fixture(http_client):
 
 
 @pytest.fixture(scope="session")
+def valid_headers(auth_fixture):
+    """Valid authentication headers for API requests."""
+    return auth_fixture.valid_headers()
+
+
+@pytest.fixture(scope="session")
+def invalid_headers(auth_fixture):
+    """Invalid authentication headers for 401 testing."""
+    return auth_fixture.invalid_headers()
+
+
+@pytest.fixture(scope="session")
 def no_auth_headers(auth_fixture):
     """Headers without authentication (for public endpoints)."""
     return auth_fixture.no_auth_headers()
