@@ -13,6 +13,7 @@ alwaysApply: true
 
 #### ALWAYS
 
+**EXECUTE THE VALIDATION LOOP BEFORE PLANNING CHANGES OR START IMPLEMENTING, SO YOU CAN GATHER MORE CONTEXT**
 **SHOW ME A PLAN OF WHAT YOU ARE GOING TO DO AND IMPLEMENT, DO NOT IMPLEMENT IT RIGHT AWAY UNTIL I REVIEW THE CHANGES PROPOSED**
 **ALWAYS ASK ME IF YOU ARE IN DOUBT**
 
@@ -23,10 +24,19 @@ alwaysApply: true
 4. **Verify environment**: Ensure database and dependencies are up to date
 
 #### During Development
-1. **Write code** following the architecture patterns
+1. **Write code** before implementing the task following the architecture patterns
 2. **Run tests frequently** to catch issues early
 3. **Check linting** before committing
-4. **Document complex logic** with clear comments
+4. **Document complex logic** with clear comments, but never init files with comments in the first line.
+5. **ALWAYS EXECUTE THE VALIDATION LOOP AFTER FINISHING CODING**: the validation loop is below. All assertions and tests should complete successfully before moving on. I can help debug problems.
+
+**ALWAYS EXECUTE IT AFTER EACH IMPLEMENTATION** Validation Loop:
+1. `pytest` - to execute unit tests
+2. `make ENV_FILE_PATH=integration-test.env integration-test-full` - to execute integration tests
+3. `ruff check` - for linting
+4. `ruff check --fix` - for auto linting fix
+5. `ruff format` - for auto format
+
 
 #### Before Committing
 1. **Run full test suite**: `pytest`
