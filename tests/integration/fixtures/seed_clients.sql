@@ -20,6 +20,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_w
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/tus', 'POST', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_admin', '/api/v1/datasets', '(GET|POST|PUT|DELETE)', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets/.*/enable', 'PUT', 'deny', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_filters', '/api/v1/datasets/filters', 'GET', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_read', '/api/v1/tenancies', 'GET', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_write', '/api/v1/tenancies', '(GET|POST|PUT)', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_write', '/api/v1/tenancies/.*/enable', 'PUT', 'allow', NULL, NULL);
@@ -70,4 +71,5 @@ VALUES (
 -- Assign roles to the test user (for full API access)
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'admin', NULL, NULL, NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'clients_admin', NULL, NULL, NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('g', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', 'datasets_filters', NULL, NULL, NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'cbb0a683-630f-4b86-8b45-91b90a6fce1c', '/api/v1/datasets/.*/enable', 'PUT', 'allow', NULL, NULL);

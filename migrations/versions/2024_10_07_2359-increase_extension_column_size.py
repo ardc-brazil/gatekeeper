@@ -25,7 +25,7 @@ def upgrade() -> None:
         "extension",
         existing_type=sa.String(length=64),
         type_=sa.String(length=512),
-        existing_nullable=True
+        existing_nullable=True,
     )
     # ### end Alembic commands ###
 
@@ -37,6 +37,6 @@ def downgrade() -> None:
         "extension",
         existing_type=sa.String(length=512),
         type_=sa.String(length=64),
-        existing_nullable=True
+        existing_nullable=True,
     )
-    # ### end Alembic commands ### 
+    # ### end Alembic commands ###

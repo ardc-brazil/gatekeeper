@@ -66,7 +66,9 @@ async def update_by_key(
 
 
 # POST /clients
-@router.post("/", status_code=201, dependencies=[Depends(authenticate), Depends(authorize)])
+@router.post(
+    "/", status_code=201, dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def create(
     payload: ClientCreateRequest,
@@ -77,7 +79,9 @@ async def create(
 
 
 # DELETE /clients/{key}
-@router.delete("/{key}", status_code=204, dependencies=[Depends(authenticate), Depends(authorize)])
+@router.delete(
+    "/{key}", status_code=204, dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def delete(
     key: UUID,

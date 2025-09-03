@@ -1,4 +1,5 @@
 """Pytest configuration and shared fixtures for integration tests."""
+
 import pytest
 import requests
 from tests.integration.config import config
@@ -50,14 +51,22 @@ def verify_services_running():
     try:
         response = requests.get(f"{config.base_url}/api/v1/health-check/", timeout=5)
         if response.status_code != 200:
-            pytest.skip(f"API service not responding correctly. Status: {response.status_code}")
+            pytest.skip(
+                f"API service not responding correctly. Status: {response.status_code}"
+            )
     except requests.exceptions.RequestException as e:
-        pytest.skip(f"API service not running or not accessible: {config.base_url}/api/v1/health-check/ - {str(e)}")
-    
+        pytest.skip(
+            f"API service not running or not accessible: {config.base_url}/api/v1/health-check/ - {str(e)}"
+        )
+
     # Check WireMock is running
     try:
         response = requests.get(config.get_wiremock_admin_url("health"), timeout=5)
         if response.status_code != 200:
-            pytest.skip(f"WireMock service not responding correctly. Status: {response.status_code}")
+            pytest.skip(
+                f"WireMock service not responding correctly. Status: {response.status_code}"
+            )
     except requests.exceptions.RequestException as e:
-        pytest.skip(f"WireMock service not running or not accessible: {config.get_wiremock_admin_url('health')} - {str(e)}")
+        pytest.skip(
+            f"WireMock service not running or not accessible: {config.get_wiremock_admin_url('health')} - {str(e)}"
+        )

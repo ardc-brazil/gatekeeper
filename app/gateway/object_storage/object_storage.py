@@ -32,7 +32,7 @@ class ObjectStorageGateway:
     ) -> None:
         """
         Store a file in MinIO object storage.
-        
+
         Args:
             bucket_name: The name of the bucket to store the file in
             object_name: The name/path of the object in the bucket
@@ -55,28 +55,29 @@ class ObjectStorageGateway:
     ) -> bytes:
         """
         Retrieve a file from MinIO object storage.
-        
+
         Args:
             bucket_name: The name of the bucket containing the file
             object_name: The name/path of the object in the bucket
-            
+
         Returns:
             File content as bytes
-            
+
         Raises:
             FileNotFoundError: If the object doesn't exist
         """
         response = None
         try:
             response = self._minio_client.get_object(
-                bucket_name=bucket_name,
-                object_name=object_name
+                bucket_name=bucket_name, object_name=object_name
             )
             return response.read()
         except Exception as e:
             # MinIO client raises various exceptions for missing objects
             # Convert to standard FileNotFoundError for consistent handling
-            raise FileNotFoundError(f"Object not found: {bucket_name}/{object_name}") from e
+            raise FileNotFoundError(
+                f"Object not found: {bucket_name}/{object_name}"
+            ) from e
         finally:
             # Ensure response is closed to free resources
             if response is not None:

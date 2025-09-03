@@ -15,6 +15,7 @@ class VisibilityStatus(enum.Enum):
     """
     Determines the visibility status of a Dataset.
     """
+
     # Only authenticated and authorized users can access it
     PRIVATE = 1
     # Dataset metadata is disclosed for public access

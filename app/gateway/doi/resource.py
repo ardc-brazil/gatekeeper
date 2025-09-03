@@ -27,6 +27,7 @@ class Types:
 class Publisher:
     name: str
 
+
 @dataclass
 class Attributes:
     prefix: str = None

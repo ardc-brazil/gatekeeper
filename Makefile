@@ -138,6 +138,8 @@ unit-test-file: # Usage: make ENV_FILE_PATH=local.env TEST_FILE=app/service/doi_
 
 integration-test-full: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-full
 	@echo "${On_Green}Running complete integration test workflow${Color_Off}"
+	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-down
+	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-build
 	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-up
 	@echo "Running database migrations inside container..."
 	@docker exec datamap_gatekeeper_test_integration python3 -m alembic upgrade head || echo "Migration may have failed - continuing with tests"

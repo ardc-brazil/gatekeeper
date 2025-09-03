@@ -162,7 +162,9 @@ async def add_provider(
 
 
 # DELETE /users/{id}/providers
-@router.delete("/{id}/providers", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.delete(
+    "/{id}/providers", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def remove_provider(
     id: UUID,
@@ -190,7 +192,9 @@ async def get_by_provider_reference(
 
 
 # POST /users/{id}/tenancies
-@router.post("/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.post(
+    "/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def add_tenancy(
     id: UUID,
@@ -202,7 +206,9 @@ async def add_tenancy(
 
 
 # DELETE /users/{id}/tenancies
-@router.delete("/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.delete(
+    "/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def remove_tenancy(
     id: UUID,
@@ -228,7 +234,9 @@ async def enforce(
 
 
 # POST /force-policy-reload
-@router.post("/force-policy-reload", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.post(
+    "/force-policy-reload", dependencies=[Depends(authenticate), Depends(authorize)]
+)
 @inject
 async def force_policy_reload(
     service: UserService = Depends(Provide[Container.user_service]),

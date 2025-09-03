@@ -220,20 +220,21 @@ class TestUserCRUDOperations:
         user_id = create_response.json()["id"]
         
         # Arrange - Update data
+        unique_updated_email = f"updated{unique_email}.lifecycle_{str(uuid.uuid4())[:8]}@example.com"
         update_data = {
             "name": "Updated User Name",
-            "email": "updated@example.com"
+            "email": unique_updated_email
         }
         
         # Act
         response = http_client.put(f"/users/{user_id}", json=update_data, headers=valid_headers)
         
         # Assert
-        assert_status_code(response, 500)
+        assert_status_code(response, 200)
         # Service method returns UserDBModel but method signature says User
         data = assert_json_response(response)
-        assert "detail" in data
-        assert "not bound to a Session" in data["detail"]
+        assert update_data["name"] == data["name"]
+        assert update_data["email"] == data["email"]
     
     def test_update_user_not_found_404(self, http_client, valid_headers):
         """Test updating a non-existent user returns 404."""
@@ -665,8 +666,8 @@ class TestUserTenancyOperations:
         data = assert_json_response(response)
         assert "list.remove(x): x not in list" in data["detail"]
     
-    def test_remove_tenancies_not_found_500(self, http_client, valid_headers):
-        """Test removing tenancies from a non-existent user returns 500 due to controller bug."""
+    def test_remove_tenancies_not_found_404(self, http_client, valid_headers):
+        """Test removing tenancies from a non-existent user returns 404."""
         # Arrange
         non_existent_id = str(uuid4())
         tenancy_data = {
@@ -802,14 +803,14 @@ class TestUserWorkflow:
             "is_enabled": True
         })
         
-        # 3. Update user (still has service issue)
+        # 3. Update user
+        unique_updated_email = f"updated{unique_email}.lifecycle_{str(uuid.uuid4())[:8]}@example.com"
         update_data = {
             "name": "Updated Lifecycle User",
-            "email": "updated.lifecycle@example.com"
+            "email": unique_updated_email
         }
         update_response = http_client.put(f"/users/{user_id}", json=update_data, headers=valid_headers)
-        assert_status_code(update_response, 500)
-        # Service method returns UserDBModel but method signature says User
+        assert_status_code(update_response, 200)
         
         # 4. Add roles
         roles = ["admin", "user"]
@@ -858,7 +859,7 @@ class TestUserWorkflow:
         get_reenabled_response = http_client.get(f"/users/{user_id}", headers=valid_headers)
         assert_status_code(get_reenabled_response, 200)
         assert_response_contains_fields(get_reenabled_response, {
-            "name": "Lifecycle User",  # Name wasn't updated due to service issue
-            "email": unique_email,  # Email wasn't updated due to service issue
+            "name": "Updated Lifecycle User", 
+            "email": unique_updated_email, 
             "is_enabled": True
         })
