@@ -167,7 +167,7 @@ make ENV_FILE_PATH=integration-test.env integration-test-full
 # 2. Run database migrations (docker exec alembic upgrade head)
 # 3. Seed test data (docker exec psql -f seed_clients.sql)
 # 4. Execute tests (pytest tests/integration/)
-# 5. Cleanup containers (docker-compose down)
+# 5. Cleanup containers (docker compose down)
 ```
 
 ### 2. **Development Testing**

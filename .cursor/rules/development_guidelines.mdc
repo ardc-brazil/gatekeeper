@@ -265,7 +265,7 @@ pytest --cov=app.service.doi app/service/doi_test.py
 make ENV_FILE_PATH=local.env docker-run-db
 
 # Reset database (development only)
-docker-compose -f docker-compose-database.yaml down -v
+docker compose -f docker-compose-database.yaml down -v
 make ENV_FILE_PATH=local.env docker-run-db
 make ENV_FILE_PATH=local.env db-upgrade
 ```

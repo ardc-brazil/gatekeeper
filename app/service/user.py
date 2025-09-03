@@ -82,13 +82,13 @@ class UserService:
 
         return user_id
 
-    def update(self, id: UUID, name: str, email: str) -> None:
+    def update(self, id: UUID, name: str, email: str) -> User:
         user: UserDBModel = self._repository.fetch_by_id(id=id)
         if user is None:
             raise NotFoundException(f"not_found: {id}")
         user.name = name
         user.email = email
-        self._repository.upsert(user=user)
+        return self.__adapt_user(self._repository.upsert(user=user))
 
     def add_roles(self, id: UUID, roles: list[str]) -> None:
         user: UserDBModel = self._repository.fetch_by_id(id=id)

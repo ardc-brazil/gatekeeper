@@ -28,23 +28,23 @@ On_White=\033[47m       # White
 
 # Docker commands
 docker-build:
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml build
+	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml build
 
 docker-run:
 	@echo "${On_Green}Starting docker containers${Color_Off}"
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
+	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml up -d
 
 docker-run-db:
 	@echo "${On_Green}Starting docker containers${Color_Off}"
-	time docker-compose -f docker-compose-database.yaml up -d	
+	time docker compose -f docker-compose-database.yaml up -d	
 
 docker-stop:
 	@echo "${On_Green}Stoping docker containers${Color_Off}"
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml stop
+	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml stop
 
 docker-down:
 	@echo "${On_Green}Downing docker containers${Color_Off}"
-	time docker-compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml down
+	time docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml down
 
 docker-prune:
 	@echo "${On_Green}Images prune${Color_Off}"
@@ -82,11 +82,11 @@ db-downgrade:
 # Integration Test commands
 integration-test-build:
 	@echo "${On_Green}Building integration test containers${Color_Off}"
-	docker-compose -f docker-compose-integration-test.yaml build
+	docker compose -f docker-compose-integration-test.yaml build
 
 integration-test-up:
 	@echo "${On_Green}Starting integration test containers${Color_Off}"
-	docker-compose -f docker-compose-integration-test.yaml up -d
+	docker compose -f docker-compose-integration-test.yaml up -d
 	@echo "Waiting for services to be ready..."
 	@timeout 60 bash -c 'until curl -s http://localhost:9094/api/v1/health-check/ > /dev/null; do sleep 2; done' || echo "Gatekeeper may not be ready"
 	@timeout 30 bash -c 'until curl -s http://localhost:8083/__admin/health > /dev/null; do sleep 1; done' || echo "WireMock may not be ready"
@@ -102,17 +102,17 @@ integration-test-up:
 
 integration-test-down: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-down
 	@echo "${On_Green}Stopping integration test containers${Color_Off}"
-	docker-compose -f docker-compose-integration-test.yaml down
+	docker compose -f docker-compose-integration-test.yaml down
 	@echo "${On_Green}Integration test containers stopped${Color_Off}"
 
 integration-test-clean: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-clean
 	@echo "${On_Green}Cleaning integration test containers and volumes${Color_Off}"
-	docker-compose -f docker-compose-integration-test.yaml down -v
+	docker compose -f docker-compose-integration-test.yaml down -v
 	@echo "${On_Green}Integration test containers and volumes cleaned${Color_Off}"
 
 integration-test-logs: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-logs
 	@echo "${On_Green}Showing integration test container logs${Color_Off}"
-	docker-compose -f docker-compose-integration-test.yaml logs --tail=50
+	docker compose -f docker-compose-integration-test.yaml logs --tail=50
 
 integration-test-restart: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-restart
 	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-down
