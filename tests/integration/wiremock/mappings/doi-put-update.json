@@ -1,0 +1,28 @@
+{
+  "request": {
+    "method": "PUT",
+    "urlPathPattern": "/dois/([^/]+)",
+    "headers": {
+      "Content-Type": {
+        "equalTo": "application/vnd.api+json"
+      },
+      "Authorization": {
+        "matches": "Basic .*"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.data.type",
+        "equalTo": "dois"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/vnd.api+json"
+    },
+    "bodyFileName": "doi-updated-response.json",
+    "transformers": ["response-template"]
+  }
+}

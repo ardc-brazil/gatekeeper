@@ -1,0 +1,42 @@
+{
+  "data": {
+    "id": "{{randomValue length=10 type='ALPHANUMERIC'}}",
+    "type": "dois",
+    "attributes": {
+      "doi": "10.82978/{{randomValue length=8 type='ALPHANUMERIC_UPPER'}}",
+      "prefix": "10.82978",
+      "suffix": "{{randomValue length=8 type='ALPHANUMERIC_UPPER'}}",
+      "identifiers": [],
+      "alternateIdentifiers": [],
+      "creators": [
+        {
+          "name": "Test Creator",
+          "nameType": "Personal"
+        }
+      ],
+      "titles": [
+        {
+          "title": "Test Dataset"
+        }
+      ],
+      "publisher": "DataMap",
+      "publicationYear": 2024,
+      "types": {
+        "resourceTypeGeneral": "Dataset"
+      },
+      "url": "https://example.org/dataset",
+      "created": "{{now format='yyyy-MM-dd'}}T{{now format='HH:mm:ss'}}Z",
+      "registered": "{{now format='yyyy-MM-dd'}}T{{now format='HH:mm:ss'}}Z",
+      "updated": "{{now format='yyyy-MM-dd'}}T{{now format='HH:mm:ss'}}Z",
+      "state": "draft"
+    },
+    "relationships": {
+      "client": {
+        "data": {
+          "id": "mock.client",
+          "type": "clients"
+        }
+      }
+    }
+  }
+}

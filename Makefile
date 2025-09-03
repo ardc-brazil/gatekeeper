@@ -78,3 +78,62 @@ db-create-migration: # Usage: make MESSAGE="Add tenancy column to datasets" db-c
 
 db-downgrade:
 	python3 -m alembic downgrade -1
+
+# Integration Test commands
+integration-test-build:
+	@echo "${On_Green}Building integration test containers${Color_Off}"
+	docker-compose -f docker-compose-integration-test.yaml build
+
+integration-test-up:
+	@echo "${On_Green}Starting integration test containers${Color_Off}"
+	docker-compose -f docker-compose-integration-test.yaml up -d
+	@echo "Waiting for services to be ready..."
+	@timeout 60 bash -c 'until curl -s http://localhost:9094/api/v1/health-check/ > /dev/null; do sleep 2; done' || echo "Gatekeeper may not be ready"
+	@timeout 30 bash -c 'until curl -s http://localhost:8083/__admin/health > /dev/null; do sleep 1; done' || echo "WireMock may not be ready"
+	@echo "${On_Green}Integration test containers ready${Color_Off}"
+	@echo "Services available:"
+	@echo "  - Gatekeeper API: http://localhost:9094"
+	@echo "  - WireMock (DOI): http://localhost:8083"
+	@echo "  - MinIO Console: http://localhost:9003"
+	@echo "  - MinIO API: http://localhost:9002"
+	@echo "  - PostgreSQL: localhost:5433"
+	@echo "  - PGAdmin: http://localhost:5051"
+	@echo "  - TUSd: http://localhost:1081"
+
+integration-test-down: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-down
+	@echo "${On_Green}Stopping integration test containers${Color_Off}"
+	docker-compose -f docker-compose-integration-test.yaml down
+	@echo "${On_Green}Integration test containers stopped${Color_Off}"
+
+integration-test-clean: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-clean
+	@echo "${On_Green}Cleaning integration test containers and volumes${Color_Off}"
+	docker-compose -f docker-compose-integration-test.yaml down -v
+	@echo "${On_Green}Integration test containers and volumes cleaned${Color_Off}"
+
+integration-test-logs: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-logs
+	@echo "${On_Green}Showing integration test container logs${Color_Off}"
+	docker-compose -f docker-compose-integration-test.yaml logs --tail=50
+
+integration-test-restart: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-restart
+	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-down
+	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-up
+
+integration-test-run: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-run
+	@echo "${On_Green}Running integration tests${Color_Off}"
+	pytest tests/integration/ -v
+
+integration-test-run-specific: # Usage: make ENV_FILE_PATH=integration-test.env TEST_PATH=tests/integration/test_dataset_snapshot.py integration-test-run-specific
+	@echo "${On_Green}Running specific integration test: ${TEST_PATH}${Color_Off}"
+	pytest ${TEST_PATH} -v
+
+# Complete integration test workflow
+integration-test-full: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-full
+	@echo "${On_Green}Running complete integration test workflow${Color_Off}"
+	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-up
+	@echo "Running database migrations inside container..."
+	@docker exec datamap_gatekeeper_test_integration python3 -m alembic upgrade head || echo "Migration may have failed - continuing with tests"
+	@echo "Seeding test data..."
+	@docker exec datamap_postgres_test_integration psql -U gk_admin -d gatekeeper_db -f /tmp/seed_clients.sql || echo "Seed may have failed - continuing with tests"
+	@echo "Running integration tests..."
+	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-run
+	@$(MAKE) integration-test-down

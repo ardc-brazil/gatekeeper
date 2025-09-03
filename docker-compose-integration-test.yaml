@@ -1,0 +1,126 @@
+version: '3'
+
+services:
+  gatekeeper_test_integration:
+    build: .
+    image: gatekeeper
+    container_name: datamap_gatekeeper_test_integration
+    restart: always
+    env_file:
+      - ${ENV_FILE_PATH}
+    ports: 
+      - '9094:9092'  # Different port to avoid conflicts
+    networks:
+      - gatekeeper_integration-test-network
+    depends_on:
+      - postgres_test_integration
+      - minio_test_integration
+
+  minio_test_integration:
+    image: minio/minio:RELEASE.2024-03-21T23-13-43Z
+    command: server /storage --console-address ":9001"
+    container_name: datamap_min_io_test_integration
+    restart: always
+    ports:
+      - "9002:9000"  # Different port to avoid conflicts
+      - "9003:9001"  # Different console port
+    env_file:
+      - ${ENV_FILE_PATH}
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+        - gatekeeper_integration-test-network
+    hostname: minio_test_integration
+    volumes:
+      - storage_test_integration:/storage/
+  
+  tusd_test_integration:
+    image: tusproject/tusd:v2.4
+    container_name: datamap_tusd_test_integration
+    restart: always
+    ports: 
+      - "1081:1080"  # Different port to avoid conflicts
+    env_file:
+      - ${ENV_FILE_PATH}
+    entrypoint: /bin/sh -c
+    command: ["tusd -port 1080 -s3-bucket datamap -s3-endpoint $${TUS_S3_ENDPOINT} -hooks-http $${TUS_HOOK_API} -cors-allow-headers X-User-Token,X-User-Id"]
+    depends_on: 
+      - minio_test_integration
+    networks:
+      - gatekeeper_integration-test-network
+
+  postgres_test_integration:
+    image: postgres:13
+    container_name: datamap_postgres_test_integration
+    restart: always
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data_test_integration:/var/lib/postgresql/data
+      - ./tests/integration/fixtures/seed_clients.sql:/tmp/seed_clients.sql:ro
+    networks:
+      - gatekeeper_integration-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin_test_integration:
+    image: dpage/pgadmin4:6.7
+    container_name: datamap_pgadmin_test_integration
+    restart: always
+    ports:
+      - "5051:80"  # Different port to avoid conflicts
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    volumes:
+      - pgadmin-data_test_integration:/var/lib/pgadmin
+      - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json
+    depends_on:
+      - postgres_test_integration
+    networks:
+      - gatekeeper_integration-test-network
+
+  wiremock_test_integration:
+    image: wiremock/wiremock:3.3.1
+    container_name: datamap_wiremock_test_integration
+    ports:
+      - "8083:8080"
+    volumes:
+      - ./tests/integration/wiremock/mappings:/home/wiremock/mappings:ro
+      - ./tests/integration/wiremock/__files:/home/wiremock/__files:ro
+    command: ["--global-response-templating", "--verbose"]
+    networks:
+      - gatekeeper_integration-test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/__admin/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  storage_test_integration:
+    driver: local
+    driver_opts:
+      device: ${STORAGE_DOCKER_VOLUME}_test_integration
+      o: bind
+      type: local
+  postgres-data_test_integration:
+    driver: local
+  pgadmin-data_test_integration:
+    driver: local
+
+networks:
+  gatekeeper_integration-test-network:
+    driver: bridge
+    name: gatekeeper_integration-test-network
