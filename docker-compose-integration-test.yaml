@@ -73,23 +73,6 @@ services:
       timeout: 5s
       retries: 5
 
-  pgadmin_test_integration:
-    image: dpage/pgadmin4:6.7
-    container_name: datamap_pgadmin_test_integration
-    restart: always
-    ports:
-      - "5051:80"  # Different port to avoid conflicts
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
-    volumes:
-      - pgadmin-data_test_integration:/var/lib/pgadmin
-      - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json
-    depends_on:
-      - postgres_test_integration
-    networks:
-      - gatekeeper_integration-test-network
-
   wiremock_test_integration:
     image: wiremock/wiremock:3.3.1
     container_name: datamap_wiremock_test_integration

@@ -127,6 +127,15 @@ integration-test-run-specific: # Usage: make ENV_FILE_PATH=integration-test.env 
 	pytest ${TEST_PATH} -v
 
 # Complete integration test workflow
+# Unit test commands
+unit-test: # Usage: make ENV_FILE_PATH=local.env unit-test (fast unit tests, minimal env needed)
+	@echo "${On_Green}Running unit tests (service/adapter layers only)${Color_Off}"
+	@export $$(cat $(ENV_FILE_PATH) | xargs) && pytest -c pytest-unit.ini
+
+unit-test-file: # Usage: make ENV_FILE_PATH=local.env TEST_FILE=app/service/doi_test.py unit-test-file
+	@echo "${On_Green}Running specific unit test file: ${TEST_FILE}${Color_Off}"
+	@export $$(cat $(ENV_FILE_PATH) | xargs) && pytest ${TEST_FILE} -v
+
 integration-test-full: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-full
 	@echo "${On_Green}Running complete integration test workflow${Color_Off}"
 	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-up
