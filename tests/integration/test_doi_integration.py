@@ -184,7 +184,7 @@ class TestDOICreation:
     def test_create_duplicate_doi_400(
         self, http_client, valid_headers, dataset_fixture
     ):
-        """Test creating duplicate DOI returns 409 conflict."""
+        """Test creating duplicate DOI returns 400 bad request."""
         # Arrange - Create dataset with version and first DOI
         dataset = dataset_fixture.create_dataset_with_version()
         dataset_id = dataset["id"]
