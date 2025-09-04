@@ -407,7 +407,7 @@ async def create_doi(
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOICreateResponse:
     if create_doi_request.mode not in DOIMode.__members__:
-        return Response(status_code=422, content=json.dumps({"details": "Invalid mode"}), media_type="application/json")
+        return Response(status_code=422, content=json.dumps({"detail": "Invalid mode"}), media_type="application/json")
     
     res = service.create_doi(
         dataset_id=dataset_id,
