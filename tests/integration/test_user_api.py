@@ -1,3 +1,4 @@
+import uuid
 from uuid import uuid4
 from tests.integration.utils.assertions import (
     assert_status_code,
@@ -161,8 +162,6 @@ class TestUserCRUDOperations:
     def test_create_user_success_201(self, http_client, valid_headers):
         """Test creating a new user successfully."""
         # Arrange - Use unique email to avoid conflicts
-        import uuid
-
         unique_email = f"newuser_{str(uuid.uuid4())[:8]}@example.com"
         user_data = {
             "name": "New Test User",
@@ -218,8 +217,6 @@ class TestUserCRUDOperations:
     def test_update_user_success(self, http_client, valid_headers):
         """Test updating an existing user successfully."""
         # Arrange - First create a user with unique email
-        import uuid
-
         unique_email = f"updateme_{str(uuid.uuid4())[:8]}@example.com"
         create_data = {
             "name": "User To Update",
@@ -288,8 +285,6 @@ class TestUserCRUDOperations:
     def test_delete_user_success_200(self, http_client, valid_headers):
         """Test deleting (disabling) a user successfully."""
         # Arrange - First create a user
-        import uuid
-
         create_data = {
             "name": "User To Delete",
             "email": f"deleteme_{str(uuid.uuid4())[:8]}@example.com",
@@ -339,8 +334,6 @@ class TestUserCRUDOperations:
     def test_enable_user_success(self, http_client, valid_headers):
         """Test enabling a disabled user successfully."""
         # Arrange - First create and then disable a user
-        import uuid
-
         create_data = {
             "name": "User To Enable",
             "email": f"enableme_{str(uuid.uuid4())[:8]}@example.com",
@@ -398,8 +391,6 @@ class TestUserRoleOperations:
     def test_add_roles_success(self, http_client, valid_headers):
         """Test adding roles to a user successfully."""
         # Arrange - First create a user
-        import uuid
-
         create_data = {
             "name": "User For Roles",
             "email": f"roles_{str(uuid.uuid4())[:8]}@example.com",
@@ -456,8 +447,6 @@ class TestUserRoleOperations:
     def test_remove_roles_success(self, http_client, valid_headers):
         """Test removing roles from a user successfully."""
         # Arrange - First create a user with roles
-        import uuid
-
         create_data = {
             "name": "User For Role Removal",
             "email": f"removeroles_{str(uuid.uuid4())[:8]}@example.com",
@@ -518,8 +507,6 @@ class TestUserProviderOperations:
     def test_add_provider_success(self, http_client, valid_headers):
         """Test adding a provider to a user successfully."""
         # Arrange - First create a user
-        import uuid
-
         create_data = {
             "name": "User For Provider",
             "email": f"provider_{str(uuid.uuid4())[:8]}@example.com",
@@ -580,8 +567,6 @@ class TestUserProviderOperations:
     def test_remove_provider_success(self, http_client, valid_headers):
         """Test removing a provider from a user successfully."""
         # Arrange - First create a user with a provider
-        import uuid
-
         create_data = {
             "name": "User For Provider Removal",
             "email": f"removeprovider_{str(uuid.uuid4())[:8]}@example.com",
@@ -642,8 +627,6 @@ class TestUserTenancyOperations:
     def test_add_tenancies_success(self, http_client, valid_headers):
         """Test adding tenancies to a user successfully."""
         # Arrange - First create a user
-        import uuid
-
         create_data = {
             "name": "User For Tenancies",
             "email": f"tenancies_{str(uuid.uuid4())[:8]}@example.com",
@@ -702,8 +685,6 @@ class TestUserTenancyOperations:
     def test_remove_tenancies_success(self, http_client, valid_headers):
         """Test removing tenancies from a user successfully."""
         # Arrange - First create a user with tenancies
-        import uuid
-
         create_data = {
             "name": "User For Tenancy Removal",
             "email": f"removetenancies_{str(uuid.uuid4())[:8]}@example.com",
@@ -785,13 +766,12 @@ class TestUserEnforceOperations:
         )
 
         # Assert
-        assert_status_code(response, 500)
-        # Fixed: now returns 500 with Pydantic validation error
+        assert_status_code(response, 200)
         data = assert_json_response(response)
-        assert "validation error for UserEnforceResponse" in data["detail"]
-        assert "Field required" in data["detail"]
+        assert "allow" in data
+        assert data["allow"] is True
 
-    def test_enforce_authorization_not_found_500(self, http_client, valid_headers):
+    def test_enforce_authorization_not_found_200(self, http_client, valid_headers):
         """Test enforcing authorization for a non-existent user returns 500 due to controller bug."""
         # Arrange
         non_existent_id = str(uuid4())
@@ -805,11 +785,11 @@ class TestUserEnforceOperations:
         )
 
         # Assert
-        assert_status_code(response, 500)
+        assert_status_code(response, 200)
         # Fixed: now returns 500 with Pydantic validation error
         data = assert_json_response(response)
-        assert "detail" in data
-        assert "validation error for UserEnforceResponse" in data["detail"]
+        assert "allow" in data
+        assert data["allow"] is False
 
     def test_enforce_authorization_unauthorized_401(self, http_client, no_auth_headers):
         """Test enforcing authorization without authentication returns 401."""
@@ -853,8 +833,6 @@ class TestUserWorkflow:
     def test_user_full_lifecycle(self, http_client, valid_headers):
         """Test complete user lifecycle: create -> get -> update -> add roles -> add provider -> add tenancy -> enforce -> disable -> enable."""
         # 1. Create user
-        import uuid
-
         unique_email = f"lifecycle_{str(uuid.uuid4())[:8]}@example.com"
         create_data = {
             "name": "Lifecycle User",
@@ -912,10 +890,10 @@ class TestUserWorkflow:
         enforce_response = http_client.post(
             f"/users/{user_id}/enforce", json=enforce_data, headers=valid_headers
         )
-        assert_status_code(enforce_response, 500)
-        # Fixed: now returns 500 with Pydantic validation error
+        assert_status_code(enforce_response, 200)
         data = assert_json_response(enforce_response)
-        assert "validation error for UserEnforceResponse" in data["detail"]
+        assert "allow" in data
+        assert data["allow"] is True
 
         # 8. Disable user
         disable_response = http_client.delete(

@@ -230,7 +230,7 @@ async def enforce(
     is_authorized: bool = service.enforce(
         user_id=id, resource=payload.resource, action=payload.action
     )
-    return UserEnforceResponse(is_authorized=is_authorized)
+    return UserEnforceResponse(allow=is_authorized)
 
 
 # POST /force-policy-reload

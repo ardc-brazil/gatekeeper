@@ -1,5 +1,6 @@
 from datetime import datetime
 from uuid import UUID
+import json
 from fastapi import APIRouter, Depends, Response
 from app.container import Container
 from dependency_injector.wiring import inject, Provide
@@ -405,6 +406,9 @@ async def create_doi(
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOICreateResponse:
+    if create_doi_request.mode not in DOIMode.__members__:
+        return Response(status_code=422, content=json.dumps({"detail": "Invalid mode"}), media_type="application/json")
+    
     res = service.create_doi(
         dataset_id=dataset_id,
         version_name=version_name,

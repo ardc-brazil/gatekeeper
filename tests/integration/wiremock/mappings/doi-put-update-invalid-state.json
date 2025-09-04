@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "PUT",
+    "urlPathPattern": "/dois/([^/]+)",
+    "headers": {
+      "Content-Type": {
+        "equalTo": "application/vnd.api+json"
+      },
+      "Authorization": {
+        "matches": "Basic .*"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.data.type",
+        "equalTo": "dois"
+      },
+      {
+        "matchesJsonPath": "$.data.attributes.state",
+        "equalTo": "draft"
+      }
+    ]
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "Content-Type": "application/vnd.api+json"
+    },
+    "body": "{\"errors\":[{\"status\":\"400\",\"title\":\"Invalid state transition\",\"detail\":\"Cannot transition from current state to requested state.\"}]}"
+  }
+}

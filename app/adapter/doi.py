@@ -120,8 +120,8 @@ def model_to_database(doi: DOIModel) -> DOIDBModel:
         url=doi.url,
         mode=doi.mode.name,
         state=doi.state.name,
-        prefix=doi.identifier.split("/")[0],
-        suffix=doi.identifier.split("/")[1],
+        prefix=doi.identifier.split("/")[0] if doi.identifier and "/" in doi.identifier else "",
+        suffix=doi.identifier.split("/")[1] if doi.identifier and "/" in doi.identifier else doi.identifier or "",
         version_id=doi.dataset_version_id,
         created_by=doi.created_by,
     )
