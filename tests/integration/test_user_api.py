@@ -785,13 +785,12 @@ class TestUserEnforceOperations:
         )
 
         # Assert
-        assert_status_code(response, 500)
-        # Fixed: now returns 500 with Pydantic validation error
+        assert_status_code(response, 200)
         data = assert_json_response(response)
-        assert "validation error for UserEnforceResponse" in data["detail"]
-        assert "Field required" in data["detail"]
+        assert "allow" in data
+        assert data["allow"] is True
 
-    def test_enforce_authorization_not_found_500(self, http_client, valid_headers):
+    def test_enforce_authorization_not_found_200(self, http_client, valid_headers):
         """Test enforcing authorization for a non-existent user returns 500 due to controller bug."""
         # Arrange
         non_existent_id = str(uuid4())
@@ -805,11 +804,11 @@ class TestUserEnforceOperations:
         )
 
         # Assert
-        assert_status_code(response, 500)
+        assert_status_code(response, 200)
         # Fixed: now returns 500 with Pydantic validation error
         data = assert_json_response(response)
-        assert "detail" in data
-        assert "validation error for UserEnforceResponse" in data["detail"]
+        assert "allow" in data
+        assert data["allow"] is False
 
     def test_enforce_authorization_unauthorized_401(self, http_client, no_auth_headers):
         """Test enforcing authorization without authentication returns 401."""
@@ -912,10 +911,10 @@ class TestUserWorkflow:
         enforce_response = http_client.post(
             f"/users/{user_id}/enforce", json=enforce_data, headers=valid_headers
         )
-        assert_status_code(enforce_response, 500)
-        # Fixed: now returns 500 with Pydantic validation error
+        assert_status_code(enforce_response, 200)
         data = assert_json_response(enforce_response)
-        assert "validation error for UserEnforceResponse" in data["detail"]
+        assert "allow" in data
+        assert data["allow"] is True
 
         # 8. Disable user
         disable_response = http_client.delete(

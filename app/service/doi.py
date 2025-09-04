@@ -66,7 +66,7 @@ class DOIService:
             res = self._doi_gateway.post(
                 model_to_payload(repository=self._doi_prefix, doi=doi)
             )
-            doi.identifier = res["data"]["id"]
+            doi.identifier = res["data"]["attributes"]["doi"]
             doi.provider_response = res
 
         db_res = self._doi_repository.upsert(model_to_database(doi))

@@ -16,25 +16,16 @@
         "equalTo": "dois"
       },
       {
-        "matchesJsonPath": "$.data.attributes.prefix"
-      },
-      {
-        "matchesJsonPath": "$.data.attributes.creators"
-      },
-      {
-        "matchesJsonPath": "$.data.attributes.titles"
-      },
-      {
-        "matchesJsonPath": "$.data.attributes.publisher"
+        "matchesJsonPath": "$.data.attributes.doi",
+        "equalTo": "10.82978/DUPLICATE123"
       }
     ]
   },
   "response": {
-    "status": 201,
+    "status": 409,
     "headers": {
       "Content-Type": "application/vnd.api+json"
     },
-    "bodyFileName": "doi-created-unique.json",
-    "transformers": ["response-template"]
+    "body": "{\"errors\":[{\"status\":\"409\",\"title\":\"DOI already exists\",\"detail\":\"A DOI with this identifier already exists.\"}]}"
   }
 }

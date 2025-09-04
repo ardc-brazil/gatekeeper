@@ -120,7 +120,7 @@ class Container(containers.DeclarativeContainer):
 
     minio_client = providers.Factory(
         Minio,
-        config.MINIO_URL,
+        endpoint=config.MINIO_URL,
         access_key=config.MINIO_ACCESS_KEY,
         secret_key=config.MINIO_SECRET_KEY,
         secure=config.MINIO_USE_SSL,

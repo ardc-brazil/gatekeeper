@@ -1,7 +1,7 @@
 {
   "request": {
-    "method": "POST",
-    "url": "/dois",
+    "method": "PUT",
+    "urlPathPattern": "/dois/([^/]+/[^/]+)",
     "headers": {
       "Content-Type": {
         "equalTo": "application/vnd.api+json"
@@ -16,25 +16,20 @@
         "equalTo": "dois"
       },
       {
-        "matchesJsonPath": "$.data.attributes.prefix"
+        "matchesJsonPath": "$.data.attributes.event",
+        "equalTo": "register"
       },
       {
         "matchesJsonPath": "$.data.attributes.creators"
-      },
-      {
-        "matchesJsonPath": "$.data.attributes.titles"
-      },
-      {
-        "matchesJsonPath": "$.data.attributes.publisher"
       }
     ]
   },
   "response": {
-    "status": 201,
+    "status": 200,
     "headers": {
       "Content-Type": "application/vnd.api+json"
     },
-    "bodyFileName": "doi-created-unique.json",
+    "bodyFileName": "doi-updated-registered-simple.json",
     "transformers": ["response-template"]
   }
 }
