@@ -1,3 +1,4 @@
+import uuid
 from tests.integration.utils.assertions import (
     assert_status_code,
     assert_response_matches_dict,
@@ -33,7 +34,6 @@ class TestDOICreation:
         assert_status_code(publish_response, 200)
 
         # Act - Create MANUAL DOI
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/MANUAL{unique_id}",
@@ -142,7 +142,6 @@ class TestDOICreation:
         """Test creating DOI for non-existent dataset returns 404."""
         # Arrange
         nonexistent_id = dataset_fixture.get_nonexistent_dataset_id()
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/NONEXISTENT{unique_id}",
@@ -166,7 +165,6 @@ class TestDOICreation:
         # Arrange
         dataset = dataset_fixture.create_test_dataset()
         dataset_id = dataset["id"]
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/NONEXISTENTVERSION{unique_id}",
@@ -207,7 +205,6 @@ class TestDOICreation:
         assert_status_code(publish_response, 200)
 
         # Create first DOI
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/DUPLICATE{unique_id}",
@@ -241,7 +238,6 @@ class TestDOICreation:
         current_version = dataset["current_version"]
         version_name = current_version["name"]
 
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/INVALIDMODE{unique_id}",
@@ -396,7 +392,6 @@ class TestDOIStateChanges:
         assert_status_code(publish_response, 200)
 
         # Create DOI
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/INVALIDTRANSITION{unique_id}",
@@ -495,7 +490,6 @@ class TestDOIRetrieval:
         assert_status_code(publish_response, 200)
 
         # Create DOI
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/GET{unique_id}",
@@ -625,7 +619,6 @@ class TestDOIWorkflowIntegration:
         assert_status_code(publish_response, 200)
 
         # 3. Create MANUAL DOI (should trigger snapshot)
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         doi_data = {
             "identifier": f"10.82978/WORKFLOW{unique_id}",

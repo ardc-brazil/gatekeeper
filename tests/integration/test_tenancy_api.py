@@ -1,3 +1,4 @@
+import uuid
 from tests.integration.utils.assertions import (
     assert_status_code,
     assert_response_matches_dict,
@@ -105,8 +106,6 @@ class TestTenancyCRUDOperations:
     def test_create_tenancy_success_201(self, http_client, valid_headers):
         """Test creating a new tenancy successfully."""
         # Arrange - Use unique name to avoid conflicts
-        import uuid
-
         unique_name = f"test/tenancy/creation/{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
 
@@ -154,8 +153,6 @@ class TestTenancyCRUDOperations:
     def test_update_tenancy_success(self, http_client, valid_headers):
         """Test updating an existing tenancy successfully."""
         # Arrange - First create a tenancy with unique name
-        import uuid
-
         unique_name = f"test/tenancy/update/{str(uuid.uuid4())[:8]}"
         create_data = {"name": unique_name, "is_enabled": True}
         create_response = http_client.post(
@@ -209,8 +206,6 @@ class TestTenancyCRUDOperations:
     def test_delete_tenancy_success_204(self, http_client, valid_headers):
         """Test deleting (disabling) a tenancy successfully."""
         # Arrange - First create a tenancy with unique name
-        import uuid
-
         unique_name = f"test/tenancy/delete/{str(uuid.uuid4())[:8]}"
         create_data = {"name": unique_name, "is_enabled": True}
         create_response = http_client.post(
@@ -253,8 +248,6 @@ class TestTenancyCRUDOperations:
     def test_enable_tenancy_success(self, http_client, valid_headers):
         """Test enabling a disabled tenancy successfully."""
         # Arrange - First create and then disable a tenancy with unique name
-        import uuid
-
         unique_name = f"test/tenancy/enable/{str(uuid.uuid4())[:8]}"
         create_data = {"name": unique_name, "is_enabled": True}
         create_response = http_client.post(
@@ -307,8 +300,6 @@ class TestTenancyPathHandling:
     def test_tenancy_path_with_multiple_slashes(self, http_client, valid_headers):
         """Test tenancy paths with multiple slashes."""
         # Arrange - Use unique name to avoid conflicts
-        import uuid
-
         unique_name = f"test/multiple/slashes/in/path/{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
 
@@ -330,8 +321,6 @@ class TestTenancyPathHandling:
     def test_tenancy_path_with_special_characters(self, http_client, valid_headers):
         """Test tenancy paths with special characters."""
         # Arrange - Use unique name to avoid conflicts
-        import uuid
-
         unique_name = f"test/special-chars_123/{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
 
@@ -369,8 +358,6 @@ class TestTenancyWorkflow:
     def test_tenancy_full_lifecycle(self, http_client, valid_headers):
         """Test complete tenancy lifecycle: create -> get -> update -> disable -> enable -> get."""
         # Use unique name to avoid conflicts
-        import uuid
-
         unique_suffix = str(uuid.uuid4())[:8]
         tenancy_name = f"test/lifecycle/tenancy/{unique_suffix}"
 
