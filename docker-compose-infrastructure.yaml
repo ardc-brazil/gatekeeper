@@ -8,8 +8,12 @@ services:
     restart: always
     env_file:
       - ${ENV_FILE_PATH}
+    environment:
+      - POSTGRES_HOST=datamap_gatekeeper_db
     ports: 
       - '9092:9092'
+    depends_on:
+      - gatekeeper-db
     networks:
       - gatekeeper_gatekeeper-network
 

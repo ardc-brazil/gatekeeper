@@ -813,6 +813,7 @@ class DatasetService:
         # Add version-specific metadata
         snapshot.update(
             {
+                "name": dataset.name,
                 "dataset_id": str(dataset.id),
                 "version_name": version.name,
                 "doi_identifier": version.doi.identifier if version.doi else None,
