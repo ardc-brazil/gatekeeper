@@ -23,6 +23,7 @@ router = APIRouter(
 def _adapt_snapshot_response(snapshot_data: dict) -> DatasetSnapshotResponse:
     """Adapt snapshot JSON data to DatasetSnapshotResponse"""
     # Extract typed fields
+    name = snapshot_data.get("name")
     dataset_id = snapshot_data.get("dataset_id")
     version_name = snapshot_data.get("version_name")
     doi_identifier = snapshot_data.get("doi_identifier")
@@ -37,6 +38,7 @@ def _adapt_snapshot_response(snapshot_data: dict) -> DatasetSnapshotResponse:
         for k, v in snapshot_data.items()
         if k
         not in [
+            "name",
             "dataset_id",
             "version_name",
             "doi_identifier",
@@ -49,6 +51,7 @@ def _adapt_snapshot_response(snapshot_data: dict) -> DatasetSnapshotResponse:
     }
 
     return DatasetSnapshotResponse(
+        name=name,
         dataset_id=dataset_id,
         version_name=version_name,
         doi_identifier=doi_identifier,
@@ -65,6 +68,7 @@ def _adapt_latest_snapshot_response(
 ) -> DatasetLatestSnapshotResponse:
     """Adapt latest snapshot JSON data to DatasetLatestSnapshotResponse"""
     # Extract typed fields
+    name = snapshot_data.get("name")
     dataset_id = snapshot_data.get("dataset_id")
     version_name = snapshot_data.get("version_name")
     doi_identifier = snapshot_data.get("doi_identifier")
@@ -92,6 +96,7 @@ def _adapt_latest_snapshot_response(
         for k, v in snapshot_data.items()
         if k
         not in [
+            "name",
             "dataset_id",
             "version_name",
             "doi_identifier",
@@ -104,6 +109,7 @@ def _adapt_latest_snapshot_response(
     }
 
     return DatasetLatestSnapshotResponse(
+        name=name,
         dataset_id=dataset_id,
         version_name=version_name,
         doi_identifier=doi_identifier,

@@ -203,6 +203,7 @@ class DatasetSnapshotResponse(BaseModel):
     """Response for specific version snapshot"""
 
     dataset_id: str = Field(..., title="Dataset ID")
+    name: str = Field(..., title="Dataset name")
     version_name: str = Field(..., title="Version name")
     doi_identifier: Optional[str] = Field(None, title="DOI identifier")
     doi_link: Optional[str] = Field(None, title="DOI URL link")
@@ -216,6 +217,7 @@ class DatasetLatestSnapshotResponse(BaseModel):
     """Response for latest snapshot with versions list"""
 
     dataset_id: str = Field(..., title="Dataset ID")
+    name: str = Field(..., title="Dataset name")
     version_name: str = Field(..., title="Version name")
     doi_identifier: Optional[str] = Field(None, title="DOI identifier")
     doi_link: Optional[str] = Field(None, title="DOI URL link")
