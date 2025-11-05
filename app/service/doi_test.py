@@ -261,7 +261,7 @@ class TestDOIService(unittest.TestCase):
             provider_response={},
         )
 
-        gateway_response = {"data": {"id": "10.1234/new-doi"}}
+        gateway_response = {"data": {"id": "10.1234/new-doi", "attributes": {"doi": "10.1234/new-doi"}}}
         self.mock_gateway.post.return_value = gateway_response
 
         mock_doidb = DOIDBModel(

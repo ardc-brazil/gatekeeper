@@ -142,7 +142,12 @@ class TestUserService(unittest.TestCase):
     def test_update_success(self):
         user_id = uuid4()
         db_user = Mock(spec=UserDBModel)
+        db_user.id = user_id
+        db_user.providers = [Mock(spec=ProviderDBModel)]
+        db_user.tenancies = [Mock(spec=TenancyDBModel)]
         self.user_repository.fetch_by_id.return_value = db_user
+        self.user_repository.upsert.return_value = db_user
+        self.casbin_enforcer.get_roles_for_user.return_value = []
 
         self.user_service.update(
             user_id, name="Updated Name", email="updated@example.com"
@@ -150,8 +155,9 @@ class TestUserService(unittest.TestCase):
 
         self.assertEqual(db_user.name, "Updated Name")
         self.assertEqual(db_user.email, "updated@example.com")
-        self.user_repository.upsert.assert_called_once_with(user=db_user)
+        self.user_repository.upsert.assert_called_once_with(db_user)
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
+        self.casbin_enforcer.get_roles_for_user.assert_called_once_with(str(user_id))
 
     def test_update_not_found(self):
         user_id = uuid4()
