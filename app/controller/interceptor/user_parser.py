@@ -1,3 +1,4 @@
+import uuid
 from uuid import UUID
 from fastapi import Depends, Request
 from fastapi.security import APIKeyHeader
@@ -9,7 +10,7 @@ user_id = APIKeyHeader(name="X-User-Id", auto_error=False, scheme_name="X-User-I
 async def parse_user_header(request: Request, user_id: str = Depends(user_id)) -> UUID:
     if not user_id:
         # TODO: Remove this after COP30
-        return UUID.uuid4()
+        return uuid.uuid4()
         # raise UnauthorizedException("user_id header not found")
 
     return UUID(user_id)
