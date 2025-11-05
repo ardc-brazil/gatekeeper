@@ -41,7 +41,7 @@ from app.service.dataset import DatasetService
 router = APIRouter(
     prefix="/datasets",
     tags=["datasets"],
-    dependencies=[Depends(authenticate), Depends(authorize)],
+    dependencies=[Depends(authenticate)],
     responses={404: {"description": "Not found"}},
 )
 
@@ -240,7 +240,7 @@ async def get_dataset(
 
 
 # PUT /datasets/{id}
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(authorize)])
 @inject
 async def update_dataset(
     id: str,
@@ -264,7 +264,7 @@ async def update_dataset(
 
 
 # DELETE /datasets/{id}
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(authorize)])
 @inject
 async def delete_dataset(
     id: str,
@@ -276,7 +276,7 @@ async def delete_dataset(
 
 
 # POST /datasets
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, dependencies=[Depends(authorize)])
 @inject
 async def create_dataset(
     dataset_request: DatasetCreateRequest,
@@ -305,7 +305,7 @@ async def create_dataset(
 
 
 # PUT /datasets/:dataset_id/enable
-@router.put("/{id}/enable")
+@router.put("/{id}/enable", dependencies=[Depends(authorize)])
 @inject
 async def enable_dataset(
     id: str,
@@ -317,7 +317,7 @@ async def enable_dataset(
 
 
 # DELETE /datasets/:dataset_id/versions/:version
-@router.delete("/{dataset_id}/versions/{version_name}")
+@router.delete("/{dataset_id}/versions/{version_name}", dependencies=[Depends(authorize)])
 @inject
 async def delete_dataset_version(
     dataset_id: str,
@@ -336,7 +336,7 @@ async def delete_dataset_version(
 
 
 # PUT /datasets/:dataset_id/versions/:version/publish
-@router.put("/{dataset_id}/versions/{version_name}/publish")
+@router.put("/{dataset_id}/versions/{version_name}/publish", dependencies=[Depends(authorize)])
 @inject
 async def publish_dataset_version(
     dataset_id: str,
@@ -355,7 +355,7 @@ async def publish_dataset_version(
 
 
 # PUT /datasets/:dataset_id/versions/:version/enable
-@router.put("/{dataset_id}/versions/{version_name}/enable")
+@router.put("/{dataset_id}/versions/{version_name}/enable", dependencies=[Depends(authorize)])
 @inject
 async def enable_dataset_version(
     dataset_id: str,
@@ -374,7 +374,7 @@ async def enable_dataset_version(
 
 
 # PUT /datasets/:dataset_id/versions/:version/doi
-@router.put("/{dataset_id}/versions/{version_name}/doi")
+@router.put("/{dataset_id}/versions/{version_name}/doi", dependencies=[Depends(authorize)])
 @inject
 async def change_doi_state(
     dataset_id: str,
@@ -396,7 +396,7 @@ async def change_doi_state(
 
 
 # POST /datasets/:dataset_id/versions/:version/doi
-@router.post("/{dataset_id}/versions/{version_name}/doi")
+@router.post("/{dataset_id}/versions/{version_name}/doi", dependencies=[Depends(authorize)])
 @inject
 async def create_doi(
     dataset_id: UUID,
@@ -447,7 +447,7 @@ async def get_doi(
 
 
 # DELETE /datasets/:dataset_id/versions/:version/doi
-@router.delete("/{dataset_id}/versions/{version_name}/doi", status_code=204)
+@router.delete("/{dataset_id}/versions/{version_name}/doi", status_code=204, dependencies=[Depends(authorize)])
 @inject
 async def delete_doi(
     dataset_id: str,
@@ -466,7 +466,7 @@ async def delete_doi(
 
 
 # GET /datasets/:dataset_id/versions/:version/files/:file_id
-@router.get("/{dataset_id}/versions/{version_name}/files/{file_id}")
+@router.get("/{dataset_id}/versions/{version_name}/files/{file_id}", dependencies=[Depends(authorize)])
 @inject
 async def get_file_download_url(
     dataset_id: UUID,
@@ -487,7 +487,7 @@ async def get_file_download_url(
 
 
 # POST /datasets/:dataset_id/versions
-@router.post("/{dataset_id}/versions")
+@router.post("/{dataset_id}/versions", dependencies=[Depends(authorize)])
 @inject
 async def create_dataset_version(
     dataset_id: UUID,

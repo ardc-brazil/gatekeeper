@@ -425,7 +425,7 @@ class DatasetService:
     ) -> list[Dataset]:
         res: list[DatasetDBModel] = self._repository.search(
             query_params=query,
-            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+            # tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
         )
 
         if res is None:
@@ -755,7 +755,7 @@ class DatasetService:
     ) -> Dataset:
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
-            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+            # tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
         )
 
         if dataset is None:
