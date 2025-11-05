@@ -8,7 +8,9 @@ user_id = APIKeyHeader(name="X-User-Id", auto_error=False, scheme_name="X-User-I
 
 async def parse_user_header(request: Request, user_id: str = Depends(user_id)) -> UUID:
     if not user_id:
-        raise UnauthorizedException("user_id header not found")
+        # TODO: Remove this after COP30
+        return UUID.uuid4()
+        # raise UnauthorizedException("user_id header not found")
 
     return UUID(user_id)
 
