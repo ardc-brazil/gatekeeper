@@ -42,13 +42,13 @@ services:
     image: tusproject/tusd:v2.4
     container_name: datamap_tusd
     restart: always
-    ports: 
+    ports:
       - "1080:1080"
     env_file:
       - ${ENV_FILE_PATH}
     entrypoint: /bin/sh -c
-    command: ["tusd -port 1080 -s3-bucket datamap -s3-endpoint $${TUS_S3_ENDPOINT} -hooks-http $${TUS_HOOK_API} -cors-allow-headers X-User-Token,X-User-Id"]
-    depends_on: 
+    command: ["tusd -port 1080 -s3-bucket datamap -s3-object-prefix staged/ -s3-endpoint $${TUS_S3_ENDPOINT} -hooks-http $${TUS_HOOK_API} -cors-allow-headers X-User-Token,X-User-Id"]
+    depends_on:
       - minio
     networks:
       - gatekeeper_gatekeeper-network
