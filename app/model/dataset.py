@@ -22,6 +22,19 @@ class VisibilityStatus(enum.Enum):
     PUBLIC = 2
 
 
+class FileCollocationStatus(enum.Enum):
+    """
+    Determines the file collocation status of a Dataset.
+    """
+
+    # Files need to be moved from staged/legacy to the new structure
+    PENDING = "pending"
+    # Files are currently being processed by the archivist worker
+    PROCESSING = "processing"
+    # All files have been moved to the new structure
+    COMPLETED = "completed"
+
+
 @dataclass
 class DataFile:
     name: str
@@ -64,6 +77,7 @@ class Dataset:
     tenancy: str = None
     design_state: DesignState = None
     visibility: VisibilityStatus = None
+    file_collocation_status: FileCollocationStatus = None
     versions: list[DatasetVersion] = field(default_factory=lambda: [])
     current_version: DatasetVersion = None
     version: DatasetVersion = None
