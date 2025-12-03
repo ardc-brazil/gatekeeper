@@ -10,6 +10,9 @@ from app.controller.v1.user.user import router as user_router
 from app.controller.v1.dataset.dataset_filter import router as dataset_filter_router
 from app.controller.v1.dataset.dataset import router as dataset_router
 from app.controller.v1.dataset.dataset_snapshot import router as dataset_snapshot_router
+from app.controller.v1.internal.dataset_collocation import (
+    router as internal_dataset_collocation_router,
+)
 from app.controller.v1.tus.tus import router as tus_router
 from app.exception.bad_request import BadRequestException
 from app.exception.unauthorized import UnauthorizedException
@@ -57,6 +60,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(user_router, prefix="/v1")
     fastAPIApp.include_router(client_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_router, prefix="/v1")
+    fastAPIApp.include_router(internal_dataset_collocation_router, prefix="/v1")
     fastAPIApp.include_router(tus_router, prefix="/v1")
 
 

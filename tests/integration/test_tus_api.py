@@ -76,7 +76,7 @@ class TestTusHooksEndpoint:
                         "filename": "test.txt",
                         "filetype": "text/plain",
                     },
-                    "Storage": {"Key": "test-files/test.txt", "Bucket": "test-bucket"},
+                    "Storage": {"Key": f"staged/{uuid4()}", "Bucket": "datamap"},
                 },
                 "HTTPRequest": {
                     "Header": {
@@ -117,7 +117,7 @@ class TestTusHooksEndpoint:
                         "filename": "test.txt",
                         "filetype": "text/plain",
                     },
-                    "Storage": {"Key": "test-files/test.txt", "Bucket": "test-bucket"},
+                    "Storage": {"Key": f"staged/{uuid4()}", "Bucket": "datamap"},
                 },
                 "HTTPRequest": {
                     "Header": {
@@ -294,6 +294,94 @@ class TestTusHooksEndpoint:
         assert_status_code(response, 200)
         data = assert_json_response(response)
         assert data == {}
+
+
+class TestTusFilePathHandling:
+    """Integration tests for TUS file path handling with staged and legacy paths."""
+
+    def test_post_finish_hook_staged_path_success_200(
+        self, http_client, valid_headers, dataset_fixture
+    ):
+        """Test post-finish hook with staged/ prefix path returns 200."""
+        # Arrange
+        user_id = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
+        dataset = dataset_fixture.create_test_dataset()
+        dataset_id = dataset["id"]
+
+        # Create payload with staged/ prefix (new behavior)
+        file_uuid = str(uuid4())
+        payload = create_tus_payload(
+            user_id=user_id,
+            dataset_id=dataset_id,
+            filename="staged-file.csv",
+            file_size=2048,
+            file_type="text/csv",
+            storage_key=f"staged/{file_uuid}",
+        )
+
+        # Act
+        response = http_client.post("/tus/hooks", json=payload, headers=valid_headers)
+
+        # Assert
+        assert_status_code(response, 200)
+        data = assert_json_response(response)
+        assert data == {}
+
+        # Verify file was created in database
+        files_response = http_client.get(
+            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+        )
+        assert_status_code(files_response, 200)
+        files = assert_json_response(files_response)
+
+        # Find our file
+        staged_file = next(
+            (f for f in files if f["name"] == "staged-file.csv"), None
+        )
+        assert staged_file is not None
+        assert staged_file["storage_path"] == f"staged/{file_uuid}"
+
+    def test_post_finish_hook_legacy_path_success_200(
+        self, http_client, valid_headers, dataset_fixture
+    ):
+        """Test post-finish hook with legacy root path returns 200."""
+        # Arrange
+        user_id = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
+        dataset = dataset_fixture.create_test_dataset()
+        dataset_id = dataset["id"]
+
+        # Create payload with legacy root path (backward compatibility)
+        file_uuid = str(uuid4())
+        payload = create_tus_payload(
+            user_id=user_id,
+            dataset_id=dataset_id,
+            filename="legacy-file.csv",
+            file_size=1024,
+            file_type="text/csv",
+            storage_key=file_uuid,  # No staged/ prefix
+        )
+
+        # Act
+        response = http_client.post("/tus/hooks", json=payload, headers=valid_headers)
+
+        # Assert
+        assert_status_code(response, 200)
+        data = assert_json_response(response)
+        assert data == {}
+
+        # Verify file was created in database
+        files_response = http_client.get(
+            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+        )
+        assert_status_code(files_response, 200)
+        files = assert_json_response(files_response)
+
+        # Find our file
+        legacy_file = next(
+            (f for f in files if f["name"] == "legacy-file.csv"), None
+        )
+        assert legacy_file is not None
+        assert legacy_file["storage_path"] == file_uuid
 
 
 class TestTusErrorScenarios:
