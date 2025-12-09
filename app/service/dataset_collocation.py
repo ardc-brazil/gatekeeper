@@ -55,7 +55,7 @@ class DatasetCollocationService:
         """
         self._logger.info(f"Updating storage path for file {file_id} to {new_path}")
 
-        file = self._datafile_repository.fetch_by_id(file_id=file_id)
+        file = self._datafile_repository.fetch_by_id(id=file_id)
         if not file:
             raise NotFoundException(f"File not found: {file_id}")
 
