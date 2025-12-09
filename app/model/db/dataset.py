@@ -59,7 +59,9 @@ class Dataset(Base):
     tenancy = Column(String(256), nullable=True)
     design_state = Column(Enum(DesignState), nullable=True)
     visibility = Column(Enum(VisibilityStatus), nullable=True)
-    file_collocation_status = Column(Enum(FileCollocationStatus), nullable=True)
+    file_collocation_status = Column(
+        Enum(FileCollocationStatus, name="filecollocationstatus"), nullable=True
+    )
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
 
