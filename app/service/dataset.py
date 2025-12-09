@@ -720,7 +720,7 @@ class DatasetService:
 
         return self._minio_gateway.get_pre_signed_url(
             bucket_name=self._dataset_bucket,
-            object_name=file.storage_file_name,
+            object_name=file.storage_path[len(self._dataset_bucket)+1:] if file.storage_path.startswith(self._dataset_bucket + "/") else file.storage_path,
             original_file_name=file.name,
         )
 
