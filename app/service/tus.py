@@ -18,13 +18,18 @@ class TusService:
             storage = file_upload["Storage"]
             dataset_id = UUID(file_metadata["dataset_id"])
 
+            # Extract just the filename from the storage key
+            # TUSd sends "staged/uuid" but we only want "uuid" as storage_file_name
+            storage_key = storage["Key"]
+            storage_file_name = os.path.basename(storage_key)
+
             file = DataFile(
                 name=file_metadata["filename"],
                 size_bytes=file_upload["Size"],
                 format=file_metadata["filetype"],
                 extension=os.path.splitext(file_metadata["filename"])[1][1:].lower(),
-                storage_file_name=storage["Key"],
-                storage_path=storage["Bucket"] + "/" + storage["Key"],
+                storage_file_name=storage_file_name,
+                storage_path=storage["Bucket"] + "/" + storage_key,
                 created_by=user_id,
             )
 
