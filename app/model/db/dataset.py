@@ -60,7 +60,12 @@ class Dataset(Base):
     design_state = Column(Enum(DesignState), nullable=True)
     visibility = Column(Enum(VisibilityStatus), nullable=True)
     file_collocation_status = Column(
-        Enum(FileCollocationStatus, name="filecollocationstatus"), nullable=True
+        Enum(
+            FileCollocationStatus,
+            name="filecollocationstatus",
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
     )
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
