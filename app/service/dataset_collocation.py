@@ -81,7 +81,9 @@ class DatasetCollocationService:
 
         dataset = self._dataset_repository.fetch(dataset_id=dataset_id)
         if not dataset:
-            raise NotFoundException(f"Dataset not found: {dataset_id}")
+            dataset = self._dataset_repository.fetch(dataset_id=dataset_id, is_enabled=False)
+            if not dataset:
+                raise NotFoundException(f"Dataset not found: {dataset_id}")
 
         dataset.file_collocation_status = status_enum
         self._dataset_repository.upsert(dataset=dataset)
