@@ -160,6 +160,6 @@ class DatasetRepository:
             if conditions:
                 query = query.filter(or_(*conditions))
 
-            query = query.filter(Dataset.is_enabled == true())
+            # query = query.filter(Dataset.is_enabled == true())
             query = query.order_by(Dataset.created_at.asc())
             return query.all()
