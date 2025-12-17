@@ -42,7 +42,9 @@ class DatasetCollocationService:
 
         dataset = self._dataset_repository.fetch(dataset_id=dataset_id)
         if not dataset:
-            raise NotFoundException(f"Dataset not found: {dataset_id}")
+            dataset = self._dataset_repository.fetch(dataset_id=dataset_id, is_enabled=False)
+            if not dataset:
+                raise NotFoundException(f"Dataset not found: {dataset_id}")
 
         # Get all files from all versions of the dataset
         files = self._datafile_repository.fetch_by_dataset_id(dataset_id=dataset_id)
