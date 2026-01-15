@@ -223,7 +223,7 @@ class DatasetService:
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             is_enabled=is_enabled,
-            # tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
             latest_version=latest_version,
             version_design_state=version_design_state,
             version_is_enabled=version_is_enabled,
@@ -426,7 +426,7 @@ class DatasetService:
     ) -> list[Dataset]:
         res: list[DatasetDBModel] = self._repository.search(
             query_params=query,
-            # tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
         )
 
         if res is None:
@@ -636,7 +636,7 @@ class DatasetService:
     ):
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
-            # tenancies=self._determine_tenancies(user_id, tenancies),
+            tenancies=self._determine_tenancies(user_id, tenancies),
         )
 
         if dataset is None:
@@ -765,7 +765,7 @@ class DatasetService:
     ) -> Dataset:
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
-            # tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
         )
 
         if dataset is None:
