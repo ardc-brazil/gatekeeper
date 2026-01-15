@@ -27,6 +27,7 @@ from app.model.dataset import (
     DataFile,
     DesignState,
     VisibilityStatus,
+    FileCollocationStatus,
 )
 from app.model.db.dataset import (
     Dataset as DatasetDBModel,
@@ -437,11 +438,15 @@ class DatasetService:
         return [self._adapt_dataset(dataset=dataset) for dataset in res]
 
     def create_data_file(self, file: DataFile, dataset_id: UUID, user_id: UUID) -> None:
-        dataset: DatasetDBModel = self.fetch_dataset(
-            dataset_id=dataset_id, user_id=user_id
+        dataset_db: DatasetDBModel = self._repository.fetch(
+            dataset_id=dataset_id, is_enabled=True
         )
+
+        if dataset_db is None:
+            raise NotFoundException(f"Dataset not found: {dataset_id}")
+
         version: DatasetVersionDBModel = self._version_repository.fetch_draft_version(
-            dataset_id=dataset.id
+            dataset_id=dataset_db.id
         )
 
         version.files_in.append(
@@ -487,6 +492,11 @@ class DatasetService:
 
         if dataset.design_state == DesignState.DRAFT:
             dataset.design_state = DesignState.PUBLISHED
+            # Set file_collocation_status to PENDING when dataset is published
+            # This triggers the archivist service to organize files from /staged/
+            # Only set if not already COMPLETED (avoid re-organizing already processed files)
+            if dataset.file_collocation_status != FileCollocationStatus.COMPLETED:
+                dataset.file_collocation_status = FileCollocationStatus.PENDING
             self._repository.upsert(dataset=dataset)
 
     def _create_doi_model(
@@ -710,7 +720,7 @@ class DatasetService:
 
         return self._minio_gateway.get_pre_signed_url(
             bucket_name=self._dataset_bucket,
-            object_name=file.storage_file_name,
+            object_name=file.storage_path[len(self._dataset_bucket)+1:] if file.storage_path.startswith(self._dataset_bucket + "/") else file.storage_path,
             original_file_name=file.name,
         )
 

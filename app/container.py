@@ -13,6 +13,7 @@ from app.repository.doi import DOIRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
+from app.service.dataset_collocation import DatasetCollocationService
 from app.service.doi import DOIService
 from app.service.tus import TusService
 from app.service.user import UserService
@@ -38,6 +39,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
+            "app.controller.v1.internal.dataset_collocation",
         ]
     )
 
@@ -160,6 +162,12 @@ class Container(containers.DeclarativeContainer):
         minio_gateway=minio_gateway,
         tenancy_service=tenancy_service,
         dataset_bucket=config.MINIO_DATASET_BUCKET,
+    )
+
+    dataset_collocation_service = providers.Factory(
+        DatasetCollocationService,
+        dataset_repository=dataset_repository,
+        datafile_repository=data_file_repository,
     )
 
     tus_service = providers.Factory(

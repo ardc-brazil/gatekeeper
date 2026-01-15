@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
-from app.model.dataset import DesignState, VisibilityStatus
+from app.model.dataset import DesignState, VisibilityStatus, FileCollocationStatus
 
 
 version_data_file_association = Table(
@@ -59,6 +59,14 @@ class Dataset(Base):
     tenancy = Column(String(256), nullable=True)
     design_state = Column(Enum(DesignState), nullable=True)
     visibility = Column(Enum(VisibilityStatus), nullable=True)
+    file_collocation_status = Column(
+        Enum(
+            FileCollocationStatus,
+            name="filecollocationstatus",
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
 

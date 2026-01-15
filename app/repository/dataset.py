@@ -1,11 +1,11 @@
 from uuid import UUID
-from app.model.dataset import DatasetQuery
+from app.model.dataset import DatasetQuery, FileCollocationStatus
 from app.model.db.dataset import DatasetVersion, Dataset, DesignState
 from sqlalchemy import and_, or_, cast, func, String
 from sqlalchemy.sql.expression import true
 from contextlib import AbstractContextManager
 from sqlalchemy.orm import Session
-from typing import Callable
+from typing import Callable, List, Optional
 from app.exception.conflict import ConflictException
 from sqlalchemy.exc import IntegrityError
 
@@ -137,4 +137,29 @@ class DatasetRepository:
             # )
 
             query = query.order_by(Dataset.created_at.desc())
+            return query.all()
+
+    def fetch_by_collocation_status(
+        self, statuses: List[Optional[FileCollocationStatus]]
+    ) -> List[Dataset]:
+        """
+        Fetch datasets by file collocation status.
+        Supports None (NULL in DB) to fetch legacy datasets.
+        """
+        with self._session_factory() as session:
+            query = session.query(Dataset)
+
+            # Build OR condition for multiple statuses
+            conditions = []
+            for status in statuses:
+                if status is None:
+                    conditions.append(Dataset.file_collocation_status.is_(None))
+                else:
+                    conditions.append(Dataset.file_collocation_status == status)
+
+            if conditions:
+                query = query.filter(or_(*conditions))
+
+            # query = query.filter(Dataset.is_enabled == true())
+            query = query.order_by(Dataset.created_at.asc())
             return query.all()
