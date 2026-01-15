@@ -27,6 +27,7 @@ from app.model.dataset import VisibilityStatus
 from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.db.dataset import DatasetVersion as DatasetVersionDBModel
 from app.model.db.doi import DOI as DOIDBModel
+from app.model.db.user import User  # noqa: F401 - Required for SQLAlchemy FK resolution
 from app.model.doi import Mode as DOIMode
 from app.model.doi import State as DOIState
 from minio import Minio
