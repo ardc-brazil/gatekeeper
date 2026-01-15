@@ -769,7 +769,13 @@ class TestDatasetService(unittest.TestCase):
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
 
         existing_file = DataFileDBModel(
-            id=file_id, name="file_name", size_bytes=100, created_at=now, updated_at=now
+            id=file_id, 
+            name="file_name", 
+            size_bytes=100, 
+            created_at=now, 
+            updated_at=now,
+            storage_path="bucket/file_name",
+            storage_file_name="file_name",
         )
 
         existing_version = DatasetVersionDBModel(
