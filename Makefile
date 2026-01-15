@@ -148,3 +148,29 @@ integration-test-full: # Usage: make ENV_FILE_PATH=integration-test.env integrat
 	@echo "Running integration tests..."
 	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-run
 	@$(MAKE) integration-test-down
+
+# Script commands
+run-script: # Usage: make ENV_FILE_PATH=local.env SCRIPT=generate_legacy_snapshots run-script
+	@echo "${On_Green}Running script: ${SCRIPT}${Color_Off}"
+	python -m scripts.$(SCRIPT)
+
+run-script-dry: # Usage: make ENV_FILE_PATH=local.env SCRIPT=generate_legacy_snapshots run-script-dry
+	@echo "${On_Green}Running script (dry run): ${SCRIPT}${Color_Off}"
+	python -m scripts.$(SCRIPT) --dry-run
+
+# Legacy snapshot generation shortcuts
+generate-snapshots: # Usage: make ENV_FILE_PATH=local.env generate-snapshots
+	@echo "${On_Green}Generating all legacy snapshots${Color_Off}"
+	python -m scripts.generate_legacy_snapshots
+
+generate-snapshots-dry: # Usage: make ENV_FILE_PATH=local.env generate-snapshots-dry
+	@echo "${On_Green}Generating all legacy snapshots (dry run)${Color_Off}"
+	python -m scripts.generate_legacy_snapshots --dry-run
+
+generate-snapshot-single: # Usage: make ENV_FILE_PATH=local.env DATASET_ID=<uuid> generate-snapshot-single
+	@echo "${On_Green}Generating snapshot for dataset: ${DATASET_ID}${Color_Off}"
+	python -m scripts.generate_legacy_snapshots --dataset-id $(DATASET_ID)
+
+generate-snapshot-single-dry: # Usage: make ENV_FILE_PATH=local.env DATASET_ID=<uuid> generate-snapshot-single-dry
+	@echo "${On_Green}Generating snapshot for dataset (dry run): ${DATASET_ID}${Color_Off}"
+	python -m scripts.generate_legacy_snapshots --dry-run --dataset-id $(DATASET_ID)
