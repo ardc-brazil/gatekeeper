@@ -206,12 +206,13 @@ def main() -> int:
         log_enabled=settings.DATABASE_LOG_ENABLED,
     )
 
+    # Note: region parameter is omitted to avoid validation errors in newer
+    # minio library versions. For standalone MinIO servers, region is not required.
     minio_client = Minio(
         endpoint=settings.MINIO_URL,
         access_key=settings.MINIO_ACCESS_KEY,
         secret_key=settings.MINIO_SECRET_KEY,
         secure=settings.MINIO_USE_SSL,
-        region=settings.MINIO_DEFAULT_REGION_ID,
     )
     minio_gateway = ObjectStorageGateway(minio_client=minio_client)
 
