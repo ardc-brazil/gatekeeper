@@ -186,7 +186,7 @@ async def get_datasets(
 ) -> PagedDatasetGetResponse:
     # Validate pagination params
     page = max(1, page)
-    page_size = max(1, min(100, page_size))
+    page_size = max(1, min(20, page_size))
 
     query = DatasetQuery(
         categories=categories.split(",") if categories else [],

@@ -160,7 +160,7 @@ class DatasetRepository:
 
             # Apply pagination
             page = max(1, query_params.page)
-            page_size = max(1, min(100, query_params.page_size))
+            page_size = max(1, min(20, query_params.page_size))
             offset = (page - 1) * page_size
 
             datasets = query.offset(offset).limit(page_size).all()
