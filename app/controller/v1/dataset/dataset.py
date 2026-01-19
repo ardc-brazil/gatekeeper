@@ -33,6 +33,7 @@ from app.model.dataset import (
     DatasetQuery,
     DatasetVersion,
     DesignState,
+    PaginatedResult,
 )
 from app.model.doi import DOI, State as DOIState, Mode as DOIMode
 from app.service.dataset import DatasetService
@@ -177,11 +178,16 @@ async def get_datasets(
     version: str = None,
     visibility: str = None,
     minimal: bool = False,
+    page: int = 1,
+    page_size: int = 20,
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> PagedDatasetGetResponse:
-    # check if categories exists, then split by comma
+    # Validate pagination params
+    page = max(1, page)
+    page_size = max(1, min(100, page_size))
+
     query = DatasetQuery(
         categories=categories.split(",") if categories else [],
         level=level,
@@ -194,18 +200,29 @@ async def get_datasets(
         design_state=design_state,
         visibility=visibility,
         minimal=minimal,
+        page=page,
+        page_size=page_size,
     )
 
-    datasets: list[Dataset] = service.search_datasets(
+    result: PaginatedResult = service.search_datasets(
         query=query, user_id=user_id, tenancies=tenancies
     )
 
     if minimal:
-        content = [_adapt_minimal_dataset(dataset) for dataset in datasets]
-        return PagedDatasetGetResponse(content=content, size=len(content))
+        content = [_adapt_minimal_dataset(dataset) for dataset in result.items]
+    else:
+        content = [_adapt_dataset(dataset) for dataset in result.items]
 
-    content = [_adapt_dataset(dataset) for dataset in datasets]
-    return PagedDatasetGetResponse(content=content, size=len(content))
+    return PagedDatasetGetResponse(
+        content=content,
+        size=len(content),  # Deprecated, kept for backward compatibility
+        page=result.page,
+        page_size=result.page_size,
+        total_count=result.total_count,
+        total_pages=result.total_pages,
+        has_next=result.has_next,
+        has_previous=result.has_previous,
+    )
 
 
 # GET /datasets/{id}
@@ -407,8 +424,12 @@ async def create_doi(
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DOICreateResponse:
     if create_doi_request.mode not in DOIMode.__members__:
-        return Response(status_code=422, content=json.dumps({"detail": "Invalid mode"}), media_type="application/json")
-    
+        return Response(
+            status_code=422,
+            content=json.dumps({"detail": "Invalid mode"}),
+            media_type="application/json",
+        )
+
     res = service.create_doi(
         dataset_id=dataset_id,
         version_name=version_name,

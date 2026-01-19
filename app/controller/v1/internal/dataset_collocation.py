@@ -12,7 +12,6 @@ from app.controller.v1.internal.resource import (
     UpdateCollocationStatusRequest,
 )
 from app.service.dataset_collocation import DatasetCollocationService
-from app.model.db.dataset import Dataset, DataFile
 
 
 router = APIRouter(
@@ -50,11 +49,7 @@ async def get_pending_datasets(
                 else None
             ),
             file_count=len(
-                [
-                    file
-                    for version in dataset.versions
-                    for file in version.files_in
-                ]
+                [file for version in dataset.versions for file in version.files_in]
             ),
         )
         for dataset in datasets
