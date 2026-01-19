@@ -104,7 +104,7 @@ class PagedDatasetGetResponse(BaseModel):
         ..., title="The size of the content (deprecated, use total_count)"
     )
     page: int = Field(1, title="Current page number")
-    page_size: int = Field(20, title="Number of items per page")
+    page_size: int = Field(10, title="Number of items per page")
     total_count: int = Field(..., title="Total number of matching datasets")
     total_pages: int = Field(..., title="Total number of pages")
     has_next: bool = Field(..., title="Whether there is a next page")

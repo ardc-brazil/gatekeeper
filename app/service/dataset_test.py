@@ -275,7 +275,7 @@ class TestDatasetService(unittest.TestCase):
         tenancies = ["tenancy1"]
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_repository.search.return_value = PaginatedResult(
-            items=[], total_count=0, page=1, page_size=20
+            items=[], total_count=0, page=1, page_size=10
         )
 
         result = self.dataset_service.search_datasets(
@@ -1954,7 +1954,7 @@ class TestDatasetService(unittest.TestCase):
 
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
         self.dataset_repository.search.return_value = PaginatedResult(
-            items=[mock_dataset], total_count=1, page=1, page_size=20
+            items=[mock_dataset], total_count=1, page=1, page_size=10
         )
 
         result = self.dataset_service.search_datasets(

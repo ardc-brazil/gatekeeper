@@ -179,7 +179,7 @@ async def get_datasets(
     visibility: str = None,
     minimal: bool = False,
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = 10,
     user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
