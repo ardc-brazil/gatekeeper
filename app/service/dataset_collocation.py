@@ -42,7 +42,9 @@ class DatasetCollocationService:
 
         dataset = self._dataset_repository.fetch(dataset_id=dataset_id)
         if not dataset:
-            dataset = self._dataset_repository.fetch(dataset_id=dataset_id, is_enabled=False)
+            dataset = self._dataset_repository.fetch(
+                dataset_id=dataset_id, is_enabled=False
+            )
             if not dataset:
                 raise NotFoundException(f"Dataset not found: {dataset_id}")
 
@@ -83,7 +85,9 @@ class DatasetCollocationService:
 
         dataset = self._dataset_repository.fetch(dataset_id=dataset_id)
         if not dataset:
-            dataset = self._dataset_repository.fetch(dataset_id=dataset_id, is_enabled=False)
+            dataset = self._dataset_repository.fetch(
+                dataset_id=dataset_id, is_enabled=False
+            )
             if not dataset:
                 raise NotFoundException(f"Dataset not found: {dataset_id}")
 

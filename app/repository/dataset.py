@@ -1,7 +1,7 @@
 from uuid import UUID
-from app.model.dataset import DatasetQuery, FileCollocationStatus
+from app.model.dataset import DatasetQuery, FileCollocationStatus, PaginatedResult
 from app.model.db.dataset import DatasetVersion, Dataset, DesignState
-from sqlalchemy import and_, or_, cast, func, String
+from sqlalchemy import and_, or_, func, text
 from sqlalchemy.sql.expression import true
 from contextlib import AbstractContextManager
 from sqlalchemy.orm import Session
@@ -76,13 +76,21 @@ class DatasetRepository:
 
     def search(
         self, query_params: DatasetQuery, tenancies: list[str] = []
-    ) -> list[Dataset]:
+    ) -> PaginatedResult:
+        """
+        Search datasets with full-text search and pagination.
+
+        Returns a PaginatedResult containing:
+        - items: list of Dataset objects for the current page
+        - total_count: total number of matching datasets
+        - page: current page number
+        - page_size: number of items per page
+        """
         with self._session_factory() as session:
             query = session.query(Dataset)
 
             search_conditions = []
 
-            # TODO Test these
             for category in query_params.categories:
                 search_term = f"%{category.strip()}%"
                 search_conditions.append(
@@ -118,26 +126,51 @@ class DatasetRepository:
             if query_params.visibility is not None:
                 query = query.filter(Dataset.visibility == query_params.visibility)
 
-            if query_params.full_text is not None:
-                search_term = f"%{query_params.full_text}%"
-                query = query.filter(
-                    or_(
-                        cast(Dataset.data, String).ilike(search_term),
-                        Dataset.name.ilike(search_term),
-                    )
-                )
-
             if query_params.version is not None:
                 query = query.filter(
                     Dataset.versions.any(DatasetVersion.name == query_params.version)
                 )
 
-            query = query.filter(Dataset.tenancy.in_(tenancies)).order_by(
-                Dataset.created_at.desc()
-            )
+            query = query.filter(Dataset.tenancy.in_(tenancies))
 
-            query = query.order_by(Dataset.created_at.desc())
-            return query.all()
+            # Full-text search with relevance ranking
+            if query_params.full_text is not None and query_params.full_text.strip():
+                # Use PostgreSQL full-text search with unaccent for accent-insensitive matching
+                # plainto_tsquery safely handles user input (no special syntax needed)
+                search_term = func.plainto_tsquery(
+                    text("'simple'"), func.unaccent(query_params.full_text)
+                )
+                search_vector = func.to_tsvector(
+                    text("'simple'"), func.coalesce(Dataset.search_vector, "")
+                )
+
+                query = query.filter(search_vector.op("@@")(search_term))
+
+                # Order by relevance when searching
+                query = query.order_by(
+                    func.ts_rank(search_vector, search_term).desc(),
+                    Dataset.created_at.desc(),
+                )
+            else:
+                # Order by date when not searching
+                query = query.order_by(Dataset.created_at.desc())
+
+            # Get total count before pagination
+            total_count = query.count()
+
+            # Apply pagination
+            page = max(1, query_params.page)
+            page_size = max(1, min(20, query_params.page_size))
+            offset = (page - 1) * page_size
+
+            datasets = query.offset(offset).limit(page_size).all()
+
+            return PaginatedResult(
+                items=datasets,
+                total_count=total_count,
+                page=page,
+                page_size=page_size,
+            )
 
     def fetch_by_collocation_status(
         self, statuses: List[Optional[FileCollocationStatus]]

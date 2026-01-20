@@ -67,6 +67,7 @@ class Dataset(Base):
         ),
         nullable=True,
     )
+    search_vector = Column(String, nullable=True)
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
 

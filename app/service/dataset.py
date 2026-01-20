@@ -28,6 +28,7 @@ from app.model.dataset import (
     DesignState,
     VisibilityStatus,
     FileCollocationStatus,
+    PaginatedResult,
 )
 from app.model.db.dataset import (
     Dataset as DatasetDBModel,
@@ -423,19 +424,40 @@ class DatasetService:
 
     def search_datasets(
         self, query: DatasetQuery, user_id: UUID, tenancies: list[str] = []
-    ) -> list[Dataset]:
-        res: list[DatasetDBModel] = self._repository.search(
+    ) -> PaginatedResult:
+        """
+        Search datasets with full-text search and pagination.
+
+        Returns a PaginatedResult containing adapted Dataset domain objects.
+        """
+        result: PaginatedResult = self._repository.search(
             query_params=query,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
         )
 
-        if res is None:
-            return []
+        if result is None or result.items is None:
+            return PaginatedResult(
+                items=[],
+                total_count=0,
+                page=query.page,
+                page_size=query.page_size,
+            )
 
         if query.minimal:
-            return [self._adapt_minimal_dataset(dataset=dataset) for dataset in res]
+            adapted_items = [
+                self._adapt_minimal_dataset(dataset=dataset) for dataset in result.items
+            ]
+        else:
+            adapted_items = [
+                self._adapt_dataset(dataset=dataset) for dataset in result.items
+            ]
 
-        return [self._adapt_dataset(dataset=dataset) for dataset in res]
+        return PaginatedResult(
+            items=adapted_items,
+            total_count=result.total_count,
+            page=result.page,
+            page_size=result.page_size,
+        )
 
     def create_data_file(self, file: DataFile, dataset_id: UUID, user_id: UUID) -> None:
         dataset_db: DatasetDBModel = self._repository.fetch(
@@ -720,7 +742,9 @@ class DatasetService:
 
         return self._minio_gateway.get_pre_signed_url(
             bucket_name=self._dataset_bucket,
-            object_name=file.storage_path[len(self._dataset_bucket)+1:] if file.storage_path.startswith(self._dataset_bucket + "/") else file.storage_path,
+            object_name=file.storage_path[len(self._dataset_bucket) + 1 :]
+            if file.storage_path.startswith(self._dataset_bucket + "/")
+            else file.storage_path,
             original_file_name=file.name,
         )
 

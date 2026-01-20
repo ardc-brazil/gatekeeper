@@ -23,6 +23,7 @@ from app.model.dataset import (
     DatasetVersion,
     DesignState,
     VisibilityStatus,
+    PaginatedResult,
 )
 from app.model.db.dataset import (
     Dataset as DatasetDBModel,
@@ -267,15 +268,22 @@ class TestDatasetService(unittest.TestCase):
 
     def test_search_datasets(self):
         query = Mock(spec=DatasetQuery)
+        query.page = 1
+        query.page_size = 20
+        query.minimal = False
         user_id = uuid4()
         tenancies = ["tenancy1"]
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
-        self.dataset_repository.search.return_value = []
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[], total_count=0, page=1, page_size=10
+        )
 
         result = self.dataset_service.search_datasets(
             query=query, user_id=user_id, tenancies=tenancies
         )
-        self.assertIsInstance(result, list)
+        self.assertIsInstance(result, PaginatedResult)
+        self.assertEqual(result.total_count, 0)
+        self.assertEqual(result.page, 1)
         self.dataset_repository.search.assert_called_once()
 
     def test_create_data_file(self):
@@ -769,10 +777,10 @@ class TestDatasetService(unittest.TestCase):
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
 
         existing_file = DataFileDBModel(
-            id=file_id, 
-            name="file_name", 
-            size_bytes=100, 
-            created_at=now, 
+            id=file_id,
+            name="file_name",
+            size_bytes=100,
+            created_at=now,
             updated_at=now,
             storage_path="bucket/file_name",
             storage_file_name="file_name",
@@ -1945,7 +1953,9 @@ class TestDatasetService(unittest.TestCase):
         mock_dataset.versions = []
 
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
-        self.dataset_repository.search.return_value = [mock_dataset]
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[mock_dataset], total_count=1, page=1, page_size=10
+        )
 
         result = self.dataset_service.search_datasets(
             query=query, user_id=user_id, tenancies=tenancies
@@ -1954,8 +1964,8 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.search.assert_called_once_with(
             query_params=query, tenancies=tenancies
         )
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].visibility, VisibilityStatus.PUBLIC)
+        self.assertEqual(len(result.items), 1)
+        self.assertEqual(result.items[0].visibility, VisibilityStatus.PUBLIC)
 
     def test_get_latest_published_version_success(self):
         # Arrange
