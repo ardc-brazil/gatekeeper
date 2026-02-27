@@ -9,7 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     BigInteger,
-    Double,
+    Float,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -27,7 +27,6 @@ class FileMetadata(Base):
         UUID(as_uuid=True),
         ForeignKey("data_files.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
     )
     row_count = Column(BigInteger, nullable=False)
     sample_file_path = Column(String(2048), nullable=True)
@@ -63,10 +62,10 @@ class ColumnMetadata(Base):
     name = Column(String(512), nullable=False)
     dtype = Column(String(50), nullable=False)
     position = Column(Integer, nullable=False)
-    min_value = Column(Double, nullable=True)
-    max_value = Column(Double, nullable=True)
-    mean_value = Column(Double, nullable=True)
-    std_value = Column(Double, nullable=True)
+    min_value = Column(Float, nullable=True)
+    max_value = Column(Float, nullable=True)
+    mean_value = Column(Float, nullable=True)
+    std_value = Column(Float, nullable=True)
     null_count = Column(BigInteger, default=0)
     sample_values = Column(JSONB, nullable=True)
     description = Column(Text, nullable=True)
