@@ -2,7 +2,7 @@
 
 | Status | Implemented |
 |--------|-------------|
-| Author | DataMap Team |
+| Author | Caio Maia |
 | Created | 2026-01-19 |
 | Updated | 2026-01-19 |
 

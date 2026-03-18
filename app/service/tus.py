@@ -2,14 +2,20 @@ import logging
 from uuid import UUID
 from app.model.dataset import DataFile
 from app.model.tus import TusResult
+from app.repository.extraction_job import ExtractionJobRepository
 from app.service.dataset import DatasetService
 import os
 
 
 class TusService:
-    def __init__(self, dataset_service: DatasetService):
+    def __init__(
+        self,
+        dataset_service: DatasetService,
+        extraction_job_repository: ExtractionJobRepository,
+    ):
         self._logger = logging.getLogger("service:tus")
         self._dataset_service = dataset_service
+        self._extraction_job_repository = extraction_job_repository
 
     def handle_post_finish(self, payload: dict, user_id: UUID) -> TusResult:
         try:
@@ -33,9 +39,13 @@ class TusService:
                 created_by=user_id,
             )
 
-            self._dataset_service.create_data_file(
+            data_file_id = self._dataset_service.create_data_file(
                 file=file, dataset_id=dataset_id, user_id=user_id
             )
+
+            # Create extraction job for metadata-extractor to process
+            self._extraction_job_repository.create(data_file_id=data_file_id)
+            self._logger.info(f"Created extraction job for file {data_file_id}")
 
             return TusResult(status_code=200, body_msg="")
         except ValueError as e:

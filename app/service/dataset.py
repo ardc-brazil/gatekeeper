@@ -459,7 +459,11 @@ class DatasetService:
             page_size=result.page_size,
         )
 
-    def create_data_file(self, file: DataFile, dataset_id: UUID, user_id: UUID) -> None:
+    def create_data_file(self, file: DataFile, dataset_id: UUID, user_id: UUID) -> UUID:
+        """Create a data file and associate it with the draft version of a dataset.
+
+        Returns the ID of the created data file.
+        """
         dataset_db: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id, is_enabled=True
         )
@@ -471,19 +475,20 @@ class DatasetService:
             dataset_id=dataset_db.id
         )
 
-        version.files_in.append(
-            DataFileDBModel(
-                name=file.name,
-                size_bytes=file.size_bytes,
-                extension=file.extension,
-                format=file.format,
-                storage_file_name=file.storage_file_name,
-                storage_path=file.storage_path,
-                created_by=user_id,
-            )
+        data_file = DataFileDBModel(
+            name=file.name,
+            size_bytes=file.size_bytes,
+            extension=file.extension,
+            format=file.format,
+            storage_file_name=file.storage_file_name,
+            storage_path=file.storage_path,
+            created_by=user_id,
         )
+        version.files_in.append(data_file)
 
         self._version_repository.upsert(version)
+
+        return data_file.id
 
     def publish_dataset_version(
         self,

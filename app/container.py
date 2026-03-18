@@ -10,6 +10,7 @@ from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
+from app.repository.extraction_job import ExtractionJobRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
@@ -152,6 +153,11 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
+    extraction_job_repository = providers.Factory(
+        ExtractionJobRepository,
+        session_factory=db.provided.session,
+    )
+
     dataset_service = providers.Factory(
         DatasetService,
         repository=dataset_repository,
@@ -173,4 +179,5 @@ class Container(containers.DeclarativeContainer):
     tus_service = providers.Factory(
         TusService,
         dataset_service=dataset_service,
+        extraction_job_repository=extraction_job_repository,
     )

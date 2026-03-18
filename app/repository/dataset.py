@@ -32,7 +32,10 @@ class DatasetRepository:
             if is_enabled:
                 query = query.filter(Dataset.is_enabled == is_enabled)
 
-            query = query.filter(Dataset.tenancy.in_(tenancies))
+            # Only apply tenancy filter if tenancies are provided
+            # Empty list means no tenancy restriction (for internal operations like TUS hooks)
+            if tenancies:
+                query = query.filter(Dataset.tenancy.in_(tenancies))
 
             if latest_version:
                 subquery = (
