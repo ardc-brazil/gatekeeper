@@ -6,5 +6,7 @@ ignore = [
     "B008",
     # `raise ... from err`: worth adopting, 19 call sites to update first.
     "B904",
+    # lru_cache on ClientService.fetch is deliberate; the service is a Singleton.
+    "B019",
 ]
 

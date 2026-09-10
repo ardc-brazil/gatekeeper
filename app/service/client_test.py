@@ -117,31 +117,35 @@ class TestClientService(unittest.TestCase):
         with self.assertRaises(NotFoundException):
             self.client_service.enable(uuid4())
 
-    def test_fetch_reads_the_repository_every_time(self):
+    def test_cache_behavior(self):
         api_key = uuid4()
         db_client = DBModel(
             key=api_key, name="client1", is_enabled=True, secret="secret"
         )
         self.repository.fetch.return_value = db_client
 
-        self.client_service.fetch(api_key)
-        self.client_service.fetch(api_key)
+        self.assertEqual(self.client_service.fetch(api_key).name, "client1")
+        self.repository.fetch.assert_called_once_with(api_key=api_key)
 
-        self.assertEqual(self.repository.fetch.call_count, 2)
+        self.assertEqual(self.client_service.fetch(api_key).name, "client1")
+        self.repository.fetch.assert_called_once_with(api_key=api_key)
 
-    def test_fetch_sees_a_client_that_was_just_disabled(self):
-        api_key = uuid4()
-        self.repository.fetch.return_value = DBModel(
-            key=api_key, name="client1", is_enabled=True, secret="secret"
-        )
+        updated_name = "updated_client"
+        db_client.name = updated_name
+        self.client_service.update(api_key, name=updated_name)
 
-        self.assertTrue(self.client_service.fetch(api_key).is_enabled)
+        self.assertEqual(self.client_service.fetch(api_key).name, updated_name)
 
-        self.repository.fetch.return_value = DBModel(
-            key=api_key, name="client1", is_enabled=False, secret="secret"
-        )
+    def test_the_cache_is_shared_across_requests(self):
+        # The service used to be a Factory, so every request built a new instance
+        # and the cache — keyed on `self` — never hit. Asserting through the
+        # container is the only way to catch that; reusing one instance by hand
+        # passes either way.
+        from app.container import Container
 
-        self.assertFalse(self.client_service.fetch(api_key).is_enabled)
+        container = Container()
+
+        self.assertIs(container.client_service(), container.client_service())
 
 
 if __name__ == "__main__":
