@@ -5,9 +5,9 @@ from app import setup
 
 container = Container()
 
-# Create database
+# Bring the schema up to head before anything serves a request.
 db = container.db()
-db.create_database()
+db.run_migrations()
 
 # Setup casbin auto reload policy
 casbin_enforcer = container.casbin_enforcer()

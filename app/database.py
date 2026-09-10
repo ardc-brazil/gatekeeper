@@ -1,4 +1,6 @@
 from contextlib import contextmanager, AbstractContextManager
+from alembic import command
+from alembic.config import Config
 from typing import Callable
 import logging
 
@@ -24,6 +26,19 @@ class Database:
 
     def create_database(self) -> None:
         Base.metadata.create_all(self._engine)
+
+    def run_migrations(self) -> None:
+        """Bring the schema up to head.
+
+        The schema used to be built from the model metadata, which meant no
+        migration was ever executed by the application or by any test. Alembic
+        resolves the connection through `migrations/env.py`, which reads the
+        same settings the app does.
+        """
+        config = Config("alembic.ini")
+        self._logger.info("running database migrations")
+        command.upgrade(config, "head")
+        self._logger.info("database migrations are up to date")
 
     @contextmanager
     def session(self) -> Callable[..., AbstractContextManager[Session]]:

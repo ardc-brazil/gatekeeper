@@ -36,12 +36,15 @@ outside the list fall back to the default. `TusService` logs the whole hook
 payload, so signed upload tokens appear verbatim in the log. Logs live only in
 the container and disappear when it is replaced.
 
-**Migrations do not run.** `alembic.ini` is not copied into the image, so the
-`docker exec ... alembic upgrade head` step in `integration-test-full` always
-fails; the Makefile hides it behind `|| echo "Migration may have failed"`. The
-schema is created by `create_database()` from SQLAlchemy metadata at startup,
-which means **no test and no deploy exercises a migration**. Embargo (RFC 003)
-adds several.
+**Migrations are not exercised.** They do run in production, by hand from the
+host virtualenv with a second environment file that points at `0.0.0.0` instead
+of the container. They do not run anywhere else: `.dockerignore` excludes
+`alembic.ini` and `migrations/`, so the `docker exec ... alembic upgrade head`
+in `integration-test-full` always fails, hidden behind
+`|| echo "Migration may have failed"`. Every other schema comes from
+`create_database()`, which is `Base.metadata.create_all()`, so **no test has
+ever executed a migration** and the two could drift apart unnoticed. Embargo
+(RFC 003) adds several.
 
 **One instance, no health signal.** A single `datamap_gatekeeper` container, up
 3 months. Only MinIO declares a healthcheck. "I can't upload" has had at least
@@ -133,20 +136,59 @@ Branch protection marks the test workflow as required. That single setting is
 what converts "we have tests" into "tests protect us", and it is the one piece of
 this RFC that is configured in the GitHub UI rather than in a file.
 
+#### Registering the runner
+
+Once, on the production host, as the `datamap` user, so it inherits the Docker
+group membership and the paths the deploy expects:
+
+```bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+curl -o runner.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.328.0/actions-runner-linux-x64-2.328.0.tar.gz
+tar xzf runner.tar.gz
+
+# Token from Settings → Actions → Runners → New self-hosted runner. It expires
+# in an hour and is single use.
+./config.sh --url https://github.com/ardc-brazil/gatekeeper \
+            --token <TOKEN> --labels production --unattended
+
+sudo ./svc.sh install datamap
+sudo ./svc.sh start
+```
+
+Repeat for `datamap-webapp`, in a separate directory: a runner registers against
+one repository. An organisation-level runner shared by both is the tidier
+option, and the workflows work unchanged either way as long as the labels match.
+
+The workflows read the environment directory from a repository variable,
+defaulting to `/home/datamap/environment`. Set `ENVIRONMENT_DIR` under
+Settings → Secrets and variables → Actions if it ever moves.
+
+The runner needs `make`, `curl` and Docker, all of which the host already has —
+it is what the manual deploy uses.
+
 ### 3. Migrations run, and run before the switch
 
-Two fixes, in order:
+**The application runs them at startup.** `alembic.ini` and `migrations/` are no
+longer excluded from the image, and `main.py` calls `alembic upgrade head` in
+place of `Base.metadata.create_all()`. A failed migration means the container
+never becomes healthy, which the deploy job waits for and reports.
 
-1. Copy `alembic.ini` and `migrations/` into the image. Until then no migration
-   can run in a container anywhere — test or production.
-2. The deploy job runs `alembic upgrade head` against production **before**
-   pointing traffic at the new containers, and aborts the deploy on failure.
-   Remove the `|| echo "may have failed"` from the Makefile target so the same
-   step fails loudly in the test cycle.
+This removes three moving parts rather than automating them: the host
+virtualenv, the second environment file pointing at `0.0.0.0`, and the manual
+step itself. `migrations/env.py` already resolves the connection from the same
+settings the app uses, so inside the container it reaches the database by its
+service name with no extra configuration.
 
-Add an integration test that runs the migrations against an empty database and
-asserts the resulting schema matches the metadata. Today the two can drift
-without anything noticing, and RFC 003 is about to add several migrations.
+It also closes the gap: because the schema now comes from the migrations, the
+integration suite executes all 31 of them against an empty database on every
+run. Verified — the migration-built schema and the model metadata agree today,
+which nothing had ever confirmed.
+
+The one thing to revisit under §4: with two instances, both would run
+`upgrade head` at once. Alembic takes a lock per migration, so the race is
+survivable, but the honest fix is a Postgres advisory lock around the call, or
+moving the step back into the deploy job once there is more than one replica.
 
 ### 4. Two instances behind nginx, same hostname
 

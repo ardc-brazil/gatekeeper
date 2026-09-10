@@ -4,3 +4,5 @@
 !infrastructure
 !config.py
 !config_prod.py
+!alembic.ini
+!migrations
