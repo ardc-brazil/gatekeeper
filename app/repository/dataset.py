@@ -24,6 +24,7 @@ class DatasetRepository:
         latest_version: bool = False,
         version_design_state: DesignState = None,
         version_is_enabled: bool = True,
+        restrict_by_tenancy: bool = True,
     ) -> Dataset:
         with self._session_factory() as session:
             query = session.query(Dataset)
@@ -32,7 +33,13 @@ class DatasetRepository:
             if is_enabled:
                 query = query.filter(Dataset.is_enabled == is_enabled)
 
-            query = query.filter(Dataset.tenancy.in_(tenancies))
+            # Tenancy is the access boundary for anything acting on behalf of a
+            # user, so an empty list has to keep meaning "sees nothing" — a user
+            # with no tenancy must not turn into a user with no restriction.
+            # Callers with no user behind them (the TUS hook, the collocation API
+            # used by the archivist) opt out of the boundary explicitly.
+            if restrict_by_tenancy:
+                query = query.filter(Dataset.tenancy.in_(tenancies))
 
             if latest_version:
                 subquery = (

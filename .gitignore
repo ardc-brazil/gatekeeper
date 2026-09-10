@@ -162,3 +162,6 @@ cython_debug/
 db-data/
 data-storage/
 local.env
+
+# Local overrides of the tracked *.env files (worktree paths, ports, ...)
+*.local.env

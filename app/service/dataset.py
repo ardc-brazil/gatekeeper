@@ -196,20 +196,24 @@ class DatasetService:
         if not tenancies:
             tenancies = user.tenancies
 
-        # Check if tenancy is enabled
+        # Keep only the tenancies that exist and are enabled. This builds a new
+        # list on purpose: removing from the list being iterated skips whatever
+        # follows a removal, which used to let a disabled tenancy through. The
+        # caller's list is not ours to edit either.
+        enabled_tenancies = []
         for tenancy in tenancies:
             database_tenancy = self._tenancy_service.fetch(name=tenancy)
 
-            if not database_tenancy or not database_tenancy.is_enabled:
-                tenancies.remove(tenancy)
+            if database_tenancy and database_tenancy.is_enabled:
+                enabled_tenancies.append(tenancy)
 
-        if not set(tenancies).issubset(set(user.tenancies)):
+        if not set(enabled_tenancies).issubset(set(user.tenancies)):
             logging.warning(
-                f"user {user_id} trying to query with unauthorized tenancy: {tenancies}"
+                f"user {user_id} trying to query with unauthorized tenancy: {enabled_tenancies}"
             )
-            raise UnauthorizedException(f"unauthorized_tenancy: {tenancies}")
+            raise UnauthorizedException(f"unauthorized_tenancy: {enabled_tenancies}")
 
-        return tenancies
+        return enabled_tenancies
 
     def fetch_dataset(
         self,
@@ -460,8 +464,13 @@ class DatasetService:
         )
 
     def create_data_file(self, file: DataFile, dataset_id: UUID, user_id: UUID) -> None:
+        # No tenancy travels with the TUS hook payload, but the uploader does, so
+        # derive it from them. The upload is authorized like any other user
+        # action: the dataset has to sit in a tenancy the uploader belongs to.
         dataset_db: DatasetDBModel = self._repository.fetch(
-            dataset_id=dataset_id, is_enabled=True
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=self._determine_tenancies(user_id=user_id),
         )
 
         if dataset_db is None:
@@ -470,6 +479,12 @@ class DatasetService:
         version: DatasetVersionDBModel = self._version_repository.fetch_draft_version(
             dataset_id=dataset_db.id
         )
+
+        if version is None:
+            raise NotFoundException(
+                f"no_draft_version_to_receive_upload: {dataset_id}. "
+                "Create a new version before uploading files to it."
+            )
 
         version.files_in.append(
             DataFileDBModel(

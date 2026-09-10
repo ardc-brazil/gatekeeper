@@ -20,8 +20,12 @@ class IntegrationTestConfig:
         self.tenancy = os.getenv(
             "INTEGRATION_TENANCY", "datamap/production/data-amazon"
         )
+        # Must match the app's AUTH_FILE_UPLOAD_TOKEN_SECRET, or every token the
+        # fixtures sign is unverifiable. It read a differently named variable
+        # with a different default, so token validation was never exercised —
+        # the tests only passed because invalid tokens used to be ignored.
         self.file_upload_token_secret = os.getenv(
-            "FILE_UPLOAD_TOKEN_SECRET", "fake_secret_for_jwt_token"
+            "AUTH_FILE_UPLOAD_TOKEN_SECRET", "file-upload-fake-token"
         )
 
         # WireMock configuration - handle both container and host modes

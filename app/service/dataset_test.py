@@ -303,6 +303,56 @@ class TestDatasetService(unittest.TestCase):
         )
         self.dataset_version_repository.upsert.assert_called_once()
 
+    def test_create_data_file_scopes_the_lookup_to_the_uploader_tenancies(self):
+        # The TUS hook carries a user, so the upload is authorized like any other
+        # user action: the dataset has to be inside a tenancy the uploader
+        # belongs to. Looking it up with no tenancy at all would let an upload
+        # land on someone else's dataset.
+        file = Mock(spec=DataFile)
+        file.name = "test"
+        file.size_bytes = 100
+        dataset_id = uuid4()
+        user_id = uuid4()
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=True
+        )
+        self.dataset_repository.fetch.return_value = Mock(spec=DatasetDBModel)
+        self.dataset_version_repository.fetch_draft_version.return_value = Mock(
+            spec=DatasetVersionDBModel
+        )
+
+        self.dataset_service.create_data_file(
+            file=file, dataset_id=dataset_id, user_id=user_id
+        )
+
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, is_enabled=True, tenancies=["tenancy1"]
+        )
+
+    def test_create_data_file_when_dataset_has_no_draft_version(self):
+        # A dataset whose versions are all published has no draft to receive an
+        # upload. That must surface as an explicit not found, not as the
+        # AttributeError the TUS hook turns into an opaque 500 with reject_upload.
+        file = Mock(spec=DataFile)
+        file.name = "test"
+        file.size_bytes = 100
+        dataset_id = uuid4()
+        dataset = Mock(spec=DatasetDBModel)
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=True
+        )
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_draft_version.return_value = None
+
+        with self.assertRaises(NotFoundException):
+            self.dataset_service.create_data_file(
+                file=file, dataset_id=dataset_id, user_id=uuid4()
+            )
+
+        self.dataset_version_repository.upsert.assert_not_called()
+
     def test_publish_dataset_version(self):
         dataset_id = uuid4()
         user_id = uuid4()
@@ -489,6 +539,44 @@ class TestDatasetService(unittest.TestCase):
 
         # then
         self.assertEqual(actual, expected_tenancies)
+
+    def test__determine_tenancies_drops_every_disabled_tenancy(self):
+        # given: two disabled tenancies in a row. Whatever follows a removal must
+        # still be checked, otherwise a disabled tenancy keeps granting access.
+        given_user_id = "7DC7479E-9DCD-4519-BEC8-6CBA708A7B10"
+        given_tenancies = ["a", "b", "c"]
+        expected_tenancies = ["a"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(given_tenancies)
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=(name == "a")
+        )
+
+        # when
+        actual = self.dataset_service._determine_tenancies(
+            user_id=given_user_id, tenancies=list(given_tenancies)
+        )
+
+        # then
+        self.assertEqual(actual, expected_tenancies)
+
+    def test__determine_tenancies_does_not_mutate_the_given_list(self):
+        # given
+        given_user_id = "7DC7479E-9DCD-4519-BEC8-6CBA708A7B10"
+        given_tenancies = ["a", "b"]
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(given_tenancies)
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=(name == "a")
+        )
+
+        # when
+        self.dataset_service._determine_tenancies(
+            user_id=given_user_id, tenancies=given_tenancies
+        )
+
+        # then: the caller's list is theirs, not ours to edit
+        self.assertEqual(given_tenancies, ["a", "b"])
 
     def test__determine_tenancies_unauthorized_when_user_not_found(self):
         # given

@@ -78,7 +78,7 @@ class UserService:
         user_id = self._repository.upsert(user=dbUser).id
 
         for role in user.roles:
-            self._casbin_enforcer.add_grouping_policy(str(user.id), role)
+            self._casbin_enforcer.add_grouping_policy(str(user_id), role)
 
         return user_id
 
@@ -109,7 +109,7 @@ class UserService:
         if user is None:
             raise NotFoundException(f"not_found: {id}")
         for role in roles:
-            self._casbin_enforcer.delete_role_for_user(user=id, role=role)
+            self._casbin_enforcer.delete_role_for_user(user=str(id), role=role)
 
     def add_provider(self, id: UUID, provider: str, reference: str) -> None:
         user: UserDBModel = self._repository.fetch_by_id(id=id)

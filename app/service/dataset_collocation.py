@@ -3,7 +3,7 @@ from uuid import UUID
 from typing import List
 
 from app.exception.not_found import NotFoundException
-from app.exception.bad_request import BadRequestException
+from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.repository.dataset import DatasetRepository
 from app.repository.datafile import DataFileRepository
 from app.model.dataset import FileCollocationStatus
@@ -40,10 +40,12 @@ class DatasetCollocationService:
         """
         self._logger.info(f"Fetching files for dataset {dataset_id}")
 
-        dataset = self._dataset_repository.fetch(dataset_id=dataset_id)
+        dataset = self._dataset_repository.fetch(
+            dataset_id=dataset_id, restrict_by_tenancy=False
+        )
         if not dataset:
             dataset = self._dataset_repository.fetch(
-                dataset_id=dataset_id, is_enabled=False
+                dataset_id=dataset_id, is_enabled=False, restrict_by_tenancy=False
             )
             if not dataset:
                 raise NotFoundException(f"Dataset not found: {dataset_id}")
@@ -79,14 +81,19 @@ class DatasetCollocationService:
         try:
             status_enum = FileCollocationStatus(status)
         except ValueError:
+            # BadRequestException carries a list of ErrorDetails, not a message.
+            # Passing a plain string made the handler iterate its characters and
+            # call asdict() on each one, turning a bad input into a 500.
             raise BadRequestException(
-                f"Invalid status: {status}. Must be one of: {[s.value for s in FileCollocationStatus]}"
+                errors=[ErrorDetails(code="invalid_collocation_status", field="status")]
             )
 
-        dataset = self._dataset_repository.fetch(dataset_id=dataset_id)
+        dataset = self._dataset_repository.fetch(
+            dataset_id=dataset_id, restrict_by_tenancy=False
+        )
         if not dataset:
             dataset = self._dataset_repository.fetch(
-                dataset_id=dataset_id, is_enabled=False
+                dataset_id=dataset_id, is_enabled=False, restrict_by_tenancy=False
             )
             if not dataset:
                 raise NotFoundException(f"Dataset not found: {dataset_id}")

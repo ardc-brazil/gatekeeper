@@ -38,10 +38,15 @@ class TestTusHooksEndpoint:
         # TUS returns empty dict on success
         assert data == {}
 
-    def test_post_finish_hook_invalid_user_token_200(
+    def test_post_finish_hook_invalid_user_token_401(
         self, http_client, valid_headers, dataset_fixture
     ):
-        """Test post-finish hook with invalid user token returns 200 (ignored)."""
+        """An invalid upload token must stop the request, not be ignored.
+
+        The signed token is the only credential this endpoint has: TUSd forwards
+        no client key or secret, and nginx exposes /api/v1 publicly. Accepting an
+        invalid one turned the hook into an unauthenticated write endpoint.
+        """
         # Arrange
         user_id = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
         dataset = dataset_fixture.create_test_dataset()
@@ -53,10 +58,27 @@ class TestTusHooksEndpoint:
         response = http_client.post("/tus/hooks", json=payload, headers=valid_headers)
 
         # Assert
-        assert_status_code(response, 200)
-        data = assert_json_response(response)
-        # Invalid tokens are ignored and return empty response
-        assert data == {}
+        assert_status_code(response, 401)
+
+    def test_post_finish_hook_token_issued_for_another_dataset_401(
+        self, http_client, valid_headers, dataset_fixture
+    ):
+        """A token issued for one dataset must not upload into another."""
+        # Arrange
+        user_id = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
+        token_dataset = dataset_fixture.create_test_dataset()
+        other_dataset = dataset_fixture.create_test_dataset()
+
+        # create_tus_payload signs the token for the dataset it is given, so
+        # sign for one and then point the upload at the other.
+        payload = create_tus_payload(user_id=user_id, dataset_id=token_dataset["id"])
+        payload["Event"]["Upload"]["MetaData"]["dataset_id"] = other_dataset["id"]
+
+        # Act
+        response = http_client.post("/tus/hooks", json=payload, headers=valid_headers)
+
+        # Assert
+        assert_status_code(response, 401)
 
     def test_post_finish_hook_missing_user_id_500(
         self, http_client, valid_headers, dataset_fixture
@@ -191,6 +213,30 @@ class TestTusHooksEndpoint:
         data = assert_json_response(response)
         # Missing authentication is ignored and returns empty response
         assert data == {}
+
+    def test_post_finish_hook_user_id_not_matching_token_401(
+        self, http_client, valid_headers, dataset_fixture
+    ):
+        """A X-User-Id that the upload token does not vouch for is rejected.
+
+        The uploader now decides which tenancies the dataset lookup runs under,
+        so the header has to be bound to the signed token instead of being
+        trusted on its own.
+        """
+        # Arrange
+        token_owner = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
+        someone_else = str(uuid4())
+        dataset = dataset_fixture.create_test_dataset()
+        dataset_id = dataset["id"]
+
+        payload = create_tus_payload(user_id=token_owner, dataset_id=dataset_id)
+        payload["Event"]["HTTPRequest"]["Header"]["X-User-Id"] = [someone_else]
+
+        # Act
+        response = http_client.post("/tus/hooks", json=payload, headers=valid_headers)
+
+        # Assert
+        assert_status_code(response, 401)
 
     def test_unknown_hook_type_200(self, http_client, valid_headers, dataset_fixture):
         """Test unknown hook type returns 200 (ignored)."""
@@ -329,17 +375,15 @@ class TestTusFilePathHandling:
 
         # Verify file was created in database
         files_response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+            f"/internal/datasets/{dataset_id}/files", headers=valid_headers
         )
         assert_status_code(files_response, 200)
         files = assert_json_response(files_response)
 
         # Find our file
-        staged_file = next(
-            (f for f in files if f["name"] == "staged-file.csv"), None
-        )
+        staged_file = next((f for f in files if f["name"] == "staged-file.csv"), None)
         assert staged_file is not None
-        assert staged_file["storage_path"] == f"staged/{file_uuid}"
+        assert staged_file["storage_path"] == f"datamap/staged/{file_uuid}"
 
     def test_post_finish_hook_legacy_path_success_200(
         self, http_client, valid_headers, dataset_fixture
@@ -371,17 +415,15 @@ class TestTusFilePathHandling:
 
         # Verify file was created in database
         files_response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+            f"/internal/datasets/{dataset_id}/files", headers=valid_headers
         )
         assert_status_code(files_response, 200)
         files = assert_json_response(files_response)
 
         # Find our file
-        legacy_file = next(
-            (f for f in files if f["name"] == "legacy-file.csv"), None
-        )
+        legacy_file = next((f for f in files if f["name"] == "legacy-file.csv"), None)
         assert legacy_file is not None
-        assert legacy_file["storage_path"] == file_uuid
+        assert legacy_file["storage_path"] == f"datamap/{file_uuid}"
 
 
 class TestTusErrorScenarios:

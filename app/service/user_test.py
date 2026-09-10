@@ -117,8 +117,11 @@ class TestUserService(unittest.TestCase):
         )
 
     def test_create_success(self):
+        # Callers never send an id: UserCreateRequest carries only name, email,
+        # roles and providers. The id exists only after the user is persisted,
+        # so the roles must be bound to the persisted id, not to the input one.
+        persisted_id = uuid4()
         user = User(
-            id=uuid4(),
             name="Test User",
             email="test@example.com",
             roles=["role1", "role2"],
@@ -129,15 +132,19 @@ class TestUserService(unittest.TestCase):
             updated_at=None,
         )
         db_user = Mock(spec=UserDBModel)
-        db_user.id = user.id
+        db_user.id = persisted_id
         self.user_repository.upsert.return_value = db_user
 
         created_id = self.user_service.create(user)
 
-        self.assertEqual(created_id, user.id)
+        self.assertEqual(created_id, persisted_id)
         self.user_repository.upsert.assert_called_once()
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(str(user.id), "role1")
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(str(user.id), "role2")
+        self.casbin_enforcer.add_grouping_policy.assert_any_call(
+            str(persisted_id), "role1"
+        )
+        self.casbin_enforcer.add_grouping_policy.assert_any_call(
+            str(persisted_id), "role2"
+        )
 
     def test_update_success(self):
         user_id = uuid4()
@@ -172,7 +179,9 @@ class TestUserService(unittest.TestCase):
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
 
     def test_add_roles_success(self):
-        user_id = str(uuid4())
+        # Controllers hand over a UUID. Casbin stores subjects as strings, so a
+        # raw UUID would never match on lookup.
+        user_id = uuid4()
         db_user = Mock(spec=UserDBModel)
         self.user_repository.fetch_by_id.return_value = db_user
 
@@ -181,7 +190,7 @@ class TestUserService(unittest.TestCase):
 
         for role in roles:
             self.casbin_enforcer.add_role_for_user.assert_any_call(
-                user=user_id, role=role
+                user=str(user_id), role=role
             )
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
 
@@ -206,7 +215,7 @@ class TestUserService(unittest.TestCase):
 
         for role in roles:
             self.casbin_enforcer.delete_role_for_user.assert_any_call(
-                user=user_id, role=role
+                user=str(user_id), role=role
             )
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
 
