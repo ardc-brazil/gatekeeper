@@ -48,7 +48,8 @@ def create_tus_payload(
         TUS webhook payload dictionary
     """
     if user_token is None:
-        user_token = create_tus_jwt_token(user_id)
+        # The BFF signs the dataset id into the "file" claim; mirror that here.
+        user_token = create_tus_jwt_token(user_id, file_id=dataset_id)
 
     # Use staged/ prefix by default (mimics TUSd configuration)
     if storage_key is None:
@@ -97,8 +98,13 @@ def create_invalid_tus_payload(user_id: str, dataset_id: str) -> dict:
 
 
 def create_malformed_tus_payload() -> dict:
-    """Create a malformed TUS webhook payload for testing (missing dataset_id)."""
+    """Create a malformed TUS webhook payload for testing (missing dataset_id).
+
+    The token has to be genuinely valid: this exercises how a malformed payload
+    is handled, and a bogus token would just be rejected at the door instead.
+    """
     file_uuid = str(uuid4())
+    user_id = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
     return {
         "Type": "post-finish",
         "Event": {
@@ -113,8 +119,8 @@ def create_malformed_tus_payload() -> dict:
             },
             "HTTPRequest": {
                 "Header": {
-                    "X-User-Id": ["cbb0a683-630f-4b86-8b45-91b90a6fce1c"],
-                    "X-User-Token": ["valid-token"],
+                    "X-User-Id": [user_id],
+                    "X-User-Token": [create_tus_jwt_token(user_id)],
                 }
             },
         },

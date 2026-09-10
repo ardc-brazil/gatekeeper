@@ -209,24 +209,29 @@ class TestDatasetSnapshotSuccess:
         dataset_id = dataset["id"]
 
         # Act
-        response = http_client.get(f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers)
+        response = http_client.get(
+            f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers
+        )
 
         # Assert
         assert_status_code(response, 200)
         data = assert_json_response(response)
-        
+
         # Test essential fields
-        assert_response_contains_fields(response, {
-            "dataset_id": dataset_id,
-            "version_name": dataset["current_version"]["name"],
-            "doi_state": "DRAFT",  # MANUAL DOI starts as DRAFT
-            "data": dataset["data"],
-            "files_summary": {
-                "total_files": 0,  # No files uploaded in test
-                "total_size_bytes": 0,
-                "extensions_breakdown": []
-            }
-        })
+        assert_response_contains_fields(
+            response,
+            {
+                "dataset_id": dataset_id,
+                "version_name": dataset["current_version"]["name"],
+                "doi_state": "DRAFT",  # MANUAL DOI starts as DRAFT
+                "data": dataset["data"],
+                "files_summary": {
+                    "total_files": 0,  # No files uploaded in test
+                    "total_size_bytes": 0,
+                    "extensions_breakdown": [],
+                },
+            },
+        )
 
         # Verify DOI information is present and matches the created DOI
         assert "doi_identifier" in data
@@ -234,7 +239,7 @@ class TestDatasetSnapshotSuccess:
         assert data["doi_identifier"] == dataset["current_version"]["doi"]["identifier"]
         assert data["doi_state"] == "DRAFT"
         assert data["doi_link"] is not None  # Should have DOI link
-        
+
         # Verify versions field structure
         assert "versions" in data
         assert isinstance(data["versions"], list)
@@ -251,24 +256,29 @@ class TestDatasetSnapshotSuccess:
         dataset_id = dataset["id"]
 
         # Act
-        response = http_client.get(f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers)
+        response = http_client.get(
+            f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers
+        )
 
         # Assert
         assert_status_code(response, 200)
         data = assert_json_response(response)
-        
+
         # Test essential fields
-        assert_response_contains_fields(response, {
-            "dataset_id": dataset_id,
-            "version_name": dataset["current_version"]["name"],
-            "doi_state": "FINDABLE",  # AUTO DOI changed to FINDABLE
-            "data": dataset["data"],
-            "files_summary": {
-                "total_files": 0,
-                "total_size_bytes": 0,
-                "extensions_breakdown": []
-            }
-        })
+        assert_response_contains_fields(
+            response,
+            {
+                "dataset_id": dataset_id,
+                "version_name": dataset["current_version"]["name"],
+                "doi_state": "FINDABLE",  # AUTO DOI changed to FINDABLE
+                "data": dataset["data"],
+                "files_summary": {
+                    "total_files": 0,
+                    "total_size_bytes": 0,
+                    "extensions_breakdown": [],
+                },
+            },
+        )
 
         # Verify DOI information is present and matches the created DOI (identifier is auto-generated)
         assert "doi_identifier" in data
@@ -276,7 +286,7 @@ class TestDatasetSnapshotSuccess:
         assert data["doi_identifier"] == dataset["current_version"]["doi"]["identifier"]
         assert data["doi_state"] == "FINDABLE"
         assert data["doi_link"] is not None
-        
+
         # Verify versions field structure
         assert "versions" in data
         assert isinstance(data["versions"], list)
@@ -302,19 +312,22 @@ class TestDatasetSnapshotSuccess:
         # Assert
         assert_status_code(response, 200)
         data = assert_json_response(response)
-        
+
         # Test essential fields
-        assert_response_contains_fields(response, {
-            "dataset_id": dataset_id,
-            "version_name": version_name,
-            "doi_state": "DRAFT",  # MANUAL DOI starts as DRAFT
-            "data": dataset["data"],
-            "files_summary": {
-                "total_files": 0,
-                "total_size_bytes": 0,
-                "extensions_breakdown": []
-            }
-        })
+        assert_response_contains_fields(
+            response,
+            {
+                "dataset_id": dataset_id,
+                "version_name": version_name,
+                "doi_state": "DRAFT",  # MANUAL DOI starts as DRAFT
+                "data": dataset["data"],
+                "files_summary": {
+                    "total_files": 0,
+                    "total_size_bytes": 0,
+                    "extensions_breakdown": [],
+                },
+            },
+        )
 
         # Verify DOI information is present and matches the created DOI
         assert "doi_identifier" in data
@@ -328,14 +341,14 @@ class TestDatasetSnapshotSuccess:
     ):
         """Test that snapshot is published when DOI state changes to FINDABLE."""
         # Arrange - Create dataset with AUTO DOI (no snapshot initially)
-        dataset = dataset_fixture.create_dataset_with_doi(
-            doi_mode="AUTO"
-        )
+        dataset = dataset_fixture.create_dataset_with_doi(doi_mode="AUTO")
         dataset_id = dataset["id"]
         version_name = dataset["current_version"]["name"]
 
         # Verify snapshot is not available initially
-        snapshot_response = http_client.get(f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers)
+        snapshot_response = http_client.get(
+            f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers
+        )
         assert_status_code(snapshot_response, 404)
 
         # Act - Change DOI state to FINDABLE (should trigger snapshot publication)
@@ -348,15 +361,20 @@ class TestDatasetSnapshotSuccess:
         assert_status_code(state_response, 200)
 
         # Assert - Snapshot should now be available
-        snapshot_response = http_client.get(f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers)
+        snapshot_response = http_client.get(
+            f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers
+        )
         assert_status_code(snapshot_response, 200)
-        
+
         data = assert_json_response(snapshot_response)
-        assert_response_contains_fields(snapshot_response, {
-            "dataset_id": dataset_id,
-            "version_name": version_name,
-            "doi_state": "FINDABLE",
-        })
+        assert_response_contains_fields(
+            snapshot_response,
+            {
+                "dataset_id": dataset_id,
+                "version_name": version_name,
+                "doi_state": "FINDABLE",
+            },
+        )
         # Verify DOI identifier is present and matches the created DOI (auto-generated)
         assert "doi_identifier" in data
         assert data["doi_identifier"] is not None
@@ -373,18 +391,20 @@ class TestDatasetSnapshotSuccess:
         dataset_id = dataset["id"]
 
         # Act
-        response = http_client.get(f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers)
+        response = http_client.get(
+            f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers
+        )
 
         # Assert
         assert_status_code(response, 200)
         data = assert_json_response(response)
-        
+
         # Verify DOI fields are present and properly formatted
         assert "doi_identifier" in data
         assert "doi_state" in data
         assert "doi_link" in data
         assert "publication_date" in data
-        
+
         assert data["doi_identifier"] is not None
         assert data["doi_state"] == "DRAFT"
         assert data["doi_link"] is not None
@@ -401,28 +421,39 @@ class TestDatasetSnapshotSuccess:
         dataset_id = dataset["id"]
 
         # Act
-        response = http_client.get(f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers)
+        response = http_client.get(
+            f"/datasets/{dataset_id}/snapshot", headers=no_auth_headers
+        )
 
         # Assert
         assert_status_code(response, 200)
         data = assert_json_response(response)
-        
+
         # Verify all required top-level fields are present
         required_fields = [
-            "dataset_id", "version_name", "doi_identifier", "doi_link", 
-            "doi_state", "publication_date", "files_summary", "data", "versions"
+            "dataset_id",
+            "version_name",
+            "doi_identifier",
+            "doi_link",
+            "doi_state",
+            "publication_date",
+            "files_summary",
+            "data",
+            "versions",
         ]
-        
+
         for field in required_fields:
-            assert field in data, f"Required field '{field}' missing from snapshot response"
-        
+            assert (
+                field in data
+            ), f"Required field '{field}' missing from snapshot response"
+
         # Verify files_summary structure
         files_summary = data["files_summary"]
         assert "total_files" in files_summary
         assert "total_size_bytes" in files_summary
         assert "extensions_breakdown" in files_summary
         assert isinstance(files_summary["extensions_breakdown"], list)
-        
+
         # Verify data contains original dataset information
         assert data["data"]["title"] == dataset["data"]["title"]
         assert data["data"]["description"] == dataset["data"]["description"]

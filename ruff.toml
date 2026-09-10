@@ -1,0 +1,12 @@
+[lint]
+select = ["E4", "E7", "E9", "F", "B"]
+
+ignore = [
+    # Depends() in an argument default is the FastAPI idiom.
+    "B008",
+    # `raise ... from err`: worth adopting, 19 call sites to update first.
+    "B904",
+    # lru_cache on ClientService.fetch is deliberate; the service is a Singleton.
+    "B019",
+]
+

@@ -710,10 +710,11 @@ class TestUserTenancyOperations:
         )
 
         # Assert
-        assert_status_code(response, 500)
-        # Fixed: now returns 500 with "list.remove(x): x not in list" error
-        data = assert_json_response(response)
-        assert "list.remove(x): x not in list" in data["detail"]
+        assert_status_code(response, 200)
+
+        user_response = http_client.get(f"/users/{user_id}", headers=valid_headers)
+        assert_status_code(user_response, 200)
+        assert "datamap/production/data-amazon" not in user_response.json()["tenancies"]
 
     def test_remove_tenancies_not_found_404(self, http_client, valid_headers):
         """Test removing tenancies from a non-existent user returns 404."""

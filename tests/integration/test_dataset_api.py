@@ -81,7 +81,7 @@ class TestDatasetBasicCRUD:
     ):
         """Test getting all datasets returns 200."""
         # Arrange - Create a test dataset first
-        dataset = dataset_fixture.create_test_dataset()
+        dataset_fixture.create_test_dataset()
 
         # Act
         response = http_client.get("/datasets", headers=valid_headers)
@@ -100,7 +100,7 @@ class TestDatasetBasicCRUD:
     ):
         """Test getting datasets with filters returns 200."""
         # Arrange - Create a test dataset first
-        dataset = dataset_fixture.create_test_dataset()
+        dataset_fixture.create_test_dataset()
 
         # Act - Test various filters
         filters = [

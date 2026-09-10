@@ -117,8 +117,11 @@ class TestUserService(unittest.TestCase):
         )
 
     def test_create_success(self):
+        # Callers never send an id: UserCreateRequest carries only name, email,
+        # roles and providers. The id exists only after the user is persisted,
+        # so the roles must be bound to the persisted id, not to the input one.
+        persisted_id = uuid4()
         user = User(
-            id=uuid4(),
             name="Test User",
             email="test@example.com",
             roles=["role1", "role2"],
@@ -129,15 +132,75 @@ class TestUserService(unittest.TestCase):
             updated_at=None,
         )
         db_user = Mock(spec=UserDBModel)
-        db_user.id = user.id
+        db_user.id = persisted_id
         self.user_repository.upsert.return_value = db_user
+        self.tenancy_repository.fetch.return_value = TenancyDBModel(
+            name="tenancy1", is_enabled=True
+        )
 
         created_id = self.user_service.create(user)
 
-        self.assertEqual(created_id, user.id)
+        self.assertEqual(created_id, persisted_id)
         self.user_repository.upsert.assert_called_once()
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(str(user.id), "role1")
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(str(user.id), "role2")
+        self.casbin_enforcer.add_grouping_policy.assert_any_call(
+            str(persisted_id), "role1"
+        )
+        self.casbin_enforcer.add_grouping_policy.assert_any_call(
+            str(persisted_id), "role2"
+        )
+
+    def test_create_persists_the_tenancies_it_was_given(self):
+        persisted_id = uuid4()
+        existing_tenancy = TenancyDBModel(
+            name="datamap/production/data-amazon", is_enabled=True
+        )
+        self.tenancy_repository.fetch.return_value = existing_tenancy
+        db_user = Mock(spec=UserDBModel)
+        db_user.id = persisted_id
+        self.user_repository.upsert.return_value = db_user
+
+        user = User(
+            name="Test User",
+            email="test@example.com",
+            roles=[],
+            providers=[],
+            tenancies=["datamap/production/data-amazon"],
+        )
+
+        self.user_service.create(user)
+
+        self.tenancy_repository.fetch.assert_called_once_with(
+            tenancy="datamap/production/data-amazon"
+        )
+        created = self.user_repository.upsert.call_args.kwargs["user"]
+        self.assertIn(existing_tenancy, created.tenancies)
+
+    def test_remove_tenancies_success(self):
+        user_id = uuid4()
+        keep = Mock(spec=TenancyDBModel)
+        keep.name = "keep-me"
+        drop = Mock(spec=TenancyDBModel)
+        drop.name = "drop-me"
+        db_user = Mock(spec=UserDBModel)
+        db_user.tenancies = [keep, drop]
+        self.user_repository.fetch_by_id.return_value = db_user
+
+        self.user_service.remove_tenancies(user_id=user_id, tenancies=["drop-me"])
+
+        self.assertEqual(db_user.tenancies, [keep])
+        self.user_repository.upsert.assert_called_once_with(user=db_user)
+
+    def test_remove_tenancies_ignores_one_the_user_does_not_have(self):
+        user_id = uuid4()
+        keep = Mock(spec=TenancyDBModel)
+        keep.name = "keep-me"
+        db_user = Mock(spec=UserDBModel)
+        db_user.tenancies = [keep]
+        self.user_repository.fetch_by_id.return_value = db_user
+
+        self.user_service.remove_tenancies(user_id=user_id, tenancies=["never-had-it"])
+
+        self.assertEqual(db_user.tenancies, [keep])
 
     def test_update_success(self):
         user_id = uuid4()
@@ -172,7 +235,9 @@ class TestUserService(unittest.TestCase):
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
 
     def test_add_roles_success(self):
-        user_id = str(uuid4())
+        # Controllers hand over a UUID. Casbin stores subjects as strings, so a
+        # raw UUID would never match on lookup.
+        user_id = uuid4()
         db_user = Mock(spec=UserDBModel)
         self.user_repository.fetch_by_id.return_value = db_user
 
@@ -181,7 +246,7 @@ class TestUserService(unittest.TestCase):
 
         for role in roles:
             self.casbin_enforcer.add_role_for_user.assert_any_call(
-                user=user_id, role=role
+                user=str(user_id), role=role
             )
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
 
@@ -206,7 +271,7 @@ class TestUserService(unittest.TestCase):
 
         for role in roles:
             self.casbin_enforcer.delete_role_for_user.assert_any_call(
-                user=user_id, role=role
+                user=str(user_id), role=role
             )
         self.user_repository.fetch_by_id.assert_called_once_with(id=user_id)
 
@@ -242,7 +307,7 @@ class TestUserService(unittest.TestCase):
 
         provider_name = "google"
         reference = "12345"
-        with self.assertRaises(NotFoundException) as _:
+        with self.assertRaises(NotFoundException) as context:
             self.user_service.add_provider(user_id, provider_name, reference)
 
-        self.assertEqual
+        self.assertEqual(str(context.exception), f"not_found: {user_id}")

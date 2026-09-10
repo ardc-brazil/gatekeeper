@@ -161,7 +161,7 @@ class DatasetFixture:
 
         # Create DOI
         doi_data = {"mode": doi_mode}
-        
+
         if doi_mode == "MANUAL":
             if doi_identifier is None:
                 unique_id = str(uuid.uuid4())[:8]
@@ -197,7 +197,7 @@ class DatasetFixture:
     ) -> Dict[str, Any]:
         """
         Create a dataset with a published version, DOI, and snapshot.
-        
+
         This creates a complete workflow: dataset -> version -> publish -> DOI -> snapshot
         """
         # Create dataset with DOI (this will trigger snapshot publication for MANUAL mode)
@@ -279,11 +279,15 @@ class DatasetFixture:
         return response.json()
 
     def create_doi_for_version(
-        self, dataset_id: str, version_name: str, doi_identifier: str = None, doi_mode: str = "MANUAL"
+        self,
+        dataset_id: str,
+        version_name: str,
+        doi_identifier: str = None,
+        doi_mode: str = "MANUAL",
     ) -> Dict[str, Any]:
         """Create a DOI for a specific dataset version."""
         doi_data = {"mode": doi_mode}
-        
+
         if doi_mode == "MANUAL":
             if doi_identifier is None:
                 unique_id = str(uuid.uuid4())[:8]

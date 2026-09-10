@@ -29,3 +29,14 @@ async def parse_tus_user_token(request: Request) -> str:
         raise UnauthorizedException(f"unauthorized: {user_token}")
 
     return user_token
+
+
+async def parse_tus_dataset_id(request: Request) -> str | None:
+    """Dataset the upload claims to belong to, as sent in the TUS metadata.
+
+    Returns None when the hook carries no metadata, so hook types other than
+    post-finish are not rejected for lacking something they never send.
+    """
+    body = await request.json()
+
+    return body.get("Event", {}).get("Upload", {}).get("MetaData", {}).get("dataset_id")

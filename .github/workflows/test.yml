@@ -1,0 +1,110 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.10.14"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # The pinned version, not the latest: a gate that lints with a different
+      # version than the developer is not reproducible and breaks on release day.
+      - name: Install ruff
+        run: pip install "$(grep -i '^ruff==' requirements.txt)"
+
+      - run: ruff check .
+
+      - run: ruff format --check .
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest app -q
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The compose file bind-mounts ${STORAGE_DOCKER_VOLUME}_test_integration,
+      # a path relative to the repository in local development. The `datamap`
+      # directory is the bucket: MinIO does not create it, and the snapshot
+      # tests only pass locally because a developer's storage already has it.
+      - name: Prepare the object storage bind mount
+        run: mkdir -p "${{ runner.temp }}/data-storage_test_integration/datamap"
+
+      - name: Start services
+        run: |
+          make ENV_FILE_PATH=integration-test.env \
+               STORAGE_DOCKER_VOLUME="${{ runner.temp }}/data-storage" \
+               integration-test-up
+
+      - name: Seed test data
+        run: |
+          docker exec datamap_postgres_test_integration \
+            psql -U gk_admin -d gatekeeper_db -f /tmp/seed_clients.sql
+
+      # Casbin reloads its policy every 5 seconds, so the rows just seeded are
+      # not in memory yet and the first requests come back 401.
+      - name: Wait for the seeded policy to load
+        run: |
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "X-Api-Key: 5060b1a2-9aaf-48db-871a-0839007fd478" \
+              -H "X-Api-Secret: g*aZkbWom3deiAX-vtoT" \
+              -H "X-User-Id: cbb0a683-630f-4b86-8b45-91b90a6fce1c" \
+              http://localhost:9094/api/v1/clients/)
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 1
+          done
+          echo "The seeded Casbin policy never became effective."
+          exit 1
+
+      - name: Run integration tests
+        run: pytest tests/integration -q
+
+      - name: Service logs
+        if: failure()
+        run: |
+          make ENV_FILE_PATH=integration-test.env integration-test-logs
+
+      - name: Stop services
+        if: always()
+        run: |
+          make ENV_FILE_PATH=integration-test.env \
+               STORAGE_DOCKER_VOLUME="${{ runner.temp }}/data-storage" \
+               integration-test-down

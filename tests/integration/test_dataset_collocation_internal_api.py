@@ -41,12 +41,12 @@ class TestDatasetCollocationInternalAPI:
 
         # Find our dataset in the list
         our_dataset = next((d for d in data if d["id"] == dataset_id), None)
-        assert our_dataset is not None, f"Published dataset {dataset_id} should be in pending list"
+        assert (
+            our_dataset is not None
+        ), f"Published dataset {dataset_id} should be in pending list"
         assert our_dataset["file_collocation_status"] in [None, "pending"]
 
-    def test_get_pending_datasets_empty_list_200(
-        self, http_client, valid_headers
-    ):
+    def test_get_pending_datasets_empty_list_200(self, http_client, valid_headers):
         """Test getting pending datasets when none exist returns empty list."""
         # Act - All datasets should already be processed in a clean environment
         response = http_client.get(
@@ -95,7 +95,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+            f"/internal/datasets/{dataset_id}/files", headers=valid_headers
         )
 
         # Assert
@@ -122,7 +122,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.get(
-            f"/internal/datasets/{nonexistent_id}/collocation/files",
+            f"/internal/datasets/{nonexistent_id}/files",
             headers=valid_headers,
         )
 
@@ -135,7 +135,7 @@ class TestDatasetCollocationInternalAPI:
         """Test getting files with invalid UUID returns 422."""
         # Act
         response = http_client.get(
-            "/internal/datasets/invalid-uuid/collocation/files", headers=valid_headers
+            "/internal/datasets/invalid-uuid/files", headers=valid_headers
         )
 
         # Assert
@@ -150,9 +150,7 @@ class TestDatasetCollocationInternalAPI:
         dataset_id = dataset["id"]
 
         # Act
-        response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files"
-        )
+        response = http_client.get(f"/internal/datasets/{dataset_id}/files")
 
         # Assert
         assert_status_code(response, 401)
@@ -160,7 +158,7 @@ class TestDatasetCollocationInternalAPI:
         assert "detail" in data
         assert "unauthorized" in data["detail"].lower()
 
-    def test_update_file_path_success_200(
+    def test_update_file_path_success_204(
         self, http_client, valid_headers, dataset_fixture
     ):
         """Test updating file path returns 200."""
@@ -184,7 +182,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Get the file ID
         files_response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+            f"/internal/datasets/{dataset_id}/files", headers=valid_headers
         )
         files = assert_json_response(files_response)
         assert len(files) > 0
@@ -196,17 +194,17 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/files/{file_id}",
+            f"/internal/datasets/{dataset_id}/files/{file_id}",
             json=update_payload,
             headers=valid_headers,
         )
 
         # Assert
-        assert_status_code(response, 200)
+        assert_status_code(response, 204)
 
         # Verify the path was updated
         files_response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+            f"/internal/datasets/{dataset_id}/files", headers=valid_headers
         )
         files = assert_json_response(files_response)
         updated_file = next((f for f in files if f["id"] == file_id), None)
@@ -236,7 +234,7 @@ class TestDatasetCollocationInternalAPI:
         assert_status_code(upload_response, 200)
 
         files_response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+            f"/internal/datasets/{dataset_id}/files", headers=valid_headers
         )
         files = assert_json_response(files_response)
         file_id = files[0]["id"]
@@ -246,7 +244,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/files/{file_id}",
+            f"/internal/datasets/{dataset_id}/files/{file_id}",
             json=invalid_payload,
             headers=valid_headers,
         )
@@ -269,7 +267,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/files/{nonexistent_file_id}",
+            f"/internal/datasets/{dataset_id}/files/{nonexistent_file_id}",
             json=update_payload,
             headers=valid_headers,
         )
@@ -289,7 +287,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/files/{file_id}",
+            f"/internal/datasets/{dataset_id}/files/{file_id}",
             json=update_payload,
         )
 
@@ -299,7 +297,7 @@ class TestDatasetCollocationInternalAPI:
         assert "detail" in data
         assert "unauthorized" in data["detail"].lower()
 
-    def test_update_collocation_status_success_200(
+    def test_update_collocation_status_success_204(
         self, http_client, valid_headers, dataset_fixture
     ):
         """Test updating collocation status returns 200."""
@@ -319,26 +317,26 @@ class TestDatasetCollocationInternalAPI:
 
         # Act - Set to processing
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/collocation-status",
+            f"/internal/datasets/{dataset_id}/collocation-status",
             json=processing_payload,
             headers=valid_headers,
         )
 
         # Assert
-        assert_status_code(response, 200)
+        assert_status_code(response, 204)
 
         # Act - Set to completed
         completed_payload = {"status": "completed"}
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/collocation-status",
+            f"/internal/datasets/{dataset_id}/collocation-status",
             json=completed_payload,
             headers=valid_headers,
         )
 
         # Assert
-        assert_status_code(response, 200)
+        assert_status_code(response, 204)
 
-    def test_update_collocation_status_invalid_status_422(
+    def test_update_collocation_status_invalid_status_400(
         self, http_client, valid_headers, dataset_fixture
     ):
         """Test updating collocation status with invalid value returns 422."""
@@ -350,15 +348,18 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/collocation-status",
+            f"/internal/datasets/{dataset_id}/collocation-status",
             json=invalid_payload,
             headers=valid_headers,
         )
 
         # Assert
-        assert_status_code(response, 422)
+        # The status is validated in the service, not by the request model, so
+        # this comes back as a 400 from BadRequestException rather than the 422
+        # FastAPI returns for its own validation. Worth unifying one day.
+        assert_status_code(response, 400)
         data = assert_json_response(response)
-        assert "detail" in data
+        assert data["errors"][0]["code"] == "invalid_collocation_status"
 
     def test_update_collocation_status_nonexistent_dataset_404(
         self, http_client, valid_headers, dataset_fixture
@@ -370,7 +371,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.put(
-            f"/internal/datasets/{nonexistent_id}/collocation/collocation-status",
+            f"/internal/datasets/{nonexistent_id}/collocation-status",
             json=payload,
             headers=valid_headers,
         )
@@ -391,7 +392,7 @@ class TestDatasetCollocationInternalAPI:
 
         # Act
         response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/collocation-status",
+            f"/internal/datasets/{dataset_id}/collocation-status",
             json=payload,
         )
 
@@ -446,15 +447,15 @@ class TestDatasetCollocationWorkflow:
 
         # Act 2 - Mark as processing
         processing_response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/collocation-status",
+            f"/internal/datasets/{dataset_id}/collocation-status",
             json={"status": "processing"},
             headers=valid_headers,
         )
-        assert_status_code(processing_response, 200)
+        assert_status_code(processing_response, 204)
 
         # Act 3 - Get files
         files_response = http_client.get(
-            f"/internal/datasets/{dataset_id}/collocation/files", headers=valid_headers
+            f"/internal/datasets/{dataset_id}/files", headers=valid_headers
         )
         assert_status_code(files_response, 200)
         files = assert_json_response(files_response)
@@ -464,19 +465,19 @@ class TestDatasetCollocationWorkflow:
         # Act 4 - Update file path
         new_path = f"2025/12/02/{dataset_id}/1/workflow-test.csv"
         update_response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/files/{file_id}",
+            f"/internal/datasets/{dataset_id}/files/{file_id}",
             json={"storage_path": new_path},
             headers=valid_headers,
         )
-        assert_status_code(update_response, 200)
+        assert_status_code(update_response, 204)
 
         # Act 5 - Mark as completed
         completed_response = http_client.put(
-            f"/internal/datasets/{dataset_id}/collocation/collocation-status",
+            f"/internal/datasets/{dataset_id}/collocation-status",
             json={"status": "completed"},
             headers=valid_headers,
         )
-        assert_status_code(completed_response, 200)
+        assert_status_code(completed_response, 204)
 
         # Assert - Verify dataset no longer in pending list
         final_pending_response = http_client.get(
@@ -486,7 +487,9 @@ class TestDatasetCollocationWorkflow:
         final_pending = assert_json_response(final_pending_response)
 
         # Dataset should not be in pending list anymore (status is COMPLETED)
-        completed_dataset = next((d for d in final_pending if d["id"] == dataset_id), None)
+        completed_dataset = next(
+            (d for d in final_pending if d["id"] == dataset_id), None
+        )
         # If it appears, it should be marked as completed
         if completed_dataset:
             assert completed_dataset["file_collocation_status"] == "completed"

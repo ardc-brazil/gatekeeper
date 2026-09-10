@@ -124,45 +124,28 @@ class TestClientService(unittest.TestCase):
         )
         self.repository.fetch.return_value = db_client
 
-        # First fetch, should call the repository
-        client1 = self.client_service.fetch(api_key)
-        self.assertEqual(client1.name, "client1")
+        self.assertEqual(self.client_service.fetch(api_key).name, "client1")
         self.repository.fetch.assert_called_once_with(api_key=api_key)
 
-        # Directly check if the result is cached
-        cached_client = self.client_service.fetch.cache_info().hits
-        self.assertEqual(cached_client, 0, "Cache should not have any hits yet")
+        self.assertEqual(self.client_service.fetch(api_key).name, "client1")
+        self.repository.fetch.assert_called_once_with(api_key=api_key)
 
-        # Second fetch, should use the cache
-        client2 = self.client_service.fetch(api_key)
-        self.assertEqual(client2.name, "client1")
-        self.assertEqual(
-            self.client_service.fetch.cache_info().hits, 1, "Cache should have 1 hit"
-        )
-
-        # Invalidate cache by updating the client
         updated_name = "updated_client"
         db_client.name = updated_name
-        self.repository.fetch.return_value = db_client
         self.client_service.update(api_key, name=updated_name)
 
-        # Fetch again, should not use the cache due to invalidation
-        client3 = self.client_service.fetch(api_key)
-        self.assertEqual(client3.name, updated_name)
-        self.assertEqual(
-            self.client_service.fetch.cache_info().misses,
-            1,
-            "Cache should have 1 miss after invalidation",
-        )
+        self.assertEqual(self.client_service.fetch(api_key).name, updated_name)
 
-        # Fetch again, should use the cache
-        client4 = self.client_service.fetch(api_key)
-        self.assertEqual(client4.name, updated_name)
-        self.assertEqual(
-            self.client_service.fetch.cache_info().hits,
-            1,
-            "Cache should have 1 hit after invalidation",
-        )
+    def test_the_cache_is_shared_across_requests(self):
+        # The service used to be a Factory, so every request built a new instance
+        # and the cache — keyed on `self` — never hit. Asserting through the
+        # container is the only way to catch that; reusing one instance by hand
+        # passes either way.
+        from app.container import Container
+
+        container = Container()
+
+        self.assertIs(container.client_service(), container.client_service())
 
 
 if __name__ == "__main__":

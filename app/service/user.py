@@ -1,7 +1,6 @@
 from uuid import UUID
 from app.exception.not_found import NotFoundException
 from app.model.db.user import Provider as ProviderDBModel, User as UserDBModel
-from app.model.db.tenancy import Tenancy as TenancyDBModel
 from app.model.user import User, UserProvider, UserQuery
 from app.repository.tenancy import TenancyRepository
 from app.repository.user import UserRepository
@@ -72,13 +71,13 @@ class UserService:
                 ProviderDBModel(name=provider.name, reference=provider.reference)
             )
 
-        for tenancy in dbUser.tenancies:
-            dbUser.tenancies.append(TenancyDBModel(name=tenancy, is_enabled=True))
+        for tenancy in user.tenancies or []:
+            dbUser.tenancies.append(self._tenancy_repository.fetch(tenancy=tenancy))
 
         user_id = self._repository.upsert(user=dbUser).id
 
         for role in user.roles:
-            self._casbin_enforcer.add_grouping_policy(str(user.id), role)
+            self._casbin_enforcer.add_grouping_policy(str(user_id), role)
 
         return user_id
 
@@ -109,7 +108,7 @@ class UserService:
         if user is None:
             raise NotFoundException(f"not_found: {id}")
         for role in roles:
-            self._casbin_enforcer.delete_role_for_user(user=id, role=role)
+            self._casbin_enforcer.delete_role_for_user(user=str(id), role=role)
 
     def add_provider(self, id: UUID, provider: str, reference: str) -> None:
         user: UserDBModel = self._repository.fetch_by_id(id=id)
@@ -177,11 +176,9 @@ class UserService:
         user: UserDBModel = self._repository.fetch_by_id(id=user_id)
         if user is None:
             raise NotFoundException(f"not_found: {user_id}")
-        for existing_tenancy in user.tenancies:
-            for tenancy in tenancies:
-                if existing_tenancy.name == tenancy:
-                    # Only way I found to make this work with pre-existing tenancy data
-                    database_tenancy = self._tenancy_repository.fetch(tenancy=tenancy)
-                    user.tenancies.remove(database_tenancy)
-                    break
+        to_remove = set(tenancies)
+        user.tenancies = [
+            tenancy for tenancy in user.tenancies if tenancy.name not in to_remove
+        ]
+
         self._repository.upsert(user=user)

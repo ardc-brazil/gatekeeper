@@ -58,7 +58,9 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
-    client_service = providers.Factory(
+    # Singleton so the lru_cache on fetch() is shared: as a Factory each request
+    # built a new instance, and `self` is part of the cache key.
+    client_service = providers.Singleton(
         ClientService,
         repository=client_repository,
     )
