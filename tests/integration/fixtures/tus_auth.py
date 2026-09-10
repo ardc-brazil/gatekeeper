@@ -48,10 +48,7 @@ def create_tus_payload(
         TUS webhook payload dictionary
     """
     if user_token is None:
-        # The BFF signs the token with the dataset id in the "file" claim
-        # (see pages/api/auth/token.ts and the two call sites that build the
-        # request). Mirror that here, or the fixture proves nothing about the
-        # binding between a token and the dataset it was issued for.
+        # The BFF signs the dataset id into the "file" claim; mirror that here.
         user_token = create_tus_jwt_token(user_id, file_id=dataset_id)
 
     # Use staged/ prefix by default (mimics TUSd configuration)

@@ -69,8 +69,6 @@ class TestTusHooksEndpoint:
         token_dataset = dataset_fixture.create_test_dataset()
         other_dataset = dataset_fixture.create_test_dataset()
 
-        # create_tus_payload signs the token for the dataset it is given, so
-        # sign for one and then point the upload at the other.
         payload = create_tus_payload(user_id=user_id, dataset_id=token_dataset["id"])
         payload["Event"]["Upload"]["MetaData"]["dataset_id"] = other_dataset["id"]
 

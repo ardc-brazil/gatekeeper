@@ -196,10 +196,6 @@ class DatasetService:
         if not tenancies:
             tenancies = user.tenancies
 
-        # Keep only the tenancies that exist and are enabled. This builds a new
-        # list on purpose: removing from the list being iterated skips whatever
-        # follows a removal, which used to let a disabled tenancy through. The
-        # caller's list is not ours to edit either.
         enabled_tenancies = []
         for tenancy in tenancies:
             database_tenancy = self._tenancy_service.fetch(name=tenancy)
@@ -464,9 +460,6 @@ class DatasetService:
         )
 
     def create_data_file(self, file: DataFile, dataset_id: UUID, user_id: UUID) -> None:
-        # No tenancy travels with the TUS hook payload, but the uploader does, so
-        # derive it from them. The upload is authorized like any other user
-        # action: the dataset has to sit in a tenancy the uploader belongs to.
         dataset_db: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             is_enabled=True,

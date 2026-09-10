@@ -33,11 +33,7 @@ class DatasetRepository:
             if is_enabled:
                 query = query.filter(Dataset.is_enabled == is_enabled)
 
-            # Tenancy is the access boundary for anything acting on behalf of a
-            # user, so an empty list has to keep meaning "sees nothing" — a user
-            # with no tenancy must not turn into a user with no restriction.
-            # Callers with no user behind them (the TUS hook, the collocation API
-            # used by the archivist) opt out of the boundary explicitly.
+            # An empty list means "sees nothing"; callers with no user opt out explicitly.
             if restrict_by_tenancy:
                 query = query.filter(Dataset.tenancy.in_(tenancies))
 

@@ -81,9 +81,6 @@ class DatasetCollocationService:
         try:
             status_enum = FileCollocationStatus(status)
         except ValueError:
-            # BadRequestException carries a list of ErrorDetails, not a message.
-            # Passing a plain string made the handler iterate its characters and
-            # call asdict() on each one, turning a bad input into a 500.
             raise BadRequestException(
                 errors=[ErrorDetails(code="invalid_collocation_status", field="status")]
             )

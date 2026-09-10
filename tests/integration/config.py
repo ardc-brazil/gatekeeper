@@ -20,10 +20,7 @@ class IntegrationTestConfig:
         self.tenancy = os.getenv(
             "INTEGRATION_TENANCY", "datamap/production/data-amazon"
         )
-        # Must match the app's AUTH_FILE_UPLOAD_TOKEN_SECRET, or every token the
-        # fixtures sign is unverifiable. It read a differently named variable
-        # with a different default, so token validation was never exercised —
-        # the tests only passed because invalid tokens used to be ignored.
+        # Must match the app's AUTH_FILE_UPLOAD_TOKEN_SECRET.
         self.file_upload_token_secret = os.getenv(
             "AUTH_FILE_UPLOAD_TOKEN_SECRET", "file-upload-fake-token"
         )
