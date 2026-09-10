@@ -232,7 +232,10 @@ def main() -> int:
         with db.session() as session:
             query = (
                 session.query(DatasetVersionDBModel)
-                .join(DatasetDBModel, DatasetVersionDBModel.dataset_id == DatasetDBModel.id)
+                .join(
+                    DatasetDBModel,
+                    DatasetVersionDBModel.dataset_id == DatasetDBModel.id,
+                )
                 .join(DOIDBModel, DOIDBModel.version_id == DatasetVersionDBModel.id)
                 .filter(DatasetDBModel.is_enabled.is_(True))
                 .filter(DatasetVersionDBModel.is_enabled.is_(True))
@@ -248,9 +251,7 @@ def main() -> int:
             )
 
             if args.dataset_id:
-                query = query.filter(
-                    DatasetDBModel.id == UUID(args.dataset_id)
-                )
+                query = query.filter(DatasetDBModel.id == UUID(args.dataset_id))
 
             versions = query.all()
 

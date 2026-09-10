@@ -307,7 +307,7 @@ class TestUserService(unittest.TestCase):
 
         provider_name = "google"
         reference = "12345"
-        with self.assertRaises(NotFoundException) as _:
+        with self.assertRaises(NotFoundException) as context:
             self.user_service.add_provider(user_id, provider_name, reference)
 
-        self.assertEqual
+        self.assertEqual(str(context.exception), f"not_found: {user_id}")

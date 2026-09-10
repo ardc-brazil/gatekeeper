@@ -23,7 +23,7 @@ def upgrade() -> None:
     # Create the enum type first
     visibility_status_enum = sa.Enum("PRIVATE", "PUBLIC", name="visibilitystatus")
     visibility_status_enum.create(op.get_bind())
-    
+
     # Then add the column using the enum type
     op.add_column(
         "datasets",
@@ -38,7 +38,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Drop the column first
     op.drop_column("datasets", "visibility")
-    
+
     # Then drop the enum type
     visibility_status_enum = sa.Enum("PRIVATE", "PUBLIC", name="visibilitystatus")
     visibility_status_enum.drop(op.get_bind())

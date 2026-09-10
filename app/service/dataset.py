@@ -184,8 +184,10 @@ class DatasetService:
                 return version
 
     def _determine_tenancies(
-        self, user_id: UUID, tenancies: list[str] = []
+        self, user_id: UUID, tenancies: list[str] = None
     ) -> list[str]:
+        if tenancies is None:
+            tenancies = []
         try:
             user = self._user_service.fetch_by_id(id=user_id)
         except NotFoundException:
@@ -216,11 +218,13 @@ class DatasetService:
         dataset_id: UUID,
         is_enabled: bool = True,
         user_id: UUID = None,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
         latest_version: bool = False,
         version_design_state: DesignState = None,
         version_is_enabled: bool = True,
     ) -> Dataset | None:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             is_enabled=is_enabled,
@@ -240,8 +244,10 @@ class DatasetService:
         dataset_id: UUID,
         dataset_request: Dataset,
         user_id: UUID,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ) -> None:
+        if tenancies is None:
+            tenancies = []
         dataset_db: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -334,7 +340,9 @@ class DatasetService:
 
         return self._adapt_dataset(dataset=created)
 
-    def disable_dataset(self, dataset_id: UUID, tenancies: list[str] = []) -> None:
+    def disable_dataset(self, dataset_id: UUID, tenancies: list[str] = None) -> None:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id, tenancies=tenancies
         )
@@ -346,7 +354,9 @@ class DatasetService:
 
         self._repository.upsert(dataset=dataset)
 
-    def enable_dataset(self, dataset_id: UUID, tenancies: list[str] = []) -> None:
+    def enable_dataset(self, dataset_id: UUID, tenancies: list[str] = None) -> None:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id, is_enabled=False, tenancies=tenancies
         )
@@ -363,8 +373,10 @@ class DatasetService:
         dataset_id: UUID,
         user_id: UUID,
         version_name: str,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ) -> None:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -392,8 +404,10 @@ class DatasetService:
         dataset_id: UUID,
         user_id: UUID,
         version_name: str,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ) -> None:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -423,13 +437,15 @@ class DatasetService:
             return json.load(categories)
 
     def search_datasets(
-        self, query: DatasetQuery, user_id: UUID, tenancies: list[str] = []
+        self, query: DatasetQuery, user_id: UUID, tenancies: list[str] = None
     ) -> PaginatedResult:
         """
         Search datasets with full-text search and pagination.
 
         Returns a PaginatedResult containing adapted Dataset domain objects.
         """
+        if tenancies is None:
+            tenancies = []
         result: PaginatedResult = self._repository.search(
             query_params=query,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -498,8 +514,10 @@ class DatasetService:
         dataset_id: UUID,
         user_id: UUID,
         version_name: str,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ) -> None:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
@@ -563,8 +581,10 @@ class DatasetService:
         version_name: str,
         doi: DOI,
         user_id: UUID,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ) -> DOI:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
@@ -614,8 +634,10 @@ class DatasetService:
         version_name: str,
         new_state: DOIState,
         user_id: UUID,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ):
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
@@ -662,8 +684,10 @@ class DatasetService:
         dataset_id: UUID,
         version_name: str,
         user_id: UUID,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ):
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
@@ -691,8 +715,10 @@ class DatasetService:
         dataset_id: UUID,
         version_name: str,
         user_id: UUID,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ):
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id, tenancies),
@@ -721,8 +747,10 @@ class DatasetService:
         version_name: str,
         file_id: UUID,
         user_id: UUID,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ) -> str:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self.fetch_dataset(
             dataset_id=dataset_id,
             user_id=user_id,
@@ -760,9 +788,13 @@ class DatasetService:
         self,
         dataset_id: UUID,
         user_id: UUID,
-        tenancies: list[str] = [],
-        datafilesPreviouslyUploaded: list[str] = [],
+        tenancies: list[str] = None,
+        datafilesPreviouslyUploaded: list[str] = None,
     ) -> DatasetVersion:
+        if datafilesPreviouslyUploaded is None:
+            datafilesPreviouslyUploaded = []
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
@@ -793,8 +825,10 @@ class DatasetService:
         dataset_id: UUID,
         version_name: str,
         user_id: UUID,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
     ) -> Dataset:
+        if tenancies is None:
+            tenancies = []
         dataset: DatasetDBModel = self._repository.fetch(
             dataset_id=dataset_id,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),

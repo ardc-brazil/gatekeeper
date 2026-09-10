@@ -1,0 +1,90 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.10.14"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - run: ruff check .
+
+      - run: ruff format --check .
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest app -q
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The compose file bind-mounts ${STORAGE_DOCKER_VOLUME}_test_integration,
+      # which is a path relative to the repository in local development.
+      - name: Prepare the object storage bind mount
+        run: mkdir -p "${{ runner.temp }}/data-storage_test_integration"
+
+      - name: Start services
+        run: |
+          make ENV_FILE_PATH=integration-test.env \
+               STORAGE_DOCKER_VOLUME="${{ runner.temp }}/data-storage" \
+               integration-test-up
+
+      - name: Seed test data
+        run: |
+          docker exec datamap_postgres_test_integration \
+            psql -U gk_admin -d gatekeeper_db -f /tmp/seed_clients.sql
+
+      - name: Run integration tests
+        run: pytest tests/integration -q
+
+      - name: Service logs
+        if: failure()
+        run: |
+          make ENV_FILE_PATH=integration-test.env integration-test-logs
+
+      - name: Stop services
+        if: always()
+        run: |
+          make ENV_FILE_PATH=integration-test.env \
+               STORAGE_DOCKER_VOLUME="${{ runner.temp }}/data-storage" \
+               integration-test-down

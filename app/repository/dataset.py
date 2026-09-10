@@ -20,12 +20,14 @@ class DatasetRepository:
         self,
         dataset_id: UUID,
         is_enabled: bool = True,
-        tenancies: list[str] = [],
+        tenancies: list[str] = None,
         latest_version: bool = False,
         version_design_state: DesignState = None,
         version_is_enabled: bool = True,
         restrict_by_tenancy: bool = True,
     ) -> Dataset:
+        if tenancies is None:
+            tenancies = []
         with self._session_factory() as session:
             query = session.query(Dataset)
             query = query.filter(Dataset.id == dataset_id)
@@ -78,7 +80,7 @@ class DatasetRepository:
             raise ConflictException(f"dataset_already_exists: {dataset.id}")
 
     def search(
-        self, query_params: DatasetQuery, tenancies: list[str] = []
+        self, query_params: DatasetQuery, tenancies: list[str] = None
     ) -> PaginatedResult:
         """
         Search datasets with full-text search and pagination.
@@ -89,6 +91,8 @@ class DatasetRepository:
         - page: current page number
         - page_size: number of items per page
         """
+        if tenancies is None:
+            tenancies = []
         with self._session_factory() as session:
             query = session.query(Dataset)
 

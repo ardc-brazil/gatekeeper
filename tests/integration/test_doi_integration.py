@@ -49,11 +49,14 @@ class TestDOICreation:
         # Assert
         assert_status_code(response, 200)
         data = assert_json_response(response)
-        assert_response_contains_fields(response, {
-            "identifier": f"10.82978/MANUAL{unique_id}",
-            "state": "DRAFT",
-            "mode": "MANUAL",
-        })
+        assert_response_contains_fields(
+            response,
+            {
+                "identifier": f"10.82978/MANUAL{unique_id}",
+                "state": "DRAFT",
+                "mode": "MANUAL",
+            },
+        )
         assert data["identifier"] == f"10.82978/MANUAL{unique_id}"
 
         # Verify snapshot was published (dataset should be accessible via snapshot endpoint)
@@ -97,10 +100,13 @@ class TestDOICreation:
         # Assert
         assert_status_code(response, 200)
         assert_json_response(response)
-        assert_response_contains_fields(response, {
-            "state": "DRAFT",
-            "mode": "AUTO",
-        })
+        assert_response_contains_fields(
+            response,
+            {
+                "state": "DRAFT",
+                "mode": "AUTO",
+            },
+        )
         # Verify identifier is present (auto-generated)
         data = assert_json_response(response)
         assert "identifier" in data
@@ -440,9 +446,7 @@ class TestDOIStateChanges:
         # Assert
         assert_status_code(response, 404)
 
-    def test_change_doi_state_unauthorized_401(
-        self, http_client, dataset_fixture
-    ):
+    def test_change_doi_state_unauthorized_401(self, http_client, dataset_fixture):
         """Test changing DOI state without authentication returns 401."""
         # Arrange
         dataset = dataset_fixture.create_dataset_with_version()
@@ -466,9 +470,7 @@ class TestDOIStateChanges:
 class TestDOIRetrieval:
     """Integration tests for DOI retrieval workflow."""
 
-    def test_get_doi_success_200(
-        self, http_client, valid_headers, dataset_fixture
-    ):
+    def test_get_doi_success_200(self, http_client, valid_headers, dataset_fixture):
         """Test getting DOI for existing dataset version returns 200."""
         # Arrange - Create dataset with DOI
         dataset = dataset_fixture.create_dataset_with_version()
@@ -512,10 +514,13 @@ class TestDOIRetrieval:
         # Assert
         assert_status_code(response, 200)
         assert_json_response(response)
-        assert_response_contains_fields(response, {
-            "state": "DRAFT",
-            "mode": "MANUAL",
-        })
+        assert_response_contains_fields(
+            response,
+            {
+                "state": "DRAFT",
+                "mode": "MANUAL",
+            },
+        )
         # Verify identifier is present
         data = assert_json_response(response)
         assert "identifier" in data
