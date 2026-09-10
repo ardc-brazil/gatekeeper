@@ -117,52 +117,31 @@ class TestClientService(unittest.TestCase):
         with self.assertRaises(NotFoundException):
             self.client_service.enable(uuid4())
 
-    def test_cache_behavior(self):
+    def test_fetch_reads_the_repository_every_time(self):
         api_key = uuid4()
         db_client = DBModel(
             key=api_key, name="client1", is_enabled=True, secret="secret"
         )
         self.repository.fetch.return_value = db_client
 
-        # First fetch, should call the repository
-        client1 = self.client_service.fetch(api_key)
-        self.assertEqual(client1.name, "client1")
-        self.repository.fetch.assert_called_once_with(api_key=api_key)
+        self.client_service.fetch(api_key)
+        self.client_service.fetch(api_key)
 
-        # Directly check if the result is cached
-        cached_client = self.client_service.fetch.cache_info().hits
-        self.assertEqual(cached_client, 0, "Cache should not have any hits yet")
+        self.assertEqual(self.repository.fetch.call_count, 2)
 
-        # Second fetch, should use the cache
-        client2 = self.client_service.fetch(api_key)
-        self.assertEqual(client2.name, "client1")
-        self.assertEqual(
-            self.client_service.fetch.cache_info().hits, 1, "Cache should have 1 hit"
+    def test_fetch_sees_a_client_that_was_just_disabled(self):
+        api_key = uuid4()
+        self.repository.fetch.return_value = DBModel(
+            key=api_key, name="client1", is_enabled=True, secret="secret"
         )
 
-        # Invalidate cache by updating the client
-        updated_name = "updated_client"
-        db_client.name = updated_name
-        self.repository.fetch.return_value = db_client
-        self.client_service.update(api_key, name=updated_name)
+        self.assertTrue(self.client_service.fetch(api_key).is_enabled)
 
-        # Fetch again, should not use the cache due to invalidation
-        client3 = self.client_service.fetch(api_key)
-        self.assertEqual(client3.name, updated_name)
-        self.assertEqual(
-            self.client_service.fetch.cache_info().misses,
-            1,
-            "Cache should have 1 miss after invalidation",
+        self.repository.fetch.return_value = DBModel(
+            key=api_key, name="client1", is_enabled=False, secret="secret"
         )
 
-        # Fetch again, should use the cache
-        client4 = self.client_service.fetch(api_key)
-        self.assertEqual(client4.name, updated_name)
-        self.assertEqual(
-            self.client_service.fetch.cache_info().hits,
-            1,
-            "Cache should have 1 hit after invalidation",
-        )
+        self.assertFalse(self.client_service.fetch(api_key).is_enabled)
 
 
 if __name__ == "__main__":

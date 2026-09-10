@@ -6,12 +6,5 @@ ignore = [
     "B008",
     # `raise ... from err`: worth adopting, 19 call sites to update first.
     "B904",
-    # lru_cache on ClientService.fetch. It never hits (the service is a Factory,
-    # so `self` differs per request) and its test only passes by reusing one
-    # instance. Pending a decision to remove it.
-    "B019",
 ]
 
-[lint.per-file-ignores]
-"*_test.py" = ["B017"]
-"tests/**" = ["B017"]

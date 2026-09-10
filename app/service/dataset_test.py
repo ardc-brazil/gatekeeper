@@ -817,13 +817,15 @@ class TestDatasetService(unittest.TestCase):
 
         self.user_service.fetch_by_id.return_value = self.mock_user(["tenant1"])
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception) as context:
             self.dataset_service.update_dataset(
                 dataset_id=dataset_id,
                 dataset_request=dataset_request,
                 user_id=user_id,
                 tenancies=["tenant1"],
             )
+
+        self.assertEqual(str(context.exception), "Update failed")
 
         self.dataset_repository.fetch.assert_called_once_with(
             dataset_id=dataset_id,
