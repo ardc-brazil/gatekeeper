@@ -404,12 +404,19 @@ lines. Log `dataset_id`, `hook_type` and `status_code` as fields rather than
 interpolated into the message: that is what turns grepping into counting, which
 is the query that exposed the upload bug in the first place.
 
-The Archivist gives item 5 a second target. It runs its collocation job **every
-minute**, not the 15 the documentation claims, and emits eleven lines per run
-with nothing to do — three of them an eighty-character `====` banner. That is
-the shape of logging that makes 5.6 GB, and no formatter fixes a service that
-narrates an empty queue 1,440 times a day. Log the run at `DEBUG` and keep
-`INFO` for a run that actually moved a file.
+The Archivist gives item 5 a second target, and an open question. It runs its
+collocation job **every minute**, not the 15 the documentation claims, and emits
+eleven lines per run with nothing to do — three of them an eighty-character
+`====` banner. Log the idle run at `DEBUG` and keep `INFO` for a run that
+actually moved a file.
+
+That is not what made 5.6 GB, though. Measured live, the steady state is 11
+lines and 1,404 bytes a minute: 2 MB a day, 71 MB over the 35 days the container
+has been up. **Something produced the other 98%, and it has not been
+identified.** Finding it costs a full pass over the file, which takes minutes
+for the reason above. Worth doing before item 5 decides what to log, because a
+burst that large is either an error loop or a per-file log line on a big
+dataset, and those want opposite fixes.
 
 **Loose ends**, none blocking: `B904` is ignored in `ruff.toml` (19 call sites);
 validation answers 400 where FastAPI's own answers 422; the Casbin auto-reload
