@@ -104,7 +104,7 @@ one. They address different failures and neither substitutes for the other.
 **Rotation bounds the disk.** A `logging` block in Compose with `max-size` and
 `max-file`, applied to every service through a YAML anchor. No container had any
 limit, and `datamap_archivist` — the one service the deploy never replaces — had
-accumulated **5.6 GB in 35 days**, on a host shared with three unrelated
+accumulated **5.6 GB since 2025-12-18**, on a host shared with three unrelated
 projects. The file is large enough that `docker logs --since 10m` takes minutes,
 because the json-file driver has no index and scans the whole thing.
 
@@ -411,8 +411,8 @@ eleven lines per run with nothing to do — three of them an eighty-character
 actually moved a file.
 
 That is not what made 5.6 GB, though. Measured live, the steady state is 11
-lines and 1,404 bytes a minute — 2 MB a day, 71 MB over the 35 days the
-container has been up. A full pass over the file found the rest:
+lines and 1,404 bytes a minute — 2 MB a day, against an average of 21 MB a day
+over the life of the container. A full pass over the file found the rest:
 
 ```
 34,033,376 lines    5,617,352,638 bytes
@@ -420,12 +420,17 @@ container has been up. A full pass over the file found the rest:
   INFO     15,227,223 lines   2.22 GB
 ```
 
-**9.4 million errors**, about 186 a minute for 35 days, nearly all of them one
-line: `Unexpected error processing dataset 82e2913e-…: Server error '500
-Internal Server Error' for url 'http://gatekeeper…'`. That is this year's upload
-bug seen from the other side — the Archivist retrying a collocation the
-Gatekeeper could not answer, with no backoff and nothing watching. The last one
-is timestamped 15:58 on 2026-09-11; since then, none.
+**9.4 million errors**, nearly all of them one line: `Unexpected error
+processing dataset 82e2913e-…: Server error '500 Internal Server Error' for url
+'http://gatekeeper…'`. That is this year's upload bug seen from the other side —
+the Archivist retrying a collocation the Gatekeeper could not answer, with no
+backoff and nothing watching. The last one is timestamped 15:58 on 2026-09-11;
+since then, none.
+
+The same `docker inspect` that dates the log reports **`RestartCount` 169**. The
+container was created on 2025-12-18 and last started on 2026-08-07, so what
+looked like an uptime of five weeks is the latest of many restarts that
+`restart: always` papered over. Nobody was told about those either.
 
 So the 5.6 GB was a symptom, and the log that would have exposed the bug in an
 afternoon was the log nobody could read. It is also the argument for §7: a
