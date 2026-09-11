@@ -611,20 +611,13 @@ class DatasetService:
 
         created_doi: DOI = self._doi_service.create(doi=doi)
 
-        # If this is a MANUAL DOI, publish the dataset snapshot immediately
         if doi.mode == DOIMode.MANUAL:
-            try:
-                self._publish_dataset_snapshot(
-                    dataset_id=dataset_id,
-                    version_name=version_name,
-                    user_id=user_id,
-                    tenancies=tenancies,
-                )
-            except Exception as e:
-                # Log the error but don't fail the DOI creation
-                self._logger.error(
-                    f"DOI created successfully but dataset snapshot publication failed for {dataset_id}-{version_name}: {str(e)}"
-                )
+            self._publish_dataset_snapshot(
+                dataset_id=dataset_id,
+                version_name=version_name,
+                user_id=user_id,
+                tenancies=tenancies,
+            )
 
         return created_doi
 
@@ -658,26 +651,21 @@ class DatasetService:
         if version.doi is None:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
-        # Change the DOI state first
+        # Order matters: a DOI that is findable while its snapshot is missing is a
+        # citation that resolves to nothing, and the transition cannot be retried.
+        if new_state == DOIState.FINDABLE:
+            self._publish_dataset_snapshot(
+                dataset_id=dataset_id,
+                version_name=version_name,
+                user_id=user_id,
+                tenancies=tenancies,
+                doi_state=new_state.value,
+            )
+
         self._doi_service.change_state(
             identifier=version.doi.identifier,
             new_state=new_state,
         )
-
-        # If DOI is being published (changed to FINDABLE), publish the dataset snapshot
-        if new_state == DOIState.FINDABLE:
-            try:
-                self._publish_dataset_snapshot(
-                    dataset_id=dataset_id,
-                    version_name=version_name,
-                    user_id=user_id,
-                    tenancies=tenancies,
-                )
-            except Exception as e:
-                # Log the error but don't fail the DOI state change
-                self._logger.error(
-                    f"DOI state changed successfully but dataset publication failed for {dataset_id}-{version_name}: {str(e)}"
-                )
 
     def get_doi(
         self,
@@ -879,6 +867,7 @@ class DatasetService:
         dataset: DatasetDBModel,
         version: DatasetVersionDBModel,
         include_versions_list: bool = False,
+        doi_state: str = None,
     ) -> dict:
         """
         Create a JSON snapshot of the dataset metadata for public consumption.
@@ -896,7 +885,7 @@ class DatasetService:
                 "doi_link": f"https://doi.org/{version.doi.identifier}"
                 if version.doi
                 else None,
-                "doi_state": version.doi.state if version.doi else None,
+                "doi_state": doi_state or (version.doi.state if version.doi else None),
                 "publication_date": version.created_at.isoformat()
                 if version.created_at
                 else None,
@@ -952,18 +941,18 @@ class DatasetService:
             versions_info = []
             for v in dataset.versions:
                 if v.is_enabled and v.doi is not None:
-                    # For MANUAL DOIs, state should be FINDABLE
-                    doi_state = (
-                        DOIState.FINDABLE
-                        if hasattr(v.doi, "mode") and v.doi.mode == DOIMode.MANUAL
-                        else v.doi.state
-                    )
+                    if v.id == version.id and doi_state is not None:
+                        version_doi_state = doi_state
+                    elif hasattr(v.doi, "mode") and v.doi.mode == DOIMode.MANUAL:
+                        version_doi_state = DOIState.FINDABLE
+                    else:
+                        version_doi_state = v.doi.state
                     versions_info.append(
                         {
                             "id": str(v.id),
                             "name": v.name,
                             "doi_identifier": v.doi.identifier,
-                            "doi_state": doi_state,
+                            "doi_state": version_doi_state,
                             "created_at": v.created_at.isoformat()
                             if v.created_at
                             else None,
@@ -977,7 +966,12 @@ class DatasetService:
         return snapshot
 
     def _publish_dataset_snapshot(
-        self, dataset_id: UUID, version_name: str, user_id: UUID, tenancies: list[str]
+        self,
+        dataset_id: UUID,
+        version_name: str,
+        user_id: UUID,
+        tenancies: list[str],
+        doi_state: str = None,
     ) -> None:
         """
         Publish dataset snapshot by updating visibility and creating JSON files in object storage.
@@ -1007,7 +1001,7 @@ class DatasetService:
 
             # Step 2: Create and store versioned snapshot
             version_snapshot = self._create_dataset_json_snapshot(
-                dataset, version, include_versions_list=False
+                dataset, version, include_versions_list=False, doi_state=doi_state
             )
             version_json_bytes = json.dumps(version_snapshot, indent=2).encode("utf-8")
 
@@ -1023,7 +1017,7 @@ class DatasetService:
             latest_version = self._get_latest_published_version(dataset)
             if latest_version and latest_version.id == version.id:
                 latest_snapshot = self._create_dataset_json_snapshot(
-                    dataset, version, include_versions_list=True
+                    dataset, version, include_versions_list=True, doi_state=doi_state
                 )
                 latest_json_bytes = json.dumps(latest_snapshot, indent=2).encode(
                     "utf-8"
