@@ -6,6 +6,21 @@ services:
     image: gatekeeper
     container_name: datamap_gatekeeper_test_integration
     restart: always
+    healthcheck:
+      # 127.0.0.1, not localhost: that resolves to ::1 first and uvicorn binds
+      # IPv4 only, so the container would report unhealthy forever.
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://127.0.0.1:9092/api/v1/health-check/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
     env_file:
       - ${ENV_FILE_PATH}
     ports: 
@@ -41,6 +56,11 @@ services:
     image: tusproject/tusd:v2.4
     container_name: datamap_tusd_test_integration
     restart: always
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "1080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports: 
       - "1081:1080"  # Different port to avoid conflicts
     env_file:
@@ -68,7 +88,9 @@ services:
     networks:
       - gatekeeper_integration-test-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      # $$ so the container expands it. With a single $, Compose interpolates
+      # from the invoking shell, which only has the value under `make`.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5

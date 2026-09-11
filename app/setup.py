@@ -8,6 +8,7 @@ from app.logging_config import fields, request_id_var, setup_logging  # noqa: F4
 from app.controller.v1.client.client import router as client_router
 from app.controller.v1.infrastructure.infrastructure import (
     router as infrastructure_router,
+    protected_router as infrastructure_protected_router,
 )
 from app.controller.v1.tenancy.tenancy import router as tenancies_router
 from app.controller.v1.user.user import router as user_router
@@ -80,6 +81,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(user_router, prefix="/v1")
     fastAPIApp.include_router(client_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_router, prefix="/v1")
+    fastAPIApp.include_router(infrastructure_protected_router, prefix="/v1")
     fastAPIApp.include_router(internal_dataset_collocation_router, prefix="/v1")
     fastAPIApp.include_router(tus_router, prefix="/v1")
 

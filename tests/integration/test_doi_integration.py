@@ -1,9 +1,4 @@
-import subprocess
-import time
 import uuid
-
-import pytest
-import requests
 
 from tests.integration.utils.assertions import (
     assert_status_code,
@@ -11,32 +6,6 @@ from tests.integration.utils.assertions import (
     assert_response_contains_fields,
     assert_json_response,
 )
-
-MINIO_CONTAINER = "datamap_min_io_test_integration"
-MINIO_HEALTH_URL = "http://localhost:9002/minio/health/live"
-
-
-@pytest.fixture
-def object_storage_down():
-    subprocess.run(["docker", "stop", MINIO_CONTAINER], check=True, capture_output=True)
-    try:
-        yield
-    finally:
-        subprocess.run(
-            ["docker", "start", MINIO_CONTAINER], check=True, capture_output=True
-        )
-        _wait_for_object_storage()
-
-
-def _wait_for_object_storage() -> None:
-    for _ in range(60):
-        try:
-            if requests.get(MINIO_HEALTH_URL, timeout=2).status_code == 200:
-                return
-        except requests.RequestException:
-            pass
-        time.sleep(1)
-    raise RuntimeError("object storage did not come back up")
 
 
 class TestDOICreation:

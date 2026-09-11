@@ -176,6 +176,17 @@ class TestObjectStorageGateway(unittest.TestCase):
         mock_response.close.assert_called_once()
         # release_conn won't be called if close fails
 
+    def test_bucket_exists_delegates_to_the_client(self):
+        self.mock_minio_client.bucket_exists.return_value = True
+
+        self.assertTrue(self.gateway.bucket_exists("datamap"))
+        self.mock_minio_client.bucket_exists.assert_called_once_with("datamap")
+
+    def test_bucket_exists_reports_a_missing_bucket(self):
+        self.mock_minio_client.bucket_exists.return_value = False
+
+        self.assertFalse(self.gateway.bucket_exists("datamap"))
+
 
 if __name__ == "__main__":
     unittest.main()

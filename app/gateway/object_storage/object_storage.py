@@ -23,6 +23,9 @@ class ObjectStorageGateway:
             },
         )
 
+    def bucket_exists(self, bucket_name: str) -> bool:
+        return self._minio_client.bucket_exists(bucket_name)
+
     def put_file(
         self,
         bucket_name: str,
