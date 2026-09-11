@@ -138,8 +138,19 @@ this RFC that is configured in the GitHub UI rather than in a file.
 
 #### Registering the runner
 
-Once, on the production host, as the `datamap` user, so it inherits the Docker
-group membership and the paths the deploy expects:
+**One runner, registered to the organisation, serving both repositories.** A
+runner registered to a single repository would have to be installed twice on the
+same host for no benefit.
+
+Get the token from **github.com/organizations/ardc-brazil/settings/actions/runners
+→ New runner**. It expires in an hour and works once. The URL below has to be the
+organisation, with no repository name — an organisation token and a repository
+URL do not go together.
+
+Run everything on the production host as the `datamap` user. That is the Linux
+account that owns `/home/datamap` and belongs to the docker group; it is the same
+user the manual deploy runs as, and it is what `svc.sh install` takes as its
+argument — not a service name.
 
 ```bash
 mkdir -p ~/actions-runner && cd ~/actions-runner
@@ -147,18 +158,32 @@ curl -o runner.tar.gz -L \
   https://github.com/actions/runner/releases/download/v2.328.0/actions-runner-linux-x64-2.328.0.tar.gz
 tar xzf runner.tar.gz
 
-# Token from Settings → Actions → Runners → New self-hosted runner. It expires
-# in an hour and is single use.
-./config.sh --url https://github.com/ardc-brazil/gatekeeper \
+./config.sh --url https://github.com/ardc-brazil \
             --token <TOKEN> --labels production --unattended
 
-sudo ./svc.sh install datamap
+sudo ./svc.sh install datamap   # run the service as the datamap user
 sudo ./svc.sh start
 ```
 
-Repeat for `datamap-webapp`, in a separate directory: a runner registers against
-one repository. An organisation-level runner shared by both is the tidier
-option, and the workflows work unchanged either way as long as the labels match.
+Then allow both repositories to reach it: **Settings → Actions → Runner groups →
+Default**, set repository access to `gatekeeper` and `datamap-webapp`. Without
+this an organisation runner is visible to no repository and the deploy job waits
+forever for a runner that never picks it up.
+
+`runs-on: [self-hosted, production]` matches on the `production` label given
+above, so both workflows find it with no further configuration.
+
+> **Both repositories are public.** Anyone can open a pull request, and a
+> workflow running fork code on this runner would execute a stranger's code on
+> the production host. What prevents it is that the deploy workflows trigger only
+> on `push` to `main`, never on `pull_request` — keep it that way, and never move
+> a `pull_request` trigger onto a self-hosted runner.
+>
+> GitHub's own guard is secondary here and weaker than it sounds: the approval
+> policy is `first_time_contributors`, so someone whose pull request has been
+> merged once needs no approval afterwards. Raising it to all external
+> contributors, under **Settings → Actions → General**, costs nothing and is
+> worth doing.
 
 The workflows read the environment directory from a repository variable,
 defaulting to `/home/datamap/environment`. Set `ENVIRONMENT_DIR` under
