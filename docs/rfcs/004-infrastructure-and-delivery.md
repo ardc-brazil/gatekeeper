@@ -142,26 +142,26 @@ this RFC that is configured in the GitHub UI rather than in a file.
 runner registered to a single repository would have to be installed twice on the
 same host for no benefit.
 
-Get the token from **github.com/organizations/ardc-brazil/settings/actions/runners
-→ New runner**. It expires in an hour and works once. The URL below has to be the
-organisation, with no repository name — an organisation token and a repository
-URL do not go together.
+Go to **github.com/organizations/ardc-brazil/settings/actions/runners → New
+runner**, choose Linux x64, and use the download and configure commands it
+prints. They carry the current runner version and a token that expires in an
+hour and works once. Do not copy a version number out of this document: it goes
+stale, and the installer refuses a release that is too old.
 
-Run everything on the production host as the `datamap` user. That is the Linux
-account that owns `/home/datamap` and belongs to the docker group; it is the same
-user the manual deploy runs as, and it is what `svc.sh install` takes as its
-argument — not a service name.
+Run them on the production host as the `datamap` user — the Linux account that
+owns `/home/datamap` and belongs to the docker group, the same one the manual
+deploy runs as.
+
+Change three things in what GitHub gives you:
+
+1. Add `--labels production` to `./config.sh`, which is what `runs-on` matches.
+2. Keep the URL exactly as shown, `https://github.com/ardc-brazil`, with no
+   repository name. An organisation token and a repository URL do not go
+   together.
+3. Instead of `./run.sh`, install it as a service so it survives a reboot:
 
 ```bash
-mkdir -p ~/actions-runner && cd ~/actions-runner
-curl -o runner.tar.gz -L \
-  https://github.com/actions/runner/releases/download/v2.328.0/actions-runner-linux-x64-2.328.0.tar.gz
-tar xzf runner.tar.gz
-
-./config.sh --url https://github.com/ardc-brazil \
-            --token <TOKEN> --labels production --unattended
-
-sudo ./svc.sh install datamap   # run the service as the datamap user
+sudo ./svc.sh install datamap   # datamap is the user to run as, not a service name
 sudo ./svc.sh start
 ```
 
