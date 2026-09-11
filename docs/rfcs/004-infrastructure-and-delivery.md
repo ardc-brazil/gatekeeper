@@ -347,9 +347,9 @@ Ordered by what unblocks what, not by size.
 
 | # | Item | Why here |
 |---|------|----------|
-| 1 | `test.yml` + branch protection | Nothing else is safe to change until a merge is gated |
-| 2 | `alembic.ini` in the image; migrations exercised | Blocks deploy automation and RFC 003 |
-| 3 | `deploy.yml` on a self-hosted runner | Removes the manual deploy and most SSH |
+| 1 | ~~`test.yml` + branch protection~~ | **Done, 2026-09-10.** Required on `main` in both repositories, with review from a code owner |
+| 2 | ~~`alembic.ini` in the image; migrations exercised~~ | **Done, 2026-09-11.** The application runs `upgrade head` at startup; the suite executes all 31 migrations on every run |
+| 3 | ~~`deploy.yml` on a self-hosted runner~~ | **Done, 2026-09-11.** Merging `main` deploys; the first one moved production off a January branch |
 | 4 | Log rotation in Compose | One line; stops losing logs immediately |
 | 5 | Structured JSON logs, redaction, request id | Prerequisite for indexing; removes tokens from logs |
 | 6 | Health checks + status page | Lets other people answer "is it up" |
@@ -360,6 +360,28 @@ Ordered by what unblocks what, not by size.
 
 Items 1 to 3 are the ones that change how the team works; the rest are
 improvements to a system that already defends itself.
+
+### What the first three taught us
+
+**Nothing is verified until it runs where it will run.** The first CI run failed
+three times over, each for a real reason rather than noise: ruff was installed
+unpinned and linted with a version four releases ahead of the one in
+`requirements.txt`; the snapshot tests needed a `datamap` bucket that exists only
+because a developer's storage directory accumulated one; and the client tests
+raced Casbin's five-second policy reload, which a human running the same commands
+never notices because they type slowly.
+
+**A local reproduction can lie.** The claim that the deploy job had been
+validated locally was wrong: Docker reuses an existing named volume and ignores a
+changed `device`, so a run that appeared to use an empty directory was still
+reading the developer's storage, bucket included.
+
+**Item 5 stopped being optional.** Running migrations in-process made the
+application silent — `fileConfig()` disables every logger it does not name, so
+three lines came out of a deploy and the TUS hook became unobservable on the very
+day its bug was fixed. The immediate cause is repaired, but a logging setup that
+one library call can disable is not a logging setup. Structured configuration
+owned in one place is the fix, and it is next.
 
 ## Open questions
 

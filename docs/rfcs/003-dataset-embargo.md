@@ -1,10 +1,16 @@
 # RFC 003: Dataset Embargo
 
-| Status | Proposed |
+| Status | On hold |
 |--------|----------|
 | Author | DataMap Team |
 | Created | 2026-09-09 |
-| Updated | 2026-09-09 |
+| Updated | 2026-09-11 |
+
+> **On hold as of 2026-09-11.** The product manager wants to reshape the feature,
+> and a meeting is pending. Nothing below has been built. Treat the decisions
+> here as the state of the discussion before that meeting, not as settled: the
+> access model in particular was derived from a reading of the data policy that
+> is now up for revision.
 
 ## Summary
 
@@ -194,4 +200,15 @@ Accepted. It is queryable, auditable, testable, and independent of the request p
 
 ## Open questions
 
-None blocking. The one that was open — whether metadata stay public during an embargo — was resolved by making it the author's choice rather than a platform-wide rule.
+The one that was open — whether metadata stay public during an embargo — was
+resolved by making it the author's choice rather than a platform-wide rule.
+
+Everything else is now pending the product review. Worth putting on the agenda,
+because each would change the design here:
+
+- Does the reviewer link come back into scope? It was cut, and the invitation
+  model in §"Granting access" is its natural foundation if it returns.
+- Does the 90-day extension cap survive contact with how researchers actually
+  work, or does it become a reminder rather than a limit?
+- Is a manual DOI promotion still acceptable, given the expectation that authors
+  will leave identifiers in `registered` indefinitely?
