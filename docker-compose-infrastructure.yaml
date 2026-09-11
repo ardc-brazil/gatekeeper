@@ -1,11 +1,18 @@
 version: '3'
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "10"
+
 services:
   gatekeeper:
     build: .
     image: gatekeeper
     container_name: datamap_gatekeeper
     restart: always
+    logging: *logging
     env_file:
       - ${ENV_FILE_PATH}
     environment:
@@ -18,10 +25,11 @@ services:
       - gatekeeper_gatekeeper-network
 
   minio:
-    image: minio/minio:RELEASE.2024-03-21T23-13-43Z
+    image: quay.io/minio/minio:RELEASE.2024-03-21T23-13-43Z
     command: server /storage --console-address ":9001"
     container_name: datamap_min_io
     restart: always
+    logging: *logging
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -42,6 +50,7 @@ services:
     image: tusproject/tusd:v2.4
     container_name: datamap_tusd
     restart: always
+    logging: *logging
     ports:
       - "1080:1080"
     env_file:

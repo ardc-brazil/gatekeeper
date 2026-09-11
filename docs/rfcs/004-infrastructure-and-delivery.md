@@ -98,8 +98,24 @@ Compose file, with Promtail reading the Docker socket. Retention on disk, not in
 the container. Grafana is reused for metrics (§7), so this is one dependency, not
 two.
 
-Before that lands, a one-line improvement stops the bleeding: a `logging` block
-in Compose with `max-size` and `max-file` so logs rotate rather than vanish.
+Before that lands, two cheap measures, which this RFC originally conflated into
+one. They address different failures and neither substitutes for the other.
+
+**Rotation bounds the disk.** A `logging` block in Compose with `max-size` and
+`max-file`, applied to every service through a YAML anchor. No container had any
+limit, and `datamap_archivist` — the one service the deploy never replaces — had
+accumulated **5.6 GB in 35 days**, on a host shared with three unrelated
+projects. The file is large enough that `docker logs --since 10m` takes minutes,
+because the json-file driver has no index and scans the whole thing.
+
+**Archiving makes a log survive a deploy.** Rotation does not do this: `docker
+compose down` deletes the container together with its log file, so every deploy
+erases the history of exactly the system it is changing. Every container the
+deploy touches was proved empty of anything older than today. The deploy job now
+writes `docker logs -t` to a gzipped, timestamped file under
+`/home/datamap/logs` before replacing anything, and prunes past 30 days. Six
+lines of workflow, no new containers, and it is what makes the goal "a log line
+from last month is findable" true today rather than after §1 and Loki.
 
 ### 2. CI on GitHub-hosted runners, deploy on a self-hosted one
 
@@ -350,7 +366,7 @@ Ordered by what unblocks what, not by size.
 | 1 | ~~`test.yml` + branch protection~~ | **Done, 2026-09-10.** Required on `main` in both repositories, with review from a code owner |
 | 2 | ~~`alembic.ini` in the image; migrations exercised~~ | **Done, 2026-09-11.** The application runs `upgrade head` at startup; the suite executes all 31 migrations on every run |
 | 3 | ~~`deploy.yml` on a self-hosted runner~~ | **Done, 2026-09-11.** Merging `main` deploys; the first one moved production off a January branch |
-| 4 | Log rotation in Compose | One line; stops losing logs immediately |
+| 4 | ~~Bounded and archived logs~~ | **Done, 2026-09-11.** Rotation on every service in all four repositories, and the deploy archives a container's log before replacing it |
 | 5 | Structured JSON logs, redaction, request id | Prerequisite for indexing; removes tokens from logs |
 | 6 | Health checks + status page | Lets other people answer "is it up" |
 | 7 | Two instances behind nginx | Needs health checks to roll safely |
@@ -360,6 +376,73 @@ Ordered by what unblocks what, not by size.
 
 Items 1 to 3 are the ones that change how the team works; the rest are
 improvements to a system that already defends itself.
+
+### Where this stands, 2026-09-11
+
+**In production.** Tests gate every merge; merging `main` deploys; the schema is
+applied by the application at startup. The first automated deploy moved
+production off a January branch and carried the upload fix with it — a test
+upload landed correctly, file record and all.
+
+**Verified after that deploy**: the corrected code is running, the schema is at
+head, every container is up, the API answers, and — once logging was repaired
+separately — a `post-finish` hook returning **200 in the logs**, with the file
+record on an Archivist-organised path rather than `staged/`. The baseline this
+replaces is 9 `post-finish` hooks and 9 × 500 over 90 days; it is recorded in
+`docs/runbooks/post-deploy-verification.md`, which now closes end to end.
+
+**Item 4 is in.** It turned out to be two changes rather than the one this RFC
+described — see §1: rotation for the disk, archiving for the history. Both take
+effect at the next deploy, and the first archived log will be whatever the
+running containers have accumulated by then.
+
+**Item 5 is next**, and it is the one this week argued for: one handler
+configured at the root, JSON, mandatory redaction of `X-User-Token`,
+`Authorization` and `X-Api-Secret` — the upload token appears verbatim in the
+production log today — and a `request_id` so one upload can be followed across
+lines. Log `dataset_id`, `hook_type` and `status_code` as fields rather than
+interpolated into the message: that is what turns grepping into counting, which
+is the query that exposed the upload bug in the first place.
+
+The Archivist gives item 5 a second target, and an open question. It runs its
+collocation job **every minute**, not the 15 the documentation claims, and emits
+eleven lines per run with nothing to do — three of them an eighty-character
+`====` banner. Log the idle run at `DEBUG` and keep `INFO` for a run that
+actually moved a file.
+
+That is not what made 5.6 GB, though. Measured live, the steady state is 11
+lines and 1,404 bytes a minute — 2 MB a day, 71 MB over the 35 days the
+container has been up. A full pass over the file found the rest:
+
+```
+34,033,376 lines    5,617,352,638 bytes
+  ERROR     9,376,873 lines   2.56 GB
+  INFO     15,227,223 lines   2.22 GB
+```
+
+**9.4 million errors**, about 186 a minute for 35 days, nearly all of them one
+line: `Unexpected error processing dataset 82e2913e-…: Server error '500
+Internal Server Error' for url 'http://gatekeeper…'`. That is this year's upload
+bug seen from the other side — the Archivist retrying a collocation the
+Gatekeeper could not answer, with no backoff and nothing watching. The last one
+is timestamped 15:58 on 2026-09-11; since then, none.
+
+So the 5.6 GB was a symptom, and the log that would have exposed the bug in an
+afternoon was the log nobody could read. It is also the argument for §7: a
+counter on that failure path is a line on a chart, where 9.4 million identical
+log lines are just weather.
+
+Two things follow for item 5. A retry loop with no backoff is a defect of its
+own, independent of formatting. And a service that can emit 186 errors a minute
+needs rate limiting or aggregation in the logging configuration, or a 200 MB
+ceiling buys twenty minutes of history instead of a hundred days.
+
+**Loose ends**, none blocking: `B904` is ignored in `ruff.toml` (19 call sites);
+validation answers 400 where FastAPI's own answers 422; the Casbin auto-reload
+failed to pick up a seeded policy once right after startup and could not be
+reproduced afterwards; `actions/checkout@v4` and `actions/setup-python@v5` warn
+about the Node 20 deprecation; and three datasets may hold a published version
+missing its files, with the query to check them in the runbook.
 
 ### What the first three taught us
 
