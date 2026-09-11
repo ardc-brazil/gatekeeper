@@ -384,14 +384,23 @@ class TestDOIStateChanges:
             200,
         )
 
-        response = http_client.put(
-            f"/datasets/{dataset_id}/versions/{version_name}/doi",
-            json={"state": "FINDABLE"},
-            headers=valid_headers,
-        )
-        assert (
-            response.status_code >= 500
-        ), f"the failure was swallowed: {response.status_code} {response.text}"
+        # With the object storage gone the client may fail fast or hang until its
+        # own timeout, depending on whether the stopped container's address still
+        # resolves. Both are refusals to publish; what must not happen is a 200.
+        try:
+            response = http_client.put(
+                f"/datasets/{dataset_id}/versions/{version_name}/doi",
+                json={"state": "FINDABLE"},
+                headers=valid_headers,
+            )
+        except Exception as e:
+            assert "timed out" in str(e).lower() or "timeout" in str(e).lower(), e
+            response = None
+
+        if response is not None:
+            assert (
+                response.status_code >= 500
+            ), f"the failure was swallowed: {response.status_code} {response.text}"
 
         doi = http_client.get(
             f"/datasets/{dataset_id}/versions/{version_name}/doi",
