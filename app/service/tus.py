@@ -2,6 +2,7 @@ import logging
 from uuid import UUID
 from app.model.dataset import DataFile
 from app.model.tus import TusResult
+from app.logging_config import fields
 from app.service.dataset import DatasetService
 import os
 
@@ -55,6 +56,17 @@ class TusService:
             else:
                 return TusResult(200, "")
         except Exception as e:
-            self._logger.info(payload)
-            self._logger.error(e)
+            # Never the whole payload: it carries the signed upload token in
+            # Event.HTTPRequest.Header.
+            self._logger.error(
+                "tus hook failed",
+                extra=fields(
+                    hook_type=payload.get("Type"),
+                    dataset_id=payload.get("Event", {})
+                    .get("Upload", {})
+                    .get("MetaData", {})
+                    .get("dataset_id"),
+                    error=str(e),
+                ),
+            )
             return TusResult(status_code=500, body_msg=str(e), reject_upload=True)
