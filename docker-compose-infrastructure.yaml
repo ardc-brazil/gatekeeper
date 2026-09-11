@@ -25,7 +25,7 @@ services:
       - gatekeeper_gatekeeper-network
 
   minio:
-    image: minio/minio:RELEASE.2024-03-21T23-13-43Z
+    image: quay.io/minio/minio:RELEASE.2024-03-21T23-13-43Z
     command: server /storage --console-address ":9001"
     container_name: datamap_min_io
     restart: always
