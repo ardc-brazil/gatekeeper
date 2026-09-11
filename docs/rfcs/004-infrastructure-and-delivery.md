@@ -367,7 +367,7 @@ Ordered by what unblocks what, not by size.
 | 2 | ~~`alembic.ini` in the image; migrations exercised~~ | **Done, 2026-09-11.** The application runs `upgrade head` at startup; the suite executes all 31 migrations on every run |
 | 3 | ~~`deploy.yml` on a self-hosted runner~~ | **Done, 2026-09-11.** Merging `main` deploys; the first one moved production off a January branch |
 | 4 | ~~Bounded and archived logs~~ | **Done, 2026-09-11.** Rotation on every service in all four repositories, and the deploy archives a container's log before replacing it |
-| 5 | Structured JSON logs, redaction, request id | Prerequisite for indexing; removes tokens from logs |
+| 5 | ~~Structured JSON logs, redaction, request id~~ | **Done, 2026-09-11**, in the gatekeeper and the archivist. Awaiting review |
 | 6 | Health checks + status page | Lets other people answer "is it up" |
 | 7 | Two instances behind nginx | Needs health checks to roll safely |
 | 8 | SOPS secrets | Independent, but needs a rotation window |
@@ -409,13 +409,36 @@ The Zipper is deliberately excluded. It has no container, no directory and no
 environment file on the production host: it was never finished, and automating
 the delivery of something that does not run would be theatre.
 
-**Item 5 is next**, and it is the one this week argued for: one handler
-configured at the root, JSON, mandatory redaction of `X-User-Token`,
-`Authorization` and `X-Api-Secret` — the upload token appears verbatim in the
-production log today — and a `request_id` so one upload can be followed across
-lines. Log `dataset_id`, `hook_type` and `status_code` as fields rather than
-interpolated into the message: that is what turns grepping into counting, which
-is the query that exposed the upload bug in the first place.
+**Item 5 is written and waiting for review.** One handler at the root, JSON,
+redaction by filter rather than by remembering, and a `request_id` carried in a
+`ContextVar`. One upload now reads as three correlated lines:
+
+```json
+{"message": "tus hook received", "hook_type": "post-finish", "dataset_id": "923b9884…", "logger": "controller:tus", "request_id": "110a59d6…"}
+{"message": "tus hook failed",   "hook_type": "post-finish", "dataset_id": "923b9884…", "error": "Dataset not found: 923b9884…", "request_id": "110a59d6…"}
+{"message": "request", "method": "POST", "path": "/api/v1/tus/hooks", "status_code": 500, "duration_ms": 5.4, "request_id": "110a59d6…"}
+```
+
+`hook_type` and `status_code` are fields, which is what turns grepping into
+counting — the query that exposed the upload bug after ninety days.
+
+One correction to what this RFC claimed: **no credential is in the production
+log today.** `LOG_LEVEL` is `INFO`, so the `logger.debug(payload)` line never
+fired, and a search of the current and archived logs finds nothing. The exposure
+was on the hook's failure path, which logged the payload whole and was taken
+nine times this year; those logs are gone. The path is removed rather than
+depending on the level staying where it is.
+
+Writing it found a defect of the same family it was meant to prevent. A log
+field named `filename` collides with `LogRecord.filename`, and `logging` raises
+rather than overwrite it — so **every TUS hook answered 500**, on the endpoint
+whose bug had just been fixed, in the release meant to make it observable. No
+unit test would have seen it. The integration suite did, on the first run.
+
+The archivist got the same treatment, plus the thing that actually made its
+5.6 GB: an idle run is now `DEBUG`, and a dataset failing the same way every
+minute is reported once with the repeats counted, instead of once a minute
+forever. That repository also got its first tests; it had none.
 
 The Archivist gives item 5 a second target, and an open question. It runs its
 collocation job **every minute**, not the 15 the documentation claims, and emits
@@ -454,14 +477,6 @@ Two things follow for item 5. A retry loop with no backoff is a defect of its
 own, independent of formatting. And a service that can emit 186 errors a minute
 needs rate limiting or aggregation in the logging configuration, or a 200 MB
 ceiling buys twenty minutes of history instead of a hundred days.
-
-**The object storage call has no timeout**, which an integration test found by
-accident: with MinIO stopped, publishing a snapshot hangs for the full HTTP
-client timeout instead of failing. A request worker is held for as long as the
-storage is unreachable, and MinIO has been down before — so the failure mode is
-not "uploads fail", it is "the API stops answering". Bounding it is small and
-belongs with item 5, since the same release should make the failure visible in
-the log.
 
 **Loose ends**, none blocking: `B904` is ignored in `ruff.toml` (19 call sites);
 validation answers 400 where FastAPI's own answers 422; the Casbin auto-reload
