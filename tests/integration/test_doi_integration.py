@@ -1,10 +1,42 @@
+import subprocess
+import time
 import uuid
+
+import pytest
+import requests
+
 from tests.integration.utils.assertions import (
     assert_status_code,
     assert_response_matches_dict,
     assert_response_contains_fields,
     assert_json_response,
 )
+
+MINIO_CONTAINER = "datamap_min_io_test_integration"
+MINIO_HEALTH_URL = "http://localhost:9002/minio/health/live"
+
+
+@pytest.fixture
+def object_storage_down():
+    subprocess.run(["docker", "stop", MINIO_CONTAINER], check=True, capture_output=True)
+    try:
+        yield
+    finally:
+        subprocess.run(
+            ["docker", "start", MINIO_CONTAINER], check=True, capture_output=True
+        )
+        _wait_for_object_storage()
+
+
+def _wait_for_object_storage() -> None:
+    for _ in range(60):
+        try:
+            if requests.get(MINIO_HEALTH_URL, timeout=2).status_code == 200:
+                return
+        except requests.RequestException:
+            pass
+        time.sleep(1)
+    raise RuntimeError("object storage did not come back up")
 
 
 class TestDOICreation:
@@ -320,6 +352,55 @@ class TestDOIStateChanges:
         # Verify snapshot was published after state change
         snapshot_response = http_client.get(f"/datasets/{dataset_id}/snapshot")
         assert_status_code(snapshot_response, 200)
+
+    def test_doi_stays_hidden_when_the_snapshot_cannot_be_written(
+        self, http_client, valid_headers, dataset_fixture, object_storage_down
+    ):
+        """A DOI must not become citable while the page it cites does not exist."""
+        dataset = dataset_fixture.create_dataset_with_version()
+        dataset_id = dataset["id"]
+        version_name = dataset["current_version"]["name"]
+
+        assert_status_code(
+            http_client.put(
+                f"/datasets/{dataset_id}/versions/{version_name}/enable",
+                headers=valid_headers,
+            ),
+            200,
+        )
+        assert_status_code(
+            http_client.put(
+                f"/datasets/{dataset_id}/versions/{version_name}/publish",
+                headers=valid_headers,
+            ),
+            200,
+        )
+        assert_status_code(
+            http_client.post(
+                f"/datasets/{dataset_id}/versions/{version_name}/doi",
+                json={"mode": "AUTO"},
+                headers=valid_headers,
+            ),
+            200,
+        )
+
+        response = http_client.put(
+            f"/datasets/{dataset_id}/versions/{version_name}/doi",
+            json={"state": "FINDABLE"},
+            headers=valid_headers,
+        )
+        assert (
+            response.status_code >= 500
+        ), f"the failure was swallowed: {response.status_code} {response.text}"
+
+        doi = http_client.get(
+            f"/datasets/{dataset_id}/versions/{version_name}/doi",
+            headers=valid_headers,
+        )
+        assert_status_code(doi, 200)
+        assert (
+            doi.json()["state"] != "FINDABLE"
+        ), "the DOI became findable without a snapshot"
 
     def test_change_doi_state_to_registered_no_snapshot(
         self, http_client, valid_headers, dataset_fixture

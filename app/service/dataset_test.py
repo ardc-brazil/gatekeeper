@@ -2359,6 +2359,7 @@ class TestDatasetService(unittest.TestCase):
                 version_name=version_name,
                 user_id=user_id,
                 tenancies=tenancies,
+                doi_state=DOIState.FINDABLE.value,
             )
 
     def test_change_doi_state_no_publication_on_non_findable(self):
@@ -2485,13 +2486,11 @@ class TestDatasetService(unittest.TestCase):
             mock_publish.assert_not_called()
             self.assertEqual(result, doi)
 
-    def test_publication_error_does_not_fail_doi_operations(self):
-        # Test for change_doi_state
+    def test_doi_does_not_become_findable_when_the_snapshot_cannot_be_written(self):
         dataset_id = uuid4()
         version_name = "v1.0"
         user_id = uuid4()
         tenancies = ["tenant1"]
-        new_state = DOIState.FINDABLE
 
         dataset = DatasetDBModel()
         dataset.id = dataset_id
@@ -2505,22 +2504,142 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.fetch.return_value = dataset
         self.dataset_version_repository.fetch_version_by_name.return_value = version
 
-        # Mock publication to raise exception
         with patch.object(
             self.dataset_service, "_publish_dataset_snapshot"
         ) as mock_publish:
-            mock_publish.side_effect = Exception("Publication failed")
+            mock_publish.side_effect = RuntimeError("object storage is down")
 
-            # Act - should not raise exception
+            with self.assertRaises(RuntimeError):
+                self.dataset_service.change_doi_state(
+                    dataset_id, version_name, DOIState.FINDABLE, user_id, tenancies
+                )
+
+            self.doi_service.change_state.assert_not_called()
+
+    def test_snapshot_is_written_before_the_doi_becomes_findable(self):
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+
+        order = []
+        with patch.object(
+            self.dataset_service,
+            "_publish_dataset_snapshot",
+            side_effect=lambda **kwargs: order.append("snapshot"),
+        ):
+            self.doi_service.change_state.side_effect = lambda **kwargs: order.append(
+                "doi"
+            )
+
             self.dataset_service.change_doi_state(
-                dataset_id, version_name, new_state, user_id, tenancies
+                dataset_id, version_name, DOIState.FINDABLE, user_id, tenancies
             )
 
-            # Assert
-            self.doi_service.change_state.assert_called_once_with(
-                identifier=version.doi.identifier, new_state=new_state
+        self.assertEqual(order, ["snapshot", "doi"])
+
+    def test_snapshot_carries_the_state_the_doi_is_about_to_reach(self):
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+
+        with patch.object(
+            self.dataset_service, "_publish_dataset_snapshot"
+        ) as mock_publish:
+            self.dataset_service.change_doi_state(
+                dataset_id, version_name, DOIState.FINDABLE, user_id, tenancies
             )
-            mock_publish.assert_called_once()
+
+            mock_publish.assert_called_once_with(
+                dataset_id=dataset_id,
+                version_name=version_name,
+                user_id=user_id,
+                tenancies=tenancies,
+                doi_state=DOIState.FINDABLE.value,
+            )
+
+    def test_snapshot_records_the_state_it_was_given_rather_than_the_stored_one(self):
+        dataset = DatasetDBModel()
+        dataset.id = uuid4()
+        dataset.name = "Test Dataset"
+        dataset.data = {}
+        dataset.versions = []
+
+        version = DatasetVersionDBModel()
+        version.name = "1"
+        version.created_at = datetime.datetime(2024, 1, 1)
+        version.files_in = []
+        version.doi = DOIDBModel()
+        version.doi.identifier = "10.1234/test"
+        version.doi.state = "REGISTERED"
+
+        snapshot = self.dataset_service._create_dataset_json_snapshot(
+            dataset, version, doi_state=DOIState.FINDABLE.value
+        )
+
+        self.assertEqual(snapshot["doi_state"], "FINDABLE")
+
+    def test_manual_doi_creation_reports_a_failed_snapshot(self):
+        dataset_id = uuid4()
+        version_name = "v1.0"
+        user_id = uuid4()
+        tenancies = ["tenant1"]
+
+        doi = DOI(
+            mode=DOIMode.MANUAL,
+            identifier="10.1234/manual",
+            title=DOITitle(title="Test DOI"),
+        )
+
+        dataset = DatasetDBModel()
+        dataset.id = dataset_id
+        dataset.name = "Test Dataset"
+        dataset.data = {"authors": [{"name": "Test Author"}]}
+        dataset.created_at = datetime.datetime(2024, 1, 1)
+
+        version = DatasetVersionDBModel()
+        version.name = version_name
+        version.doi = None
+
+        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.dataset_repository.fetch.return_value = dataset
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.doi_service.create.return_value = doi
+
+        with patch.object(
+            self.dataset_service, "_publish_dataset_snapshot"
+        ) as mock_publish:
+            mock_publish.side_effect = RuntimeError("object storage is down")
+
+            with self.assertRaises(RuntimeError):
+                self.dataset_service.create_doi(
+                    dataset_id, version_name, doi, user_id, tenancies
+                )
 
     def test_get_dataset_latest_snapshot_success(self):
         # Arrange
