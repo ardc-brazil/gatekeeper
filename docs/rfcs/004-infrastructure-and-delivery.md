@@ -411,12 +411,31 @@ eleven lines per run with nothing to do — three of them an eighty-character
 actually moved a file.
 
 That is not what made 5.6 GB, though. Measured live, the steady state is 11
-lines and 1,404 bytes a minute: 2 MB a day, 71 MB over the 35 days the container
-has been up. **Something produced the other 98%, and it has not been
-identified.** Finding it costs a full pass over the file, which takes minutes
-for the reason above. Worth doing before item 5 decides what to log, because a
-burst that large is either an error loop or a per-file log line on a big
-dataset, and those want opposite fixes.
+lines and 1,404 bytes a minute — 2 MB a day, 71 MB over the 35 days the
+container has been up. A full pass over the file found the rest:
+
+```
+34,033,376 lines    5,617,352,638 bytes
+  ERROR     9,376,873 lines   2.56 GB
+  INFO     15,227,223 lines   2.22 GB
+```
+
+**9.4 million errors**, about 186 a minute for 35 days, nearly all of them one
+line: `Unexpected error processing dataset 82e2913e-…: Server error '500
+Internal Server Error' for url 'http://gatekeeper…'`. That is this year's upload
+bug seen from the other side — the Archivist retrying a collocation the
+Gatekeeper could not answer, with no backoff and nothing watching. The last one
+is timestamped 15:58 on 2026-09-11; since then, none.
+
+So the 5.6 GB was a symptom, and the log that would have exposed the bug in an
+afternoon was the log nobody could read. It is also the argument for §7: a
+counter on that failure path is a line on a chart, where 9.4 million identical
+log lines are just weather.
+
+Two things follow for item 5. A retry loop with no backoff is a defect of its
+own, independent of formatting. And a service that can emit 186 errors a minute
+needs rate limiting or aggregation in the logging configuration, or a 200 MB
+ceiling buys twenty minutes of history instead of a hundred days.
 
 **Loose ends**, none blocking: `B904` is ignored in `ruff.toml` (19 call sites);
 validation answers 400 where FastAPI's own answers 422; the Casbin auto-reload
