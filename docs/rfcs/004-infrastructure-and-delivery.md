@@ -361,6 +361,35 @@ Ordered by what unblocks what, not by size.
 Items 1 to 3 are the ones that change how the team works; the rest are
 improvements to a system that already defends itself.
 
+### Where this stands, 2026-09-11
+
+**In production.** Tests gate every merge; merging `main` deploys; the schema is
+applied by the application at startup. The first automated deploy moved
+production off a January branch and carried the upload fix with it — a test
+upload landed correctly, file record and all.
+
+**Verified after that deploy**: the corrected code is running, the schema is at
+head, every container is up, the API answers. **Still to confirm**: a `post-finish`
+hook returning 200 *in the logs*. Logging was broken by the same release and
+repaired separately, so that line has not been seen yet. The baseline to compare
+against is in `docs/runbooks/post-deploy-verification.md`.
+
+**Next, and they belong together.** Item 4 is three lines of Compose and stops
+losing logs at every deploy. Item 5 is the one this week argued for: one handler
+configured at the root, JSON, mandatory redaction of `X-User-Token`,
+`Authorization` and `X-Api-Secret` — the upload token appears verbatim in the
+production log today — and a `request_id` so one upload can be followed across
+lines. Log `dataset_id`, `hook_type` and `status_code` as fields rather than
+interpolated into the message: that is what turns grepping into counting, which
+is the query that exposed the upload bug in the first place.
+
+**Loose ends**, none blocking: `B904` is ignored in `ruff.toml` (19 call sites);
+validation answers 400 where FastAPI's own answers 422; the Casbin auto-reload
+failed to pick up a seeded policy once right after startup and could not be
+reproduced afterwards; `actions/checkout@v4` and `actions/setup-python@v5` warn
+about the Node 20 deprecation; and three datasets may hold a published version
+missing its files, with the query to check them in the runbook.
+
 ### What the first three taught us
 
 **Nothing is verified until it runs where it will run.** The first CI run failed
