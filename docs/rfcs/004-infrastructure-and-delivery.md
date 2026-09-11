@@ -165,6 +165,16 @@ sudo ./svc.sh install datamap   # datamap is the user to run as, not a service n
 sudo ./svc.sh start
 ```
 
+Two things that went wrong the first time, both harmless once recognised:
+
+- `error: exists /etc/systemd/system/actions.runner.*.service` means the install
+  already succeeded and is being run a second time. The service is there and
+  enabled; it only needs `sudo ./svc.sh start`.
+- `status=203/EXEC` means systemd could not execute `ExecStart`. The unit points
+  at `<runner root>/runsvc.sh`, which was only present under `bin/`:
+  `cp bin/runsvc.sh runsvc.sh` and start again. The script uses relative paths
+  and relies on the `WorkingDirectory` systemd sets, so it works from the root.
+
 Then allow both repositories to reach it: **Settings → Actions → Runner groups →
 Default**, set repository access to `gatekeeper` and `datamap-webapp`. Without
 this an organisation runner is visible to no repository and the deploy job waits
