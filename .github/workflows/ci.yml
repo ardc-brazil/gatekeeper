@@ -1,4 +1,4 @@
-name: test
+name: ci
 
 on:
   pull_request:
@@ -6,8 +6,10 @@ on:
     branches: [main]
 
 concurrency:
-  group: test-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  # Never cancel a run on main: it carries the deploy, and interrupting that
+  # leaves the stack down.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PYTHON_VERSION: "3.10.14"
@@ -108,3 +110,71 @@ jobs:
           make ENV_FILE_PATH=integration-test.env \
                STORAGE_DOCKER_VOLUME="${{ runner.temp }}/data-storage" \
                integration-test-down
+
+  deploy:
+    # Why this job lives here rather than in its own workflow: two workflows on
+    # the same push run in parallel, so the deploy raced the tests and regularly
+    # finished first. `needs` only reaches jobs in the same workflow.
+    needs: [lint, unit, integration]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Never `pull_request`: code from a fork must not run on the production host.
+    runs-on: [self-hosted, production]
+    environment: production
+
+    # Serialise deploys without ever cancelling one in flight.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    env:
+      # Absolute: the runner checks out into its own workspace, so the
+      # `../environment/...` used by hand does not resolve here.
+      ENV_FILE_PATH: ${{ vars.ENVIRONMENT_DIR || '/home/datamap/environment' }}/gatekeeper.prod.env
+      # Must match the project the running containers belong to, or `down`
+      # leaves them up and `up` collides on the container names.
+      COMPOSE_PROJECT_NAME: gatekeeper
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show what is being deployed
+        run: git log --oneline -1
+
+      - name: Build the image
+        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-build
+
+      - name: Restart the stack
+        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-deployment-no-prune
+
+      # The application runs `alembic upgrade head` at startup, so a failed
+      # migration means the container never becomes healthy and this fails.
+      - name: Wait for the API to answer
+        run: |
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:9092/api/v1/health-check/ || true)
+            if [ "$code" = "200" ]; then
+              echo "healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The API did not answer within five minutes."
+          docker logs --tail 100 datamap_gatekeeper
+          exit 1
+
+      - name: Confirm the schema is at head
+        run: docker exec datamap_gatekeeper python3 -m alembic current
+
+      - name: Container status
+        if: always()
+        run: docker ps --filter "name=datamap_" --format "table {{.Names}}\t{{.Status}}"
+
+      - name: Logs on failure
+        if: failure()
+        run: docker logs --tail 200 datamap_gatekeeper
+
+      - name: Reclaim disk
+        if: success()
+        run: docker image prune -f
