@@ -368,7 +368,7 @@ Ordered by what unblocks what, not by size.
 | 3 | ~~`deploy.yml` on a self-hosted runner~~ | **Done, 2026-09-11.** Merging `main` deploys; the first one moved production off a January branch |
 | 4 | ~~Bounded and archived logs~~ | **Done, 2026-09-11.** Rotation on every service in all four repositories, and the deploy archives a container's log before replacing it |
 | 5 | ~~Structured JSON logs, redaction, request id~~ | **Done, 2026-09-11**, in the gatekeeper and the archivist. Awaiting review |
-| 6 | Health checks + status page | Lets other people answer "is it up" |
+| 6 | ~~Health checks + dependency report~~ | **Done, 2026-09-11.** Awaiting review. The status page itself stays in the backlog |
 | 7 | Two instances behind nginx | Needs health checks to roll safely |
 | 8 | SOPS secrets | Independent, but needs a rotation window |
 | 9 | Prometheus + custom metrics | Needs somewhere to look, i.e. Grafana from §1 |
@@ -439,6 +439,28 @@ The archivist got the same treatment, plus the thing that actually made its
 5.6 GB: an idle run is now `DEBUG`, and a dataset failing the same way every
 minute is reported once with the repeats counted, instead of once a minute
 forever. That repository also got its first tests; it had none.
+
+**Item 6 followed it**, because the same session kept needing it. There is now
+an authenticated `GET /v1/health-check/dependencies` reporting the database and
+the object storage with a status and a latency, which is the answer to "is it
+down or did I hit a bug" that the curation team could not get without a shell.
+The shallow `/health-check/` stays public and unchanged, because the deploy
+waits on it and a degraded object storage must not block a deploy that is
+fixing something else.
+
+The compose healthchecks that came with it are worth recording for how they
+failed. The one written for the gatekeeper used `http://localhost:9092`, which
+is refused inside the container: `localhost` resolves to `::1` first and uvicorn
+binds IPv4 only, so it would have reported unhealthy forever. And the postgres
+healthcheck in the integration stack had been failing since it was written —
+`${POSTGRES_USER}` is interpolated by Compose on the host, where the value only
+exists under `make`. **A healthcheck that never passes is worse than no
+healthcheck**, because it reports a broken system as fine, and neither of these
+was visible in `docker compose config`. CI now fails unless every container
+reaches healthy.
+
+The status page for the curation team stays in the backlog; the endpoint it
+would render exists now.
 
 The Archivist gives item 5 a second target, and an open question. It runs its
 collocation job **every minute**, not the 15 the documentation claims, and emits
