@@ -21,6 +21,37 @@ Nine `post-finish` hooks, nine failures, no successes. TUSd recorded three
 `UploadFinished` in the same period, in three episodes (01/07, 17/07, 21/08),
 each retried by TUSd. Three uploads attempted, three lost.
 
+## Result, 2026-09-11
+
+An upload to dataset `7a9b5d5e-fa6d-4c18-a42c-34f28fea6241`, after the deploy
+and after logging was repaired:
+
+| Hook type | Calls | Result |
+|---|---|---|
+| `pre-create` | 1 | 200 |
+| `post-create` | 1 | 200 |
+| `post-receive` | 1 | 200 |
+| `post-finish` | 1 | **200** |
+
+The file record exists, and its `storage_path` is
+`datamap/2026/09/11/7a9b5d5e-.../1/9147151a...` rather than `staged/`, so the
+Archivist collected it as well. Every step below passed.
+
+## Before you read any log
+
+Container logs do not survive a deploy — `docker compose down` deletes the
+container together with its log file. From the deploy that carries
+[#75](https://github.com/ardc-brazil/gatekeeper/pull/75) onward, the previous
+container's log is archived first:
+
+```bash
+ssh datamap-prod 'ls -lh /home/datamap/logs | tail'
+ssh datamap-prod 'zcat /home/datamap/logs/datamap_gatekeeper-<stamp>.log.gz | grep tus/hooks'
+```
+
+Kept for 30 days. So `docker logs` answers for the running container, and that
+directory answers for everything before it.
+
 ## 1. The right code is running
 
 ```bash
