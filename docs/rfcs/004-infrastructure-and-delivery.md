@@ -396,6 +396,19 @@ described — see §1: rotation for the disk, archiving for the history. Both ta
 effect at the next deploy, and the first archived log will be whatever the
 running containers have accumulated by then.
 
+**Item 2 now covers the Archivist**, which this RFC had quietly left out: it had
+no gate, no deploy, and a `make docker-deployment` typed over SSH. The image
+build is its only gate, because the repository has no tests at all —
+`tests/unit` and `tests/integration` are empty directories. That is a low bar,
+and naming it is the point: the service that moves every uploaded file into
+place is the one with no test covering it. The deploy also waits for
+`Scheduler started` and then confirms the container is still running a minute
+later, so a crash loop cannot report success.
+
+The Zipper is deliberately excluded. It has no container, no directory and no
+environment file on the production host: it was never finished, and automating
+the delivery of something that does not run would be theatre.
+
 **Item 5 is next**, and it is the one this week argued for: one handler
 configured at the root, JSON, mandatory redaction of `X-User-Token`,
 `Authorization` and `X-Api-Secret` — the upload token appears verbatim in the
@@ -442,12 +455,22 @@ own, independent of formatting. And a service that can emit 186 errors a minute
 needs rate limiting or aggregation in the logging configuration, or a 200 MB
 ceiling buys twenty minutes of history instead of a hundred days.
 
+**The object storage call has no timeout**, which an integration test found by
+accident: with MinIO stopped, publishing a snapshot hangs for the full HTTP
+client timeout instead of failing. A request worker is held for as long as the
+storage is unreachable, and MinIO has been down before — so the failure mode is
+not "uploads fail", it is "the API stops answering". Bounding it is small and
+belongs with item 5, since the same release should make the failure visible in
+the log.
+
 **Loose ends**, none blocking: `B904` is ignored in `ruff.toml` (19 call sites);
 validation answers 400 where FastAPI's own answers 422; the Casbin auto-reload
 failed to pick up a seeded policy once right after startup and could not be
 reproduced afterwards; `actions/checkout@v4` and `actions/setup-python@v5` warn
-about the Node 20 deprecation; and three datasets may hold a published version
-missing its files, with the query to check them in the runbook.
+about the Node 20 deprecation; three datasets may hold a published version
+missing its files, with the query to check them in the runbook; and the
+`archivist` repository is private, so branch protection is unavailable on the
+free plan and its CI gates nothing until it is made public.
 
 ### What the first three taught us
 
