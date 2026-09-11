@@ -36,6 +36,9 @@ class Database:
         same settings the app does.
         """
         config = Config("alembic.ini")
+        # Keep alembic away from the logging configuration: fileConfig would
+        # disable every logger it does not name, leaving the app silent.
+        config.attributes["configure_logger"] = False
         self._logger.info("running database migrations")
         command.upgrade(config, "head")
         self._logger.info("database migrations are up to date")
