@@ -55,10 +55,30 @@ class TestLogIsStructured:
 
         assert response.headers.get("X-Request-Id") == given
 
-    def test_the_request_id_reaches_the_log_once_per_event(self, http_client):
+    def test_the_liveness_probe_is_not_written_to_the_log(self, http_client):
+        """The Compose healthcheck calls it every ten seconds. In production it
+        was 61 of 91 lines over ten minutes."""
         marker = f"req-{uuid.uuid4()}"
 
         http_client.get("/health-check/", headers={"X-Request-Id": marker})
+        time.sleep(1)
+
+        assert marker not in _container_log(), "the probe is filling the log"
+
+    def test_a_real_request_is_still_written(self, http_client, valid_headers):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get("/clients/", headers={**valid_headers, "X-Request-Id": marker})
+        time.sleep(1)
+
+        assert marker in _container_log(), "an actual request went unlogged"
+
+    def test_the_request_id_reaches_the_log_once_per_event(
+        self, http_client, valid_headers
+    ):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get("/clients/", headers={**valid_headers, "X-Request-Id": marker})
         time.sleep(1)
 
         occurrences = [line for line in _container_log().splitlines() if marker in line]

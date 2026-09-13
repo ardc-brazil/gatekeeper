@@ -36,6 +36,14 @@ from app.controller.interceptor.exception_handler import (
 
 access_logger = logging.getLogger("http.access")
 
+# The Compose healthcheck calls this every ten seconds. Logging it made two
+# thirds of the production log the probe rather than the traffic.
+_PROBE_PATHS = frozenset({"/v1/health-check/", "/api/v1/health-check/"})
+
+
+def is_probe(path: str) -> bool:
+    return path.rstrip("/") + "/" in _PROBE_PATHS
+
 
 def setup_middleware(fastAPIApp: FastAPI) -> None:
     @fastAPIApp.middleware("http")
@@ -62,6 +70,9 @@ def setup_middleware(fastAPIApp: FastAPI) -> None:
 
 
 def _log_access(request: Request, status_code: int, started: float) -> None:
+    if is_probe(request.url.path):
+        return
+
     access_logger.info(
         "request",
         extra=fields(
