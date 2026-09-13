@@ -367,12 +367,12 @@ Ordered by what unblocks what, not by size.
 | 2 | ~~`alembic.ini` in the image; migrations exercised~~ | **Done, 2026-09-11.** The application runs `upgrade head` at startup; the suite executes all 31 migrations on every run |
 | 3 | ~~`deploy.yml` on a self-hosted runner~~ | **Done, 2026-09-11.** Merging `main` deploys; the first one moved production off a January branch |
 | 4 | ~~Bounded and archived logs~~ | **Done, 2026-09-11.** Rotation on every service in all four repositories, and the deploy archives a container's log before replacing it |
-| 5 | ~~Structured JSON logs, redaction, request id~~ | **Done, 2026-09-11**, in the gatekeeper and the archivist. Awaiting review |
-| 6 | ~~Health checks + dependency report~~ | **Done, 2026-09-11.** Awaiting review. The status page itself stays in the backlog |
+| 5 | ~~Structured JSON logs, redaction, request id~~ | **In production, 2026-09-13**, across all three services, correlated end to end |
+| 6 | ~~Health checks + dependency report~~ | **In production, 2026-09-13.** The status page itself stays in the backlog |
 | 7 | Two instances behind nginx | Needs health checks to roll safely |
 | 8 | SOPS secrets | Independent, but needs a rotation window |
-| 9 | Prometheus + custom metrics | Needs somewhere to look, i.e. Grafana from §1 |
-| 10 | Loki + Grafana | Last, and only worth it once logs are structured |
+| 9 | Prometheus + custom metrics | **Recommended next.** Detection, which is the gap that actually cost this year |
+| 10 | Loki + Grafana | Last. Logs are structured now, so it is finally worth something — but see the host below |
 
 Items 1 to 3 are the ones that change how the team works; the rest are
 improvements to a system that already defends itself.
@@ -462,6 +462,44 @@ reaches healthy.
 The status page for the curation team stays in the backlog; the endpoint it
 would render exists now.
 
+### What items 5 and 6 cost each other, 2026-09-13
+
+Both shipped, and then production showed what neither had been measured against.
+
+**Two correct changes made one bad one.** Item 6's Compose healthcheck calls the
+liveness endpoint every ten seconds; item 5 writes an access line per request.
+Ten minutes after the deploy, **61 of 91 lines were the probe**. A log that is
+two thirds probe is a log nobody greps and an index nobody wants to pay for,
+which is the whole premise of doing item 5 before item 10. Neither change was
+wrong on its own and no test could have caught the combination, because the
+thing that was wrong only existed once both were running.
+
+Once the probe was out, the next-largest source was the gatekeeper narrating the
+Archivist's minute-by-minute poll — 4,320 lines a day to say nothing is pending.
+Both ends of that exchange are at `DEBUG` now. The log went from 91 lines per ten
+minutes to 17, all of it real.
+
+**And silence is not free either.** Dropping the Archivist's idle run to `DEBUG`
+left it writing *nothing*: zero bytes in sixty seconds, measured. For a service
+that restarted 169 times without anyone noticing, that is the wrong trade — a
+dead scheduler and an idle one became indistinguishable. It now writes one line
+an hour. The rule that came out of this: **a service should be quiet, not
+silent**, and the difference matters precisely for the failure nobody is
+watching for.
+
+**The webapp was worse than a formatting problem.** Its axios instance carries
+`X-Api-Key` and `X-Api-Secret` on every request, and an axios error holds
+`config.headers`. Eight server-side call sites printed the error whole; proven
+against a real axios error, all three credentials appear. Two more sat in
+`getServerSideProps`, outside what the first invariant test scanned. Whether any
+of it was ever written cannot be established: the container held 144 bytes of log
+and a container's log dies with it at every deploy.
+
+**A gate that does not run what the deploy runs is not a gate.** The webapp's CI
+ran `tsc` and `jest`, neither of which runs webpack, so a `Module not found:
+async_hooks` reached `main` and failed in the deploy. Same shape as `pytest`
+versus `python -m pytest` the week before. CI runs `next build` now.
+
 The Archivist gives item 5 a second target, and an open question. It runs its
 collocation job **every minute**, not the 15 the documentation claims, and emits
 eleven lines per run with nothing to do — three of them an eighty-character
@@ -530,6 +568,45 @@ three lines came out of a deploy and the TUS hook became unobservable on the ver
 day its bug was fixed. The immediate cause is repaired, but a logging setup that
 one library call can disable is not a logging setup. Structured configuration
 owned in one place is the fix, and it is next.
+
+## Why item 9 before item 10
+
+The RFC ordered these by dependency. A year of evidence says order them by
+failure mode instead.
+
+What went wrong in 2026 was never that a log could not be found. It was that
+**nobody was told**: nine uploads lost over ninety days, 9.4 million Archivist
+errors, 169 restarts, three datasets with a public DOI and no page. Every one of
+those was visible in data nobody was looking at. Log indexing helps whoever is
+already investigating; a counter with an alert is what starts the investigation.
+
+`UPLOAD_HOOKS.labels(hook_type="post-finish", outcome="error").inc()` on the
+failure path would have made this year's upload bug a line on a chart within a
+day. Grepping would not have, because nobody greps a log they have no reason to
+open.
+
+### What the host can take
+
+Measured 2026-09-11:
+
+| | |
+|---|---|
+| Cores | 32 |
+| Load average | 32.68 / 32.62 / 32.56 — sustained |
+| `efc_datamap_jupyter` | **3181.96%**, about 31.8 cores |
+| Memory | 114 GB available of 125 |
+| Disk | 110 GB free of 295 |
+
+`docker stats` normalises to one core, so that figure is one container using the
+whole machine — a neighbouring project, not ours. Memory and disk are not
+constraints; **CPU already is**. DataMap itself is not suffering (the gatekeeper
+used 0.19% and answers the database in under a millisecond), but there is no
+headroom to spend carelessly.
+
+Prometheus and Grafana are cheap: two containers scraping a handful of targets
+every fifteen seconds. Promtail, which tails the Docker socket for Loki, is the
+expensive one of the four and the one to measure before committing. That is the
+second reason to do 9 before 10, independent of the first.
 
 ## Open questions
 
