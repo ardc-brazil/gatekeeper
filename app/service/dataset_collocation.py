@@ -8,6 +8,7 @@ from app.repository.dataset import DatasetRepository
 from app.repository.datafile import DataFileRepository
 from app.model.dataset import FileCollocationStatus
 from app.model.db.dataset import Dataset as DatasetDBModel, DataFile as DataFileDBModel
+from app.metrics import metrics
 
 
 class DatasetCollocationService:
@@ -31,6 +32,7 @@ class DatasetCollocationService:
         datasets = self._dataset_repository.fetch_by_collocation_status(
             statuses=[None, FileCollocationStatus.PENDING]
         )
+        metrics.collocation_pending(len(datasets))
         self._logger.info(f"Found {len(datasets)} datasets pending collocation")
         return datasets
 

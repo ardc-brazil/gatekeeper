@@ -36,6 +36,7 @@ from app.model.db.dataset import (
     DataFile as DataFileDBModel,
 )
 from app.adapter import doi as DOIAdapter
+from app.metrics import metrics
 
 
 class DatasetService:
@@ -1031,11 +1032,13 @@ class DatasetService:
                     content_type="application/json",
                 )
 
+            metrics.snapshot_published(success=True)
             self._logger.info(
                 f"Successfully published dataset snapshot for {dataset_id}-{version_name}"
             )
 
         except Exception as e:
+            metrics.snapshot_published(success=False)
             self._logger.error(
                 f"Failed to publish dataset snapshot for {dataset_id}-{version_name}: {str(e)}"
             )
