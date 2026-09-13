@@ -1,6 +1,10 @@
 import logging
-from fastapi import FastAPI
-from app.config import settings
+from time import perf_counter
+from uuid import uuid4
+
+from fastapi import FastAPI, Request
+
+from app.logging_config import fields, request_id_var, setup_logging  # noqa: F401
 from app.controller.v1.client.client import router as client_router
 from app.controller.v1.infrastructure.infrastructure import (
     router as infrastructure_router,
@@ -29,27 +33,43 @@ from app.controller.interceptor.exception_handler import (
 )
 
 
-def setup_logging() -> None:
-    logging.basicConfig(level=settings.LOG_LEVEL)
-    logging.getLogger("uvicorn").handlers.clear()
+access_logger = logging.getLogger("http.access")
 
-    modules = [
-        {"name": "uvicorn", "level": settings.LOG_LEVEL},
-        {"name": "tests", "level": logging.INFO},
-        {"name": "casbin.enforcer", "level": settings.CASBIN_LOG_LEVEL},
-        {"name": "casbin.policy", "level": settings.CASBIN_LOG_LEVEL},
-        {"name": "casbin.role", "level": settings.CASBIN_LOG_LEVEL},
-        {"name": "sqlalchemy.engine", "level": settings.SQLALCHEMY_LOG_LEVEL},
-    ]
-    for module in modules:
-        logger = logging.getLogger(module["name"])
-        logger.setLevel(module["level"])
-        log_formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)s] " + " %(module)s - %(name)s: %(message)s"
-        )
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(log_formatter)
-        logger.addHandler(console_handler)
+
+def setup_middleware(fastAPIApp: FastAPI) -> None:
+    @fastAPIApp.middleware("http")
+    async def assign_request_id(request: Request, call_next):
+        request_id = request.headers.get("X-Request-Id") or str(uuid4())
+        token = request_id_var.set(request_id)
+        started = perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            # uvicorn's own access line is emitted outside this context and
+            # carries no request id, so a failed request would lose its only
+            # correlatable record.
+            _log_access(request, 500, started)
+            request_id_var.reset(token)
+            raise
+
+        try:
+            response.headers["X-Request-Id"] = request_id
+            _log_access(request, response.status_code, started)
+            return response
+        finally:
+            request_id_var.reset(token)
+
+
+def _log_access(request: Request, status_code: int, started: float) -> None:
+    access_logger.info(
+        "request",
+        extra=fields(
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            duration_ms=round((perf_counter() - started) * 1000, 1),
+        ),
+    )
 
 
 def setup_routes(fastAPIApp: FastAPI) -> None:

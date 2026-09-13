@@ -5,6 +5,7 @@ from casbin import SyncedEnforcer
 from minio import Minio
 
 from app.gateway.doi.doi import DOIGateway
+from app.gateway.object_storage.http_client import build_http_client
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
@@ -122,9 +123,16 @@ class Container(containers.DeclarativeContainer):
         doi_prefix=config.DOI_PREFIX,
     )
 
+    minio_http_client = providers.Factory(
+        build_http_client,
+        timeout_seconds=config.MINIO_TIMEOUT_SECONDS,
+        retries=config.MINIO_RETRIES,
+    )
+
     minio_client = providers.Factory(
         Minio,
         endpoint=config.MINIO_URL,
+        http_client=minio_http_client,
         access_key=config.MINIO_ACCESS_KEY,
         secret_key=config.MINIO_SECRET_KEY,
         secure=config.MINIO_USE_SSL,

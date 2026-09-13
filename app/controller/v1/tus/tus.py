@@ -8,6 +8,7 @@ from app.controller.interceptor.authorization import authorize_tus
 from dependency_injector.wiring import inject, Provide
 
 from app.controller.interceptor.user_parser import parse_tus_user_id
+from app.logging_config import fields
 from app.model.tus import TusResult
 from app.service.tus import TusService
 
@@ -40,18 +41,25 @@ async def post(
     user_id: UUID = Depends(parse_tus_user_id),
     service: TusService = Depends(Provide[Container.tus_service]),
 ) -> dict:
-    logger.debug(payload)
-    payload_type = payload["Type"]
-    payload_event_upload = payload["Event"]["Upload"]
-    logger.info(
-        f"user_id={user_id} payload.type={payload_type} payload.event.upload={payload_event_upload}"
+    upload = payload.get("Event", {}).get("Upload", {})
+    metadata = upload.get("MetaData", {})
+    hook = fields(
+        user_id=str(user_id),
+        hook_type=payload.get("Type"),
+        dataset_id=metadata.get("dataset_id"),
+        filename=metadata.get("filename"),
+        size_bytes=upload.get("Size"),
     )
+    logger.info("tus hook received", extra=hook)
 
     res = service.handle(payload=payload, user_id=user_id)
 
     response.status_code = res.status_code
     response.body = json.dumps(_adapt(res)).encode()
 
-    logger.info(f"status_code={res.status_code}")
+    logger.info(
+        "tus hook answered",
+        extra={**hook, "status_code": res.status_code, "rejected": res.reject_upload},
+    )
 
     return response

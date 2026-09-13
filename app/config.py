@@ -47,6 +47,10 @@ class Config(BaseSettings):
     MINIO_DATASET_BUCKET: str = Field(..., description="Minio dataset bucket")
     MINIO_DEFAULT_REGION_ID: str = Field(..., description="Minio default region id")
     MINIO_USE_SSL: bool = Field(..., description="Minio use SSL")
+    MINIO_TIMEOUT_SECONDS: int = Field(
+        10, description="Connect and read timeout for object storage calls"
+    )
+    MINIO_RETRIES: int = Field(2, description="Retries for object storage calls")
 
     @field_validator("DATABASE_URL", mode="before")
     def build_database_url(cls, value: Optional[str], values: ValidationInfo) -> str:

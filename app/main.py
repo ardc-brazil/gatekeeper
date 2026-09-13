@@ -5,6 +5,9 @@ from app import setup
 
 container = Container()
 
+# Before anything else, so migrations and startup are logged like everything else.
+setup.setup_logging()
+
 # Bring the schema up to head before anything serves a request.
 db = container.db()
 db.run_migrations()
@@ -24,7 +27,7 @@ fastAPIApp = FastAPI(
 
 fastAPIApp.container = container
 
-setup.setup_logging()
+setup.setup_middleware(fastAPIApp)
 setup.setup_routes(fastAPIApp)
 setup.setup_error_handlers(fastAPIApp)
 

@@ -444,7 +444,9 @@ class TestTusErrorScenarios:
     def test_post_finish_hook_missing_type_field_500(
         self, http_client, valid_headers, dataset_fixture
     ):
-        """Test post-finish hook with missing Type field returns 500."""
+        """A payload with no Type is answered in the shape TUSd understands, the
+        same as every other malformed payload. It used to escape as FastAPI's
+        generic `detail`, which TUSd cannot read."""
         # Arrange
         user_id = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
         dataset = dataset_fixture.create_test_dataset()
@@ -459,8 +461,9 @@ class TestTusErrorScenarios:
         # Assert
         assert_status_code(response, 500)
         data = assert_json_response(response)
-        assert "detail" in data
-        assert "'Type'" in data["detail"]
+        assert data["HTTPResponse"]["StatusCode"] == 500
+        assert data["RejectUpload"] is True
+        assert "'Type'" in data["HTTPResponse"]["Body"]
 
     def test_post_finish_hook_missing_event_field_500(
         self, http_client, valid_headers, dataset_fixture
