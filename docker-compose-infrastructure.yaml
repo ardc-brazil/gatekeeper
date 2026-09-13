@@ -13,6 +13,19 @@ services:
     container_name: datamap_gatekeeper
     restart: always
     logging: *logging
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://127.0.0.1:9092/api/v1/health-check/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
     env_file:
       - ${ENV_FILE_PATH}
     environment:
@@ -51,6 +64,11 @@ services:
     container_name: datamap_tusd
     restart: always
     logging: *logging
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "1080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports:
       - "1080:1080"
     env_file:

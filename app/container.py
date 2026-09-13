@@ -6,6 +6,7 @@ from minio import Minio
 
 from app.gateway.doi.doi import DOIGateway
 from app.gateway.object_storage.http_client import build_http_client
+from app.service.health import DependencyHealthService
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
@@ -41,6 +42,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
             "app.controller.v1.internal.dataset_collocation",
+            "app.controller.v1.infrastructure.infrastructure",
         ]
     )
 
@@ -145,6 +147,13 @@ class Container(containers.DeclarativeContainer):
     minio_gateway = providers.Factory(
         ObjectStorageGateway,
         minio_client=minio_client,
+    )
+
+    dependency_health_service = providers.Factory(
+        DependencyHealthService,
+        database=db,
+        object_storage=minio_gateway,
+        bucket=config.MINIO_DATASET_BUCKET,
     )
 
     dataset_repository = providers.Factory(

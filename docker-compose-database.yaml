@@ -12,6 +12,11 @@ services:
     restart: always
     logging: *logging
     container_name: datamap_gatekeeper_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     env_file:
       - ${ENV_FILE_PATH}
     ports:

@@ -75,6 +75,23 @@ jobs:
                STORAGE_DOCKER_VOLUME="${{ runner.temp }}/data-storage" \
                integration-test-up
 
+      # A healthcheck that never passes is worse than none: it reports a broken
+      # system as fine. The postgres one was interpolating from the invoking
+      # shell and had been failing silently.
+      - name: Every container must report healthy
+        run: |
+          for _ in $(seq 1 40); do
+            status=$(docker ps --format "{{.Names}} {{.Status}}" | grep test_integration)
+            if ! echo "$status" | grep -qv "(healthy)"; then
+              echo "$status"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "not every container became healthy:"
+          docker ps --format "table {{.Names}}\t{{.Status}}"
+          exit 1
+
       - name: Seed test data
         run: |
           docker exec datamap_postgres_test_integration \
