@@ -5,10 +5,12 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 
 from app.logging_config import fields, request_id_var, setup_logging  # noqa: F401
+from app.metrics import metrics
 from app.controller.v1.client.client import router as client_router
 from app.controller.v1.infrastructure.infrastructure import (
     router as infrastructure_router,
     protected_router as infrastructure_protected_router,
+    metrics_router,
 )
 from app.controller.v1.tenancy.tenancy import router as tenancies_router
 from app.controller.v1.user.user import router as user_router
@@ -38,7 +40,15 @@ access_logger = logging.getLogger("http.access")
 
 # The Compose healthcheck calls this every ten seconds. Logging it made two
 # thirds of the production log the probe rather than the traffic.
-_PROBE_PATHS = frozenset({"/v1/health-check/", "/api/v1/health-check/"})
+_PROBE_PATHS = frozenset(
+    {
+        "/v1/health-check/",
+        "/api/v1/health-check/",
+        # Scraped every fifteen seconds once Prometheus is pointed at it.
+        "/v1/metrics/",
+        "/api/v1/metrics/",
+    }
+)
 
 
 def is_probe(path: str) -> bool:
@@ -73,13 +83,15 @@ def _log_access(request: Request, status_code: int, started: float) -> None:
     if is_probe(request.url.path):
         return
 
+    elapsed = perf_counter() - started
+    metrics.request(request.method, request.url.path, status_code, elapsed)
     access_logger.info(
         "request",
         extra=fields(
             method=request.method,
             path=request.url.path,
             status_code=status_code,
-            duration_ms=round((perf_counter() - started) * 1000, 1),
+            duration_ms=round(elapsed * 1000, 1),
         ),
     )
 
@@ -93,6 +105,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(client_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_protected_router, prefix="/v1")
+    fastAPIApp.include_router(metrics_router, prefix="/v1")
     fastAPIApp.include_router(internal_dataset_collocation_router, prefix="/v1")
     fastAPIApp.include_router(tus_router, prefix="/v1")
 
