@@ -64,6 +64,29 @@ class TestDependencyHealth(unittest.TestCase):
         for check in report["checks"].values():
             self.assertIsInstance(check["latency_ms"], float)
 
+    def test_a_degraded_dependency_is_written_to_the_log(self):
+        """The access line for this endpoint is suppressed, so this WARNING is
+        the only trace a degraded dependency leaves. It has to exist."""
+        self.object_storage.bucket_exists.side_effect = OSError("no route to host")
+
+        with self.assertLogs("service:health", level="WARNING") as captured:
+            self.service.check()
+
+        self.assertIn("dependency check degraded", captured.output[0])
+
+    def test_that_line_names_which_dependency(self):
+        self.object_storage.bucket_exists.side_effect = OSError("no route to host")
+
+        with self.assertLogs("service:health", level="WARNING") as captured:
+            self.service.check()
+
+        self.assertEqual(captured.records[0].degraded, ["object_storage"])
+
+    def test_nothing_is_logged_while_everything_answers(self):
+        with self.assertRaises(AssertionError):
+            with self.assertLogs("service:health", level="WARNING"):
+                self.service.check()
+
     def test_a_credential_in_the_error_is_not_passed_through(self):
         self.database.session.side_effect = OSError(
             "could not connect: password=hunter2"
