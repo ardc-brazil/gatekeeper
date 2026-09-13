@@ -104,7 +104,7 @@ one. They address different failures and neither substitutes for the other.
 **Rotation bounds the disk.** A `logging` block in Compose with `max-size` and
 `max-file`, applied to every service through a YAML anchor. No container had any
 limit, and `datamap_archivist` — the one service the deploy never replaces — had
-accumulated **5.6 GB in 35 days**, on a host shared with three unrelated
+accumulated **5.6 GB since 2025-12-18**, on a host shared with three unrelated
 projects. The file is large enough that `docker logs --since 10m` takes minutes,
 because the json-file driver has no index and scans the whole thing.
 
@@ -367,8 +367,8 @@ Ordered by what unblocks what, not by size.
 | 2 | ~~`alembic.ini` in the image; migrations exercised~~ | **Done, 2026-09-11.** The application runs `upgrade head` at startup; the suite executes all 31 migrations on every run |
 | 3 | ~~`deploy.yml` on a self-hosted runner~~ | **Done, 2026-09-11.** Merging `main` deploys; the first one moved production off a January branch |
 | 4 | ~~Bounded and archived logs~~ | **Done, 2026-09-11.** Rotation on every service in all four repositories, and the deploy archives a container's log before replacing it |
-| 5 | Structured JSON logs, redaction, request id | Prerequisite for indexing; removes tokens from logs |
-| 6 | Health checks + status page | Lets other people answer "is it up" |
+| 5 | ~~Structured JSON logs, redaction, request id~~ | **Done, 2026-09-11**, in the gatekeeper and the archivist. Awaiting review |
+| 6 | ~~Health checks + dependency report~~ | **Done, 2026-09-11.** Awaiting review. The status page itself stays in the backlog |
 | 7 | Two instances behind nginx | Needs health checks to roll safely |
 | 8 | SOPS secrets | Independent, but needs a rotation window |
 | 9 | Prometheus + custom metrics | Needs somewhere to look, i.e. Grafana from §1 |
@@ -396,13 +396,71 @@ described — see §1: rotation for the disk, archiving for the history. Both ta
 effect at the next deploy, and the first archived log will be whatever the
 running containers have accumulated by then.
 
-**Item 5 is next**, and it is the one this week argued for: one handler
-configured at the root, JSON, mandatory redaction of `X-User-Token`,
-`Authorization` and `X-Api-Secret` — the upload token appears verbatim in the
-production log today — and a `request_id` so one upload can be followed across
-lines. Log `dataset_id`, `hook_type` and `status_code` as fields rather than
-interpolated into the message: that is what turns grepping into counting, which
-is the query that exposed the upload bug in the first place.
+**Item 2 now covers the Archivist**, which this RFC had quietly left out: it had
+no gate, no deploy, and a `make docker-deployment` typed over SSH. The image
+build is its only gate, because the repository has no tests at all —
+`tests/unit` and `tests/integration` are empty directories. That is a low bar,
+and naming it is the point: the service that moves every uploaded file into
+place is the one with no test covering it. The deploy also waits for
+`Scheduler started` and then confirms the container is still running a minute
+later, so a crash loop cannot report success.
+
+The Zipper is deliberately excluded. It has no container, no directory and no
+environment file on the production host: it was never finished, and automating
+the delivery of something that does not run would be theatre.
+
+**Item 5 is written and waiting for review.** One handler at the root, JSON,
+redaction by filter rather than by remembering, and a `request_id` carried in a
+`ContextVar`. One upload now reads as three correlated lines:
+
+```json
+{"message": "tus hook received", "hook_type": "post-finish", "dataset_id": "923b9884…", "logger": "controller:tus", "request_id": "110a59d6…"}
+{"message": "tus hook failed",   "hook_type": "post-finish", "dataset_id": "923b9884…", "error": "Dataset not found: 923b9884…", "request_id": "110a59d6…"}
+{"message": "request", "method": "POST", "path": "/api/v1/tus/hooks", "status_code": 500, "duration_ms": 5.4, "request_id": "110a59d6…"}
+```
+
+`hook_type` and `status_code` are fields, which is what turns grepping into
+counting — the query that exposed the upload bug after ninety days.
+
+One correction to what this RFC claimed: **no credential is in the production
+log today.** `LOG_LEVEL` is `INFO`, so the `logger.debug(payload)` line never
+fired, and a search of the current and archived logs finds nothing. The exposure
+was on the hook's failure path, which logged the payload whole and was taken
+nine times this year; those logs are gone. The path is removed rather than
+depending on the level staying where it is.
+
+Writing it found a defect of the same family it was meant to prevent. A log
+field named `filename` collides with `LogRecord.filename`, and `logging` raises
+rather than overwrite it — so **every TUS hook answered 500**, on the endpoint
+whose bug had just been fixed, in the release meant to make it observable. No
+unit test would have seen it. The integration suite did, on the first run.
+
+The archivist got the same treatment, plus the thing that actually made its
+5.6 GB: an idle run is now `DEBUG`, and a dataset failing the same way every
+minute is reported once with the repeats counted, instead of once a minute
+forever. That repository also got its first tests; it had none.
+
+**Item 6 followed it**, because the same session kept needing it. There is now
+an authenticated `GET /v1/health-check/dependencies` reporting the database and
+the object storage with a status and a latency, which is the answer to "is it
+down or did I hit a bug" that the curation team could not get without a shell.
+The shallow `/health-check/` stays public and unchanged, because the deploy
+waits on it and a degraded object storage must not block a deploy that is
+fixing something else.
+
+The compose healthchecks that came with it are worth recording for how they
+failed. The one written for the gatekeeper used `http://localhost:9092`, which
+is refused inside the container: `localhost` resolves to `::1` first and uvicorn
+binds IPv4 only, so it would have reported unhealthy forever. And the postgres
+healthcheck in the integration stack had been failing since it was written —
+`${POSTGRES_USER}` is interpolated by Compose on the host, where the value only
+exists under `make`. **A healthcheck that never passes is worse than no
+healthcheck**, because it reports a broken system as fine, and neither of these
+was visible in `docker compose config`. CI now fails unless every container
+reaches healthy.
+
+The status page for the curation team stays in the backlog; the endpoint it
+would render exists now.
 
 The Archivist gives item 5 a second target, and an open question. It runs its
 collocation job **every minute**, not the 15 the documentation claims, and emits
@@ -411,8 +469,8 @@ eleven lines per run with nothing to do — three of them an eighty-character
 actually moved a file.
 
 That is not what made 5.6 GB, though. Measured live, the steady state is 11
-lines and 1,404 bytes a minute — 2 MB a day, 71 MB over the 35 days the
-container has been up. A full pass over the file found the rest:
+lines and 1,404 bytes a minute — 2 MB a day, against an average of 21 MB a day
+over the life of the container. A full pass over the file found the rest:
 
 ```
 34,033,376 lines    5,617,352,638 bytes
@@ -420,12 +478,17 @@ container has been up. A full pass over the file found the rest:
   INFO     15,227,223 lines   2.22 GB
 ```
 
-**9.4 million errors**, about 186 a minute for 35 days, nearly all of them one
-line: `Unexpected error processing dataset 82e2913e-…: Server error '500
-Internal Server Error' for url 'http://gatekeeper…'`. That is this year's upload
-bug seen from the other side — the Archivist retrying a collocation the
-Gatekeeper could not answer, with no backoff and nothing watching. The last one
-is timestamped 15:58 on 2026-09-11; since then, none.
+**9.4 million errors**, nearly all of them one line: `Unexpected error
+processing dataset 82e2913e-…: Server error '500 Internal Server Error' for url
+'http://gatekeeper…'`. That is this year's upload bug seen from the other side —
+the Archivist retrying a collocation the Gatekeeper could not answer, with no
+backoff and nothing watching. The last one is timestamped 15:58 on 2026-09-11;
+since then, none.
+
+The same `docker inspect` that dates the log reports **`RestartCount` 169**. The
+container was created on 2025-12-18 and last started on 2026-08-07, so what
+looked like an uptime of five weeks is the latest of many restarts that
+`restart: always` papered over. Nobody was told about those either.
 
 So the 5.6 GB was a symptom, and the log that would have exposed the bug in an
 afternoon was the log nobody could read. It is also the argument for §7: a
@@ -441,8 +504,10 @@ ceiling buys twenty minutes of history instead of a hundred days.
 validation answers 400 where FastAPI's own answers 422; the Casbin auto-reload
 failed to pick up a seeded policy once right after startup and could not be
 reproduced afterwards; `actions/checkout@v4` and `actions/setup-python@v5` warn
-about the Node 20 deprecation; and three datasets may hold a published version
-missing its files, with the query to check them in the runbook.
+about the Node 20 deprecation; three datasets may hold a published version
+missing its files, with the query to check them in the runbook; and the
+`archivist` repository is private, so branch protection is unavailable on the
+free plan and its CI gates nothing until it is made public.
 
 ### What the first three taught us
 
