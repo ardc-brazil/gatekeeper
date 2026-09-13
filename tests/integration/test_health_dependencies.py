@@ -1,6 +1,9 @@
 """Whether the curation team can tell "the system is down" from "I hit a bug"
 without a shell on the production host."""
 
+import subprocess
+import time
+
 from tests.integration.utils.assertions import assert_status_code
 
 
@@ -46,6 +49,23 @@ class TestDependencyReportWhenSomethingIsDown:
         report = response.json()
         assert report["status"] == "degraded"
         assert report["checks"]["object_storage"]["status"] == "down"
+
+    def test_the_degradation_reaches_the_log(
+        self, http_client, valid_headers, object_storage_down
+    ):
+        """The access line for this endpoint is suppressed, so this is the only
+        trace left when a dependency falls over."""
+        http_client.get("/health-check/dependencies", headers=valid_headers)
+        time.sleep(1)
+
+        log = subprocess.run(
+            ["docker", "logs", "--since", "60s", "datamap_gatekeeper_test_integration"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        assert "dependency check degraded" in log.stdout + log.stderr
 
     def test_the_database_is_still_reported_as_up(
         self, http_client, valid_headers, object_storage_down
