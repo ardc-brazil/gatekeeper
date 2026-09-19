@@ -4,11 +4,6 @@ from app.gateway.object_storage.http_client import build_http_client
 
 
 class TestObjectStorageHttpClient(unittest.TestCase):
-    """minio-py defaults to a five minute timeout and five retries, so an
-    unreachable storage holds a request worker for up to twenty-five minutes.
-    MinIO has gone down before; the API answering nothing is worse than an
-    upload failing."""
-
     def test_the_read_timeout_is_bounded(self):
         client = build_http_client(timeout_seconds=10, retries=2)
 

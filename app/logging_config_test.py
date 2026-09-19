@@ -112,10 +112,6 @@ class TestRedaction(unittest.TestCase):
 
 
 class TestReservedAttributes(unittest.TestCase):
-    """`logging` refuses a record whose extras collide with LogRecord's own
-    attributes, and raises where the call site is. A field named `filename` made
-    every TUS hook answer 500."""
-
     def tearDown(self):
         root = logging.getLogger()
         for handler in list(root.handlers):

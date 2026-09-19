@@ -1,11 +1,3 @@
-"""What the collocation service says while nothing is happening.
-
-The Archivist polls `/internal/datasets/collocation/pending` every minute, and
-this service wrote two INFO lines for each of those, forever. After the probe
-lines were removed, it was the largest remaining source in the production log:
-six of seventeen lines over ten minutes, all of them saying nothing happened.
-"""
-
 import logging
 import unittest
 from unittest.mock import MagicMock

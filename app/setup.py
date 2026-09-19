@@ -65,9 +65,7 @@ def setup_middleware(fastAPIApp: FastAPI) -> None:
         try:
             response = await call_next(request)
         except Exception:
-            # uvicorn's own access line is emitted outside this context and
-            # carries no request id, so a failed request would lose its only
-            # correlatable record.
+            # uvicorn's own line is emitted outside this context, without the id.
             _log_access(request, 500, started)
             request_id_var.reset(token)
             raise

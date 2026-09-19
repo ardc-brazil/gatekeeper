@@ -56,8 +56,7 @@ class TusService:
             else:
                 return TusResult(200, "")
         except Exception as e:
-            # Never the whole payload: it carries the signed upload token in
-            # Event.HTTPRequest.Header.
+            # Never the whole payload: it carries the signed upload token.
             self._logger.error(
                 "tus hook failed",
                 extra=fields(
