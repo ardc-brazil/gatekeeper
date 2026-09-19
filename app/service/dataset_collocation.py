@@ -9,6 +9,7 @@ from app.repository.datafile import DataFileRepository
 from app.model.dataset import FileCollocationStatus
 from app.model.db.dataset import Dataset as DatasetDBModel, DataFile as DataFileDBModel
 from app.logging_config import fields
+from app.metrics import metrics
 
 
 class DatasetCollocationService:
@@ -32,7 +33,7 @@ class DatasetCollocationService:
         datasets = self._dataset_repository.fetch_by_collocation_status(
             statuses=[None, FileCollocationStatus.PENDING]
         )
-        # The Archivist asks every minute and the answer is almost always none.
+        metrics.collocation_pending(len(datasets))
         if datasets:
             self._logger.info(
                 "datasets pending collocation", extra=fields(count=len(datasets))

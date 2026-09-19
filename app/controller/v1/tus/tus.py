@@ -9,6 +9,7 @@ from dependency_injector.wiring import inject, Provide
 
 from app.controller.interceptor.user_parser import parse_tus_user_id
 from app.logging_config import fields
+from app.metrics import metrics
 from app.model.tus import TusResult
 from app.service.tus import TusService
 
@@ -57,6 +58,7 @@ async def post(
     response.status_code = res.status_code
     response.body = json.dumps(_adapt(res)).encode()
 
+    metrics.tus_hook(payload.get("Type"), res.status_code)
     logger.info(
         "tus hook answered",
         extra={**hook, "status_code": res.status_code, "rejected": res.reject_upload},

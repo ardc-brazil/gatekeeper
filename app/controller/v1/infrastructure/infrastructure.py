@@ -1,10 +1,11 @@
 from dependency_injector.wiring import inject, Provide
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
 from app.controller.interceptor.authorization import authorize
+from app.metrics import CONTENT_TYPE, metrics
 from app.service.health import DependencyHealthService
 
 router = APIRouter(prefix="/health-check", tags=["health-check"])
@@ -16,6 +17,17 @@ protected_router = APIRouter(
     tags=["health-check"],
     dependencies=[Depends(authenticate), Depends(authorize)],
 )
+
+
+metrics_router = APIRouter(
+    tags=["metrics"],
+    dependencies=[Depends(authenticate), Depends(authorize)],
+)
+
+
+@metrics_router.get("/metrics")
+async def prometheus_metrics():
+    return Response(content=metrics.render(), media_type=CONTENT_TYPE)
 
 
 @router.get("/")
