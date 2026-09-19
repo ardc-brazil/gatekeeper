@@ -36,9 +36,17 @@ from app.controller.interceptor.exception_handler import (
 
 access_logger = logging.getLogger("http.access")
 
-# The Compose healthcheck calls this every ten seconds. Logging it made two
-# thirds of the production log the probe rather than the traffic.
-_PROBE_PATHS = frozenset({"/v1/health-check/", "/api/v1/health-check/"})
+# The Compose healthcheck calls the first every ten seconds, and the second has
+# no reader but a monitor. A degraded dependency writes its own WARNING line, so
+# nothing is lost by leaving both out of the access log.
+_PROBE_PATHS = frozenset(
+    {
+        "/v1/health-check/",
+        "/api/v1/health-check/",
+        "/v1/health-check/dependencies/",
+        "/api/v1/health-check/dependencies/",
+    }
+)
 
 
 def is_probe(path: str) -> bool:
