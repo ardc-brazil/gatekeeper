@@ -5,10 +5,6 @@ from app.service.health import DependencyHealthService
 
 
 class TestDependencyHealth(unittest.TestCase):
-    """ "I can't upload" has had at least two causes, the tenancy filter and
-    MinIO being down, and no way to tell them apart without a shell on the
-    host. This is what the curation team reads instead."""
-
     def setUp(self):
         self.database = MagicMock()
         self.object_storage = MagicMock()
@@ -65,8 +61,6 @@ class TestDependencyHealth(unittest.TestCase):
             self.assertIsInstance(check["latency_ms"], float)
 
     def test_a_degraded_dependency_is_written_to_the_log(self):
-        """The access line for this endpoint is suppressed, so this WARNING is
-        the only trace a degraded dependency leaves. It has to exist."""
         self.object_storage.bucket_exists.side_effect = OSError("no route to host")
 
         with self.assertLogs("service:health", level="WARNING") as captured:

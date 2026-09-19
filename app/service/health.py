@@ -11,8 +11,7 @@ from app.logging_config import Redactor, fields
 class DependencyHealthService:
     """Reports whether the things the API depends on are answering.
 
-    Kept separate from the liveness endpoint the deploy polls: a degraded
-    object storage must not stop a deploy that is fixing something else.
+    Separate from the liveness endpoint on purpose: the deploy waits on that one.
     """
 
     def __init__(
@@ -46,8 +45,7 @@ class DependencyHealthService:
         try:
             result = check()
         except Exception as e:
-            # A connection error carries the DSN, and the DSN carries the
-            # password.
+            # A connection error carries the DSN, and the DSN carries the password.
             result = {"status": "down", "error": Redactor.scrub_text(str(e))}
         result["latency_ms"] = round((perf_counter() - started) * 1000, 1)
         return result

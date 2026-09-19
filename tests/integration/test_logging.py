@@ -1,6 +1,3 @@
-"""The log is a product surface: it must be parseable, correlatable, and free of
-credentials. These assert that against the running container, not a formatter."""
-
 import json
 import subprocess
 import time
@@ -56,8 +53,6 @@ class TestLogIsStructured:
         assert response.headers.get("X-Request-Id") == given
 
     def test_the_liveness_probe_is_not_written_to_the_log(self, http_client):
-        """The Compose healthcheck calls it every ten seconds. In production it
-        was 61 of 91 lines over ten minutes."""
         marker = f"req-{uuid.uuid4()}"
 
         http_client.get("/health-check/", headers={"X-Request-Id": marker})
@@ -95,13 +90,8 @@ class TestCredentialsNeverReachTheLog:
     def test_a_failing_tus_hook_does_not_log_the_upload_token(
         self, http_client, valid_headers
     ):
-        """The hook payload carries the signed upload token in its header block,
-        and the failure path used to log the payload whole. That path was taken
-        nine times in production this year, once per lost upload.
-
-        The token has to be a valid one, or authorisation rejects the request
-        before the handler runs and this asserts nothing.
-        """
+        """The token has to be valid, or authorisation rejects the request before
+        the handler runs and this asserts nothing."""
         payload = create_tus_payload(
             user_id=SEEDED_USER_ID,
             dataset_id=str(uuid.uuid4()),  # nonexistent: drives the failure path

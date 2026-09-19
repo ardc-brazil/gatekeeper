@@ -1,6 +1,3 @@
-"""Whether the curation team can tell "the system is down" from "I hit a bug"
-without a shell on the production host."""
-
 import subprocess
 import time
 
@@ -24,15 +21,11 @@ class TestDependencyReport:
             assert isinstance(check["latency_ms"], (int, float))
 
     def test_it_is_not_public(self, http_client):
-        """It names what is reachable and how slowly. That is for the people who
-        operate the system."""
         response = http_client.get("/health-check/dependencies")
 
         assert response.status_code in (401, 403), response.status_code
 
     def test_liveness_stays_shallow_and_public(self, http_client):
-        """The deploy waits on this one, so it must not start failing because
-        the object storage is unhappy."""
         response = http_client.get("/health-check/")
 
         assert_status_code(response, 200)
@@ -53,8 +46,6 @@ class TestDependencyReportWhenSomethingIsDown:
     def test_the_degradation_reaches_the_log(
         self, http_client, valid_headers, object_storage_down
     ):
-        """The access line for this endpoint is suppressed, so this is the only
-        trace left when a dependency falls over."""
         http_client.get("/health-check/dependencies", headers=valid_headers)
         time.sleep(1)
 
@@ -70,8 +61,6 @@ class TestDependencyReportWhenSomethingIsDown:
     def test_the_database_is_still_reported_as_up(
         self, http_client, valid_headers, object_storage_down
     ):
-        """One dependency failing must not make the report useless about the
-        others."""
         response = http_client.get("/health-check/dependencies", headers=valid_headers)
 
         assert response.json()["checks"]["database"]["status"] == "up"

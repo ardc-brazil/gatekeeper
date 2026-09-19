@@ -651,8 +651,8 @@ class DatasetService:
         if version.doi is None:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
-        # Order matters: a DOI that is findable while its snapshot is missing is a
-        # citation that resolves to nothing, and the transition cannot be retried.
+        # Before the state change: a findable DOI with no snapshot cannot be
+        # retried, because FINDABLE -> FINDABLE is rejected.
         if new_state == DOIState.FINDABLE:
             self._publish_dataset_snapshot(
                 dataset_id=dataset_id,

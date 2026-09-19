@@ -20,9 +20,7 @@ _STANDARD_RECORD_ATTRS = frozenset(
 
 
 def fields(**values: Any) -> dict[str, Any]:
-    """Extras for a log record. `logging` raises rather than overwrite one of
-    LogRecord's own attributes, so a field innocently named `filename` or
-    `module` takes down the call site instead of the log line."""
+    """Extras for a log record, renaming any key that LogRecord already uses."""
     return {
         f"log_{key}" if key in _STANDARD_RECORD_ATTRS else key: value
         for key, value in values.items()
@@ -32,9 +30,8 @@ def fields(**values: Any) -> dict[str, Any]:
 class Redactor:
     KEY_PATTERN = re.compile(_SECRET_WORDS, re.IGNORECASE)
 
-    # A credential that reached the record already interpolated into the message
-    # cannot be found by key, so it is matched where it sits: after a key that
-    # names it, through any quoting or list wrapper the repr added.
+    # Matches a credential already interpolated into a message, which no
+    # key-based check can reach.
     VALUE_PATTERN = re.compile(
         r"(['\"]?[\w\-]*(?:" + _SECRET_WORDS + r")[\w\-]*['\"]?\s*[:=]\s*\[?\s*['\"]?)"
         r"([^'\",\}\]\s]+)",
@@ -90,8 +87,7 @@ class JsonFormatter(jsonlogger.JsonFormatter):
 def _module_levels() -> dict[str, int | str]:
     return {
         "uvicorn": settings.LOG_LEVEL,
-        # Replaced by the `http.access` line the middleware emits, which carries
-        # the request id and the status code as fields rather than as prose.
+        # Replaced by the `http.access` line the middleware emits.
         "uvicorn.access": logging.WARNING,
         "uvicorn.error": settings.LOG_LEVEL,
         "tests": logging.INFO,
@@ -113,8 +109,7 @@ def setup_logging(stream: TextIO = None) -> None:
     root.addHandler(handler)
     root.setLevel(settings.LOG_LEVEL)
 
-    # Levels only. A handler here would emit every line a second time, in the
-    # other format, which is what the previous setup did.
+    # Levels only: a handler here emits every line a second time.
     for name, level in _module_levels().items():
         logger = logging.getLogger(name)
         logger.setLevel(level)

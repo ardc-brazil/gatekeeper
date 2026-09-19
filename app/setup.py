@@ -36,9 +36,8 @@ from app.controller.interceptor.exception_handler import (
 
 access_logger = logging.getLogger("http.access")
 
-# The Compose healthcheck calls the first every ten seconds, and the second has
-# no reader but a monitor. A degraded dependency writes its own WARNING line, so
-# nothing is lost by leaving both out of the access log.
+# Polled on a timer, so an access line each would swamp the log. A degraded
+# dependency writes its own WARNING regardless.
 _PROBE_PATHS = frozenset(
     {
         "/v1/health-check/",
@@ -62,9 +61,7 @@ def setup_middleware(fastAPIApp: FastAPI) -> None:
         try:
             response = await call_next(request)
         except Exception:
-            # uvicorn's own access line is emitted outside this context and
-            # carries no request id, so a failed request would lose its only
-            # correlatable record.
+            # uvicorn's own line is emitted outside this context, without the id.
             _log_access(request, 500, started)
             request_id_var.reset(token)
             raise
