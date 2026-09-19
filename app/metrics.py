@@ -1,16 +1,3 @@
-"""Counters for the failures that went unnoticed.
-
-Every serious problem found in September 2026 was already visible in data
-nobody was looking at: nine uploads lost over ninety days, 9.4 million
-collocation errors, 169 restarts, three public DOIs with no page. Structured
-logs tell whoever is already investigating. A counter with an alert is what
-starts the investigation.
-
-Plain `prometheus_client` rather than an instrumentation framework: the
-middleware already measures what an instrumentator would, and one dependency
-that does nothing surprising beats a second middleware stack.
-"""
-
 import re
 
 from prometheus_client import (
@@ -31,8 +18,7 @@ _UUID = re.compile(
 
 
 def normalise_path(path: str) -> str:
-    """One series per dataset id would be a cardinality explosion, which is how
-    a metrics backend falls over."""
+    """Replace ids with a placeholder, so one series does not become one per id."""
     return _UUID.sub("/{id}", path)
 
 
@@ -94,5 +80,4 @@ class Metrics:
         return generate_latest(self.registry)
 
 
-# One per process, which is what a registry is. Tests build their own.
 metrics = Metrics(registry=REGISTRY)

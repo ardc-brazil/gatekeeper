@@ -8,6 +8,7 @@ from app.repository.dataset import DatasetRepository
 from app.repository.datafile import DataFileRepository
 from app.model.dataset import FileCollocationStatus
 from app.model.db.dataset import Dataset as DatasetDBModel, DataFile as DataFileDBModel
+from app.logging_config import fields
 from app.metrics import metrics
 
 
@@ -28,12 +29,17 @@ class DatasetCollocationService:
         Fetch all datasets with file_collocation_status IS NULL or 'PENDING'.
         NULL is treated as PENDING for legacy datasets.
         """
-        self._logger.info("Fetching datasets pending file collocation")
+        self._logger.debug("fetching datasets pending file collocation")
         datasets = self._dataset_repository.fetch_by_collocation_status(
             statuses=[None, FileCollocationStatus.PENDING]
         )
         metrics.collocation_pending(len(datasets))
-        self._logger.info(f"Found {len(datasets)} datasets pending collocation")
+        if datasets:
+            self._logger.info(
+                "datasets pending collocation", extra=fields(count=len(datasets))
+            )
+        else:
+            self._logger.debug("no datasets pending collocation")
         return datasets
 
     def get_dataset_files(self, dataset_id: UUID) -> List[DataFileDBModel]:

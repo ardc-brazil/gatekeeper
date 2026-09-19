@@ -18,9 +18,10 @@ class TestWhatCountsAsAProbe(unittest.TestCase):
     def test_the_path_without_the_root_prefix_is_one_too(self):
         self.assertTrue(is_probe("/v1/health-check/"))
 
-    def test_the_dependency_report_is_not(self):
-        """Someone asked for that one, so it is a request and belongs in the log."""
-        self.assertFalse(is_probe("/api/v1/health-check/dependencies"))
+    def test_the_dependency_report_is_a_probe_too(self):
+        """It has no reader other than a monitor, and a degraded dependency
+        writes its own WARNING line, so the access entry adds nothing."""
+        self.assertTrue(is_probe("/api/v1/health-check/dependencies"))
 
     def test_an_ordinary_route_is_not(self):
         self.assertFalse(is_probe("/api/v1/datasets"))

@@ -38,13 +38,14 @@ from app.controller.interceptor.exception_handler import (
 
 access_logger = logging.getLogger("http.access")
 
-# The Compose healthcheck calls this every ten seconds. Logging it made two
-# thirds of the production log the probe rather than the traffic.
+# Polled on a timer, so an access line each would swamp the log. A degraded
+# dependency writes its own WARNING regardless.
 _PROBE_PATHS = frozenset(
     {
         "/v1/health-check/",
         "/api/v1/health-check/",
-        # Scraped every fifteen seconds once Prometheus is pointed at it.
+        "/v1/health-check/dependencies/",
+        "/api/v1/health-check/dependencies/",
         "/v1/metrics/",
         "/api/v1/metrics/",
     }

@@ -1,9 +1,3 @@
-"""The counters, against the running service.
-
-Every serious failure this year was visible in data nobody was looking at. These
-assert the data now exists and moves when the thing it counts happens.
-"""
-
 import uuid
 
 from tests.integration.fixtures.tus_auth import create_tus_payload
@@ -37,8 +31,6 @@ class TestTheEndpoint:
         assert response.status_code in (401, 403), response.status_code
 
     def test_scraping_it_does_not_fill_the_access_log(self, http_client, valid_headers):
-        """Prometheus reads it every fifteen seconds. #81 is the reason this is
-        asserted rather than assumed."""
         import subprocess
         import time
 
@@ -71,7 +63,7 @@ class TestTheCountersMove:
 
         payload = create_tus_payload(
             user_id=SEEDED_USER_ID,
-            dataset_id=str(uuid.uuid4()),  # nonexistent, so the hook fails
+            dataset_id=str(uuid.uuid4()),
             filename="test.txt",
         )
         assert_status_code(
@@ -95,4 +87,4 @@ class TestTheCountersMove:
 
         body = self._metrics(http_client, valid_headers)
         assert 'path="/api/v1/datasets/{id}"' in body
-        assert dataset["id"] not in body, "one series per dataset would explode"
+        assert dataset["id"] not in body

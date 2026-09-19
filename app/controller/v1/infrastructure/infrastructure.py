@@ -19,7 +19,6 @@ protected_router = APIRouter(
 )
 
 
-# Its own router: /v1/metrics is where a scraper looks, not under health-check.
 metrics_router = APIRouter(
     tags=["metrics"],
     dependencies=[Depends(authenticate), Depends(authorize)],
@@ -28,8 +27,6 @@ metrics_router = APIRouter(
 
 @metrics_router.get("/metrics")
 async def prometheus_metrics():
-    """Scraped by Prometheus. Authenticated like the dependency report: it names
-    every route, how often each fails and how slow it is."""
     return Response(content=metrics.render(), media_type=CONTENT_TYPE)
 
 
