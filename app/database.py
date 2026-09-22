@@ -5,11 +5,14 @@ from typing import Callable
 import logging
 
 from pydantic import PostgresDsn
-from sqlalchemy import create_engine, orm
+from sqlalchemy import create_engine, orm, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
 Base = declarative_base()
+
+# Arbitrary but fixed: every instance has to name the same lock.
+MIGRATION_LOCK_KEY = 4915623
 
 
 class Database:
@@ -28,20 +31,27 @@ class Database:
         Base.metadata.create_all(self._engine)
 
     def run_migrations(self) -> None:
-        """Bring the schema up to head.
+        """Bring the schema up to head, one instance at a time.
 
-        The schema used to be built from the model metadata, which meant no
-        migration was ever executed by the application or by any test. Alembic
-        resolves the connection through `migrations/env.py`, which reads the
-        same settings the app does.
+        Every instance runs this at startup, so the lock is what keeps two of
+        them from migrating the same database at once.
         """
         config = Config("alembic.ini")
         # Keep alembic away from the logging configuration: fileConfig would
         # disable every logger it does not name, leaving the app silent.
         config.attributes["configure_logger"] = False
-        self._logger.info("running database migrations")
-        command.upgrade(config, "head")
-        self._logger.info("database migrations are up to date")
+
+        with self._engine.connect() as connection:
+            self._logger.info("waiting for the migration lock")
+            connection.execute(text(f"SELECT pg_advisory_lock({MIGRATION_LOCK_KEY})"))
+            try:
+                self._logger.info("running database migrations")
+                command.upgrade(config, "head")
+                self._logger.info("database migrations are up to date")
+            finally:
+                connection.execute(
+                    text(f"SELECT pg_advisory_unlock({MIGRATION_LOCK_KEY})")
+                )
 
     @contextmanager
     def session(self) -> Callable[..., AbstractContextManager[Session]]:
