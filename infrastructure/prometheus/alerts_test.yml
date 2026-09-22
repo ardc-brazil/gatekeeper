@@ -1,0 +1,92 @@
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: an upload hook that answers 5xx alerts
+    input_series:
+      - series: 'datamap_tus_hook_total{outcome="error",hook_type="post-finish",job="gatekeeper"}'
+        values: "0 0 0 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UploadHooksFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              outcome: error
+              hook_type: post-finish
+              job: gatekeeper
+            exp_annotations:
+              summary: "A TUS hook answered 5xx"
+              description: >-
+                An upload was rejected by the API. In 2026 this failed every
+                time for ninety days and nobody was told, losing three uploads.
+
+  - interval: 1m
+    name: accepted hooks alone do not alert
+    input_series:
+      - series: 'datamap_tus_hook_total{outcome="accepted",hook_type="post-finish",job="gatekeeper"}'
+        values: "0 1 2 3 4 5 6 7 8 9 10 11"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: UploadHooksFailing
+        exp_alerts: []
+
+  - interval: 1m
+    name: a backlog that drains does not alert
+    input_series:
+      - series: 'datamap_collocation_pending{job="gatekeeper"}'
+        values: "5+0x30 0+0x120"
+    alert_rule_test:
+      - eval_time: 150m
+        alertname: CollocationBacklogNotDraining
+        exp_alerts: []
+
+  - interval: 1m
+    name: a backlog under two hours old does not alert
+    input_series:
+      - series: 'datamap_collocation_pending{job="gatekeeper"}'
+        values: "3+0x150"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: CollocationBacklogNotDraining
+        exp_alerts: []
+
+  - interval: 1m
+    name: a backlog stuck for two hours alerts
+    input_series:
+      - series: 'datamap_collocation_pending{job="gatekeeper"}'
+        values: "3+0x150"
+    alert_rule_test:
+      - eval_time: 130m
+        alertname: CollocationBacklogNotDraining
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: gatekeeper
+            exp_annotations:
+              summary: "Datasets have been waiting for collocation for two hours"
+              description: >-
+                The Archivist retries every minute and never gives up, so a
+                backlog that does not drain means a dataset it can never finish.
+
+  - interval: 1m
+    name: the gatekeeper disappearing alerts after five minutes
+    input_series:
+      - series: 'up{job="gatekeeper",instance="datamap_gatekeeper:9095"}'
+        values: "1 1 1 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: GatekeeperDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: GatekeeperDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: gatekeeper
+              instance: datamap_gatekeeper:9095
+            exp_annotations:
+              summary: "The gatekeeper has not been scrapeable for five minutes"

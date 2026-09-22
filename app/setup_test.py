@@ -18,8 +18,3 @@ class TestWhatCountsAsAProbe(unittest.TestCase):
 
     def test_a_route_that_merely_mentions_it_is_not(self):
         self.assertFalse(is_probe("/api/v1/datasets/health-check-results"))
-
-    def test_the_metrics_endpoint_is_a_probe(self):
-        """Prometheus scrapes it every fifteen seconds. Logging that would put
-        the log back where #81 found it."""
-        self.assertTrue(is_probe("/api/v1/metrics"))

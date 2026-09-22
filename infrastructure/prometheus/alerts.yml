@@ -1,0 +1,55 @@
+groups:
+  - name: datamap
+    rules:
+      - alert: UploadHooksFailing
+        expr: increase(datamap_tus_hook_total{outcome="error"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A TUS hook answered 5xx"
+          description: >-
+            An upload was rejected by the API. In 2026 this failed every time
+            for ninety days and nobody was told, losing three uploads.
+
+      - alert: SnapshotPublicationFailing
+        expr: increase(datamap_snapshot_publish_total{outcome="error"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A dataset snapshot failed to publish"
+          description: >-
+            A DOI may now be findable with no page behind it. Check
+            docs/runbooks/snapshot-audit.md.
+
+      - alert: CollocationBacklogNotDraining
+        # `for`, not a range: min_over_time fires within minutes of a fresh
+        # Prometheus, because the range only sees the history that exists.
+        expr: datamap_collocation_pending > 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Datasets have been waiting for collocation for two hours"
+          description: >-
+            The Archivist retries every minute and never gives up, so a backlog
+            that does not drain means a dataset it can never finish.
+
+      - alert: GatekeeperDown
+        expr: up{job="gatekeeper"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The gatekeeper has not been scrapeable for five minutes"
+
+      - alert: ServerErrorsElevated
+        expr: >-
+          sum(rate(datamap_http_requests_total{status=~"5.."}[10m]))
+          / sum(rate(datamap_http_requests_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 5% of requests are failing"

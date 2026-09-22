@@ -1,12 +1,18 @@
 import uvicorn
 from fastapi import FastAPI
+from app.config import settings
 from app.container import Container
+from app.metrics_server import start_metrics_server
 from app import setup
 
 container = Container()
 
 # Before anything else, so migrations and startup are logged like everything else.
 setup.setup_logging()
+
+# Its own port, published to no host: a Prometheus scrape config cannot send
+# this API's headers, so the docker network is the boundary.
+start_metrics_server(settings.METRICS_PORT)
 
 # Bring the schema up to head before anything serves a request.
 db = container.db()

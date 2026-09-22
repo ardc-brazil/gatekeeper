@@ -10,7 +10,6 @@ from app.controller.v1.client.client import router as client_router
 from app.controller.v1.infrastructure.infrastructure import (
     router as infrastructure_router,
     protected_router as infrastructure_protected_router,
-    metrics_router,
 )
 from app.controller.v1.tenancy.tenancy import router as tenancies_router
 from app.controller.v1.user.user import router as user_router
@@ -46,8 +45,6 @@ _PROBE_PATHS = frozenset(
         "/api/v1/health-check/",
         "/v1/health-check/dependencies/",
         "/api/v1/health-check/dependencies/",
-        "/v1/metrics/",
-        "/api/v1/metrics/",
     }
 )
 
@@ -104,7 +101,6 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(client_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_protected_router, prefix="/v1")
-    fastAPIApp.include_router(metrics_router, prefix="/v1")
     fastAPIApp.include_router(internal_dataset_collocation_router, prefix="/v1")
     fastAPIApp.include_router(tus_router, prefix="/v1")
 
