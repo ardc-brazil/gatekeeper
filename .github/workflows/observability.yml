@@ -1,0 +1,95 @@
+name: observability
+
+# Its own workflow, and its own trigger: Prometheus, Grafana, Loki and Alloy
+# hold their own data and have no reason to restart when the application
+# changes — least of all during a deploy, which is when they are most wanted.
+# They do need to move when their own configuration does.
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker-compose-observability.yaml
+      - infrastructure/prometheus/**
+      - infrastructure/grafana/**
+      - infrastructure/loki/**
+      - infrastructure/alloy/**
+      - .github/workflows/observability.yml
+
+concurrency:
+  group: observability-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prometheus config and alert rules
+        run: |
+          docker run --rm -v "$PWD/infrastructure/prometheus:/etc/prometheus" \
+            -w /etc/prometheus --entrypoint promtool prom/prometheus:v2.53.0 \
+            check config prometheus.yml
+          docker run --rm -v "$PWD/infrastructure/prometheus:/etc/prometheus" \
+            -w /etc/prometheus --entrypoint promtool prom/prometheus:v2.53.0 \
+            test rules alerts_test.yml
+
+  apply:
+    needs: [validate]
+    # Never `pull_request`: code from a fork must not run on the production host.
+    runs-on: [self-hosted, production]
+    environment: production
+
+    env:
+      ENV_FILE_PATH: ${{ vars.ENVIRONMENT_DIR || '/home/datamap/environment' }}/gatekeeper.prod.env
+      # The runner checks out into its own directory, and Compose would name the
+      # volumes after it. Without this the stack comes back up with empty ones.
+      COMPOSE_PROJECT_NAME: gatekeeper
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show what is being applied
+        run: git log --oneline -1
+
+      # The configuration is bind-mounted, so Compose sees no change to the
+      # container and would leave it running with the old file.
+      - name: Apply
+        run: |
+          docker compose -f docker-compose-observability.yaml up -d --force-recreate
+
+      # Not the gatekeeper: the application is deployed separately and may be
+      # restarting for reasons that have nothing to do with this change.
+      - name: The observability targets must come back
+        run: |
+          for _ in $(seq 1 30); do
+            result=$(docker exec datamap_prometheus wget -qO- \
+              'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%21%3D%22gatekeeper%22%7D%3D%3D0' \
+              2>/dev/null || true)
+            case "$result" in
+              *'"result":[]'*)
+                echo "every observability target is up"
+                exit 0
+                ;;
+            esac
+            sleep 10
+          done
+          echo "a target never came back:"
+          docker exec datamap_prometheus wget -qO- \
+            'http://127.0.0.1:9090/api/v1/targets?state=active' || true
+          exit 1
+
+      - name: Container status
+        if: always()
+        run: |
+          docker ps --filter "name=datamap_prometheus" --filter "name=datamap_grafana" \
+            --filter "name=datamap_loki" --filter "name=datamap_alloy" \
+            --format "table {{.Names}}\t{{.Status}}"
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          for c in datamap_prometheus datamap_grafana datamap_loki datamap_alloy; do
+            echo "--- $c ---"
+            docker logs --tail 50 "$c" 2>&1 || true
+          done
