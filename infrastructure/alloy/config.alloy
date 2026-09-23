@@ -1,0 +1,67 @@
+discovery.docker "containers" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "15s"
+}
+
+// The host runs three unrelated projects. Their logs are not ours to collect,
+// and shipping them would be most of the volume.
+discovery.relabel "datamap" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(datamap_.*)"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = "datamap-prod"
+	}
+}
+
+loki.source.docker "datamap" {
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.relabel.datamap.output
+	forward_to    = [loki.process.datamap.receiver]
+	relabel_rules = discovery.relabel.datamap.rules
+}
+
+loki.process "datamap" {
+	forward_to = [loki.write.default.receiver]
+
+	// Everything the applications emit is JSON now, so the fields worth
+	// querying become labels rather than substrings.
+	stage.json {
+		expressions = {
+			level      = "level",
+			logger     = "logger",
+			request_id = "request_id",
+		}
+	}
+
+	// level and logger only: a label per request_id would be one stream per
+	// request, which is how a Loki index falls over.
+	stage.labels {
+		values = {
+			level  = "",
+			logger = "",
+		}
+	}
+
+	stage.label_drop {
+		values = ["filename"]
+	}
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://datamap_loki:3100/loki/api/v1/push"
+	}
+}

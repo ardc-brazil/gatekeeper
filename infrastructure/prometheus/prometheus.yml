@@ -18,3 +18,11 @@ scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+
+  - job_name: loki
+    static_configs:
+      - targets: ["datamap_loki:3100"]
+
+  - job_name: alloy
+    static_configs:
+      - targets: ["datamap_alloy:12345"]
