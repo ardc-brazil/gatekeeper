@@ -189,6 +189,43 @@ class TestTheTenancy:
         )
 
 
+class TestTheUser:
+    """Who made the request, next to which tenancy they made it under. Both are
+    identifiers that arrive in headers; neither authenticates anything."""
+
+    def test_it_is_on_the_line(self, http_client, valid_headers):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get("/datasets/", headers={**valid_headers, "X-Request-Id": marker})
+        time.sleep(1)
+
+        assert _access_lines(marker)[0]["user_id"] == valid_headers["X-User-Id"]
+
+    def test_it_is_on_a_line_that_failed(self, http_client, valid_headers):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get(
+            f"/datasets/{uuid.uuid4()}",
+            headers={**valid_headers, "X-Request-Id": marker},
+        )
+        time.sleep(1)
+
+        line = _access_lines(marker)[0]
+        assert line["status_code"] >= 400
+        assert line["user_id"] == valid_headers["X-User-Id"]
+
+    def test_a_request_without_one_reports_nothing_rather_than_guessing(
+        self, http_client
+    ):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get("/health-check/dependencies", headers={"X-Request-Id": marker})
+        time.sleep(1)
+
+        lines = _access_lines(marker)
+        assert lines == [] or lines[0]["user_id"] is None
+
+
 class TestCredentialsInABody:
     def test_a_secret_in_the_body_is_not_logged(self, http_client, valid_headers):
         """POST /clients takes an API secret in its body. Logging bodies without
