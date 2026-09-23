@@ -38,6 +38,12 @@ from app.controller.interceptor.exception_handler import (
 
 access_logger = logging.getLogger("http.access")
 
+
+def parse_tenancies(header: str) -> list[str]:
+    if not header:
+        return []
+    return [tenancy.strip() for tenancy in header.split(";") if tenancy.strip()]
+
 # Enough for the metadata bodies this API takes; a larger one is summarised
 # rather than logged.
 MAX_LOGGED_BODY_BYTES = 8192
@@ -118,6 +124,9 @@ def _log_access(
         path=request.url.path,
         status_code=status_code,
         duration_ms=round(elapsed * 1000, 1),
+        # An identifier, not a credential: which tenancy a request was made
+        # under decides what it could see.
+        tenancies=parse_tenancies(request.headers.get("x-datamap-tenancies")),
     )
     if body is not None:
         entry["body"] = body

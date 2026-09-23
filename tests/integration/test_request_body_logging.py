@@ -114,6 +114,81 @@ class TestWhatIsLogged:
         assert _access_lines(marker)[0]["request_id"] == marker
 
 
+class TestTheTenancy:
+    """Which tenancy a request was made under decides what it can see, so it
+    belongs on every line. It arrives in a header, which is where the
+    credentials are too — the value is logged, not the header block."""
+
+    def test_it_is_on_a_line_with_a_body(self, http_client, valid_headers):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.post(
+            "/datasets/",
+            json={
+                "name": f"dataset-{uuid.uuid4()}",
+                "data": {},
+                "tenancy": "datamap/production/data-amazon",
+            },
+            headers={**valid_headers, "X-Request-Id": marker},
+        )
+        time.sleep(1)
+
+        assert _access_lines(marker)[0]["tenancies"] == [
+            "datamap/production/data-amazon"
+        ]
+
+    def test_it_is_on_a_line_without_one(self, http_client, valid_headers):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get("/datasets/", headers={**valid_headers, "X-Request-Id": marker})
+        time.sleep(1)
+
+        assert _access_lines(marker)[0]["tenancies"] == [
+            "datamap/production/data-amazon"
+        ]
+
+    def test_it_is_on_a_line_that_failed(self, http_client, valid_headers):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get(
+            f"/datasets/{uuid.uuid4()}",
+            headers={**valid_headers, "X-Request-Id": marker},
+        )
+        time.sleep(1)
+
+        line = _access_lines(marker)[0]
+        assert line["status_code"] >= 400
+        assert line["tenancies"] == ["datamap/production/data-amazon"]
+
+    def test_several_are_kept_apart(self, http_client, valid_headers):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get(
+            "/datasets/",
+            headers={
+                **valid_headers,
+                "X-Request-Id": marker,
+                "X-Datamap-Tenancies": "datamap/production/data-amazon;datamap/lab",
+            },
+        )
+        time.sleep(1)
+
+        assert _access_lines(marker)[0]["tenancies"] == [
+            "datamap/production/data-amazon",
+            "datamap/lab",
+        ]
+
+    def test_a_request_without_one_says_so(self, http_client):
+        marker = f"req-{uuid.uuid4()}"
+
+        http_client.get("/health-check/dependencies", headers={"X-Request-Id": marker})
+        time.sleep(1)
+
+        assert (
+            _access_lines(marker) == [] or _access_lines(marker)[0]["tenancies"] == []
+        )
+
+
 class TestCredentialsInABody:
     def test_a_secret_in_the_body_is_not_logged(self, http_client, valid_headers):
         """POST /clients takes an API secret in its body. Logging bodies without
