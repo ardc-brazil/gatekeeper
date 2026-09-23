@@ -50,6 +50,23 @@ docker-prune:
 	@echo "${On_Green}Images prune${Color_Off}"
 	time docker image prune -a -f
 
+observability-run: # Usage: make ENV_FILE_PATH=../environment/gatekeeper.prod.env observability-run
+	@echo "${On_Green}Starting Prometheus and Grafana${Color_Off}"
+	docker compose -f docker-compose-observability.yaml up -d
+
+observability-down:
+	@echo "${On_Green}Stopping Prometheus and Grafana${Color_Off}"
+	docker compose -f docker-compose-observability.yaml down
+
+observability-check:
+	@echo "${On_Green}Validating the Prometheus configuration and alert rules${Color_Off}"
+	docker run --rm -v $(PWD)/infrastructure/prometheus:/etc/prometheus \
+		-w /etc/prometheus --entrypoint promtool prom/prometheus:v2.53.0 \
+		check config prometheus.yml
+	docker run --rm -v $(PWD)/infrastructure/prometheus:/etc/prometheus \
+		-w /etc/prometheus --entrypoint promtool prom/prometheus:v2.53.0 \
+		test rules alerts_test.yml
+
 docker-deployment: docker-build docker-stop docker-down docker-run docker-prune
 
 docker-deployment-no-prune: docker-build docker-stop docker-down docker-run

@@ -1,0 +1,69 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "10"
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: datamap_prometheus
+    restart: always
+    logging: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    # Not published: reached through Grafana, on the docker network.
+    expose:
+      - "9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gatekeeper_gatekeeper-network
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: datamap_grafana
+    restart: always
+    logging: *logging
+    env_file:
+      - ${ENV_FILE_PATH}
+    environment:
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks:
+      - gatekeeper_gatekeeper-network
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  gatekeeper_gatekeeper-network:
+    external: true
+    name: gatekeeper_gatekeeper-network
