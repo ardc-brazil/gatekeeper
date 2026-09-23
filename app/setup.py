@@ -1,3 +1,4 @@
+import json
 import logging
 from time import perf_counter
 from uuid import uuid4
@@ -37,6 +38,34 @@ from app.controller.interceptor.exception_handler import (
 
 access_logger = logging.getLogger("http.access")
 
+# Enough for the metadata bodies this API takes; a larger one is summarised
+# rather than logged.
+MAX_LOGGED_BODY_BYTES = 8192
+
+
+async def _body_for_log(request: Request) -> object:
+    """The request body, if it is JSON and small enough to be worth a line.
+
+    Headers are never logged: they carry X-Api-Secret and X-User-Token. The
+    body can carry a credential too — POST /clients takes one — so it goes
+    through the same redaction filter as everything else, by key.
+    """
+    if request.method in ("GET", "HEAD", "DELETE", "OPTIONS"):
+        return None
+    if not request.headers.get("content-type", "").startswith("application/json"):
+        return None
+
+    body = await request.body()
+    if not body:
+        return None
+    if len(body) > MAX_LOGGED_BODY_BYTES:
+        return {"omitted": "too large", "bytes": len(body)}
+    try:
+        return json.loads(body)
+    except ValueError:
+        return {"omitted": "not valid json", "bytes": len(body)}
+
+
 # Polled on a timer, so an access line each would swamp the log. A degraded
 # dependency writes its own WARNING regardless.
 _PROBE_PATHS = frozenset(
@@ -59,37 +88,40 @@ def setup_middleware(fastAPIApp: FastAPI) -> None:
         request_id = request.headers.get("X-Request-Id") or str(uuid4())
         token = request_id_var.set(request_id)
         started = perf_counter()
+        body = await _body_for_log(request)
         try:
             response = await call_next(request)
         except Exception:
             # uvicorn's own line is emitted outside this context, without the id.
-            _log_access(request, 500, started)
+            _log_access(request, 500, started, body)
             request_id_var.reset(token)
             raise
 
         try:
             response.headers["X-Request-Id"] = request_id
-            _log_access(request, response.status_code, started)
+            _log_access(request, response.status_code, started, body)
             return response
         finally:
             request_id_var.reset(token)
 
 
-def _log_access(request: Request, status_code: int, started: float) -> None:
+def _log_access(
+    request: Request, status_code: int, started: float, body: object = None
+) -> None:
     if is_probe(request.url.path):
         return
 
     elapsed = perf_counter() - started
     metrics.request(request.method, request.url.path, status_code, elapsed)
-    access_logger.info(
-        "request",
-        extra=fields(
-            method=request.method,
-            path=request.url.path,
-            status_code=status_code,
-            duration_ms=round(elapsed * 1000, 1),
-        ),
+    entry = fields(
+        method=request.method,
+        path=request.url.path,
+        status_code=status_code,
+        duration_ms=round(elapsed * 1000, 1),
     )
+    if body is not None:
+        entry["body"] = body
+    access_logger.info("request", extra=entry)
 
 
 def setup_routes(fastAPIApp: FastAPI) -> None:
