@@ -44,6 +44,17 @@ groups:
         annotations:
           summary: "The gatekeeper has not been scrapeable for five minutes"
 
+      - alert: TargetDown
+        expr: up{job!="gatekeeper"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} has not been scrapeable for ten minutes"
+          description: >-
+            Loki and Alloy have no healthcheck of their own: their images carry
+            no shell to run one with, so this is how their absence is noticed.
+
       - alert: ServerErrorsElevated
         expr: >-
           sum(rate(datamap_http_requests_total{status=~"5.."}[10m]))

@@ -59,9 +59,54 @@ services:
     networks:
       - gatekeeper_gatekeeper-network
 
+  loki:
+    image: grafana/loki:3.7.8
+    container_name: datamap_loki
+    restart: always
+    logging: *logging
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./infrastructure/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    expose:
+      - "3100"
+    # No healthcheck: the image is distroless, with no shell and no http client
+    # to run one with. Prometheus scrapes it instead, and TargetDown alerts.
+    networks:
+      - gatekeeper_gatekeeper-network
+
+  alloy:
+    image: grafana/alloy:v1.19.2
+    container_name: datamap_alloy
+    restart: always
+    logging: *logging
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./infrastructure/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Reading other containers' logs means talking to the daemon. See
+      # docs/runbooks/observability.md for what that grants.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:12345/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    networks:
+      - gatekeeper_gatekeeper-network
+
 volumes:
   prometheus_data:
   grafana_data:
+  loki_data:
+  alloy_data:
 
 networks:
   gatekeeper_gatekeeper-network:
