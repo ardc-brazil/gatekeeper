@@ -52,6 +52,10 @@ class Config(BaseSettings):
     )
     MINIO_RETRIES: int = Field(2, description="Retries for object storage calls")
 
+    METRICS_PORT: int = Field(
+        9095, description="Port the Prometheus metrics are served on"
+    )
+
     @field_validator("DATABASE_URL", mode="before")
     def build_database_url(cls, value: Optional[str], values: ValidationInfo) -> str:
         if isinstance(value, str):

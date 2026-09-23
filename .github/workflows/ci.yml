@@ -33,6 +33,17 @@ jobs:
 
       - run: ruff format --check .
 
+      # The alert rules are code with no other test: a rule that never fires
+      # looks exactly like a system that never fails.
+      - name: Prometheus config and alert rules
+        run: |
+          docker run --rm -v "$PWD/infrastructure/prometheus:/etc/prometheus" \
+            -w /etc/prometheus --entrypoint promtool prom/prometheus:v2.53.0 \
+            check config prometheus.yml
+          docker run --rm -v "$PWD/infrastructure/prometheus:/etc/prometheus" \
+            -w /etc/prometheus --entrypoint promtool prom/prometheus:v2.53.0 \
+            test rules alerts_test.yml
+
   unit:
     runs-on: ubuntu-latest
     steps:
