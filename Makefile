@@ -70,6 +70,20 @@ observability-check:
 docker-deployment: docker-build docker-stop docker-down docker-run docker-prune
 
 docker-deployment-no-prune: docker-build docker-stop docker-down docker-run
+
+# One instance at a time, and without touching the database, the object storage
+# or TUSd. `--wait` blocks on the healthcheck, so the second is only replaced
+# once the first is answering again.
+docker-deployment-rolling: docker-build
+	@echo "${On_Green}Replacing the first instance${Color_Off}"
+	docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
+		up -d --no-deps --force-recreate --wait --wait-timeout 180 gatekeeper
+	@echo "${On_Green}Replacing the second instance${Color_Off}"
+	docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
+		up -d --no-deps --force-recreate --wait --wait-timeout 180 gatekeeper_b
+	@echo "${On_Green}Bringing up anything else that changed${Color_Off}"
+	docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
+		up -d --wait --wait-timeout 180
 	
 # Python commands
 python-env:

@@ -35,7 +35,43 @@ services:
     depends_on:
       - gatekeeper-db
     networks:
-      - gatekeeper_gatekeeper-network
+      gatekeeper_gatekeeper-network:
+        # Shared with the second instance, so anything inside the network that
+        # asks for `gatekeeper` reaches whichever is up. TUSd's hook URL is the
+        # one that matters.
+        aliases:
+          - gatekeeper
+
+  gatekeeper_b:
+    image: gatekeeper
+    container_name: datamap_gatekeeper_b
+    restart: always
+    logging: *logging
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://127.0.0.1:9092/api/v1/health-check/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    env_file:
+      - ${ENV_FILE_PATH}
+    environment:
+      - POSTGRES_HOST=datamap_gatekeeper_db
+    ports:
+      - '9192:9092'
+    depends_on:
+      - gatekeeper-db
+    networks:
+      gatekeeper_gatekeeper-network:
+        aliases:
+          - gatekeeper
 
   minio:
     image: quay.io/minio/minio:RELEASE.2024-03-21T23-13-43Z
