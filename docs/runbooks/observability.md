@@ -1,8 +1,8 @@
-# Metrics and alerts
+# Metrics, logs and alerts
 
-Prometheus scrapes the gatekeeper; Grafana reads Prometheus. Neither is part of
-the automated deploy: they hold their own data and do not need replacing when
-the application changes.
+Prometheus scrapes the gatekeeper, Loki holds the logs, Alloy ships them, and
+Grafana reads both. None of it is part of the automated deploy: they hold their
+own data and do not need replacing when the application changes.
 
 ## Starting it
 
@@ -56,6 +56,42 @@ emailed. Choosing a destination — email, Slack, a webhook — is the step that
 turns this from "someone can see it" into "someone is told", and it is the
 remaining half of the problem this was built for.
 
+## Where the logs are
+
+Alloy reads the containers' logs through the Docker daemon and pushes them to
+Loki. **Only `datamap_*` containers**: the host runs three unrelated projects
+and their logs are not ours to collect.
+
+Loki keeps them on the host disk, in the `loki_data` volume, for **90 days**.
+Measured on 2026-09-23, every container together produces about 8 MB a day, of
+which MinIO is 98% — so 90 days is under a gigabyte before compression, against
+110 GB free.
+
+Not on the NAS: the volume does not justify it, and Loki's write-ahead log
+wants fsync and locking semantics that NFS does not guarantee.
+
+### Querying
+
+In Grafana, pick the Loki datasource. The fields the applications log as JSON
+are labels, so:
+
+```logql
+{container="datamap_gatekeeper", level="ERROR"}
+{level="ERROR"} |= "tus hook failed"
+{container="datamap_gatekeeper"} | json | request_id="110a59d6-…"
+```
+
+`level` and `logger` are labels. `request_id` deliberately is **not**: a label
+per request is one stream per request, which is how a Loki index falls over.
+Filter on it with `| json | request_id="…"` instead.
+
+### What Alloy is allowed to do
+
+It mounts the Docker socket. That is root-equivalent access to the host, which
+is the price of reading other containers' logs and worth knowing rather than
+discovering. The mount is read-only and the config ships only `datamap_*`, but
+neither of those constrains what the socket itself permits.
+
 ## Changing an alert
 
 The rules are code and have tests:
@@ -81,7 +117,7 @@ docker exec datamap_prometheus wget -qO- --post-data='' http://127.0.0.1:9090/-/
 docker exec datamap_prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/targets?state=active'
 ```
 
-Expect `"health":"up"` for the `gatekeeper` job. `down` with a DNS error means
+Expect `"health":"up"` for `gatekeeper`, `loki` and `alloy`. `down` with a DNS error means
 the observability stack is not on the same docker network as the application —
 it joins `gatekeeper_gatekeeper-network`, which the application stack creates.
 Start the application first.
