@@ -1,7 +1,10 @@
 """HTTP client wrapper for integration tests."""
 
 import requests
+from requests.adapters import HTTPAdapter
 from typing import Dict, Optional
+from urllib3.util import Retry
+
 from tests.integration.config import config
 
 
@@ -13,6 +16,22 @@ class HttpClient:
         self.base_url = config.base_url
         self.timeout = config.timeout
         self.session = requests.Session()
+        # requests defaults to no retries at all, so a connection closed
+        # between being picked from the pool and being written to surfaces as a
+        # test failure. `read=0` on purpose: a slow endpoint must still fail.
+        self.session.mount(
+            "http://",
+            HTTPAdapter(
+                max_retries=Retry(
+                    total=3,
+                    connect=3,
+                    read=0,
+                    status=0,
+                    allowed_methods=None,
+                    backoff_factor=0.2,
+                )
+            ),
+        )
 
     def _make_request(
         self, method: str, path: str, headers: Optional[Dict[str, str]] = None, **kwargs
