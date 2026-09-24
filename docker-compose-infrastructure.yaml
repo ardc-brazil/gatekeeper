@@ -22,9 +22,13 @@ services:
           "-q",
           "http://127.0.0.1:9092/api/v1/health-check/",
         ]
-      interval: 10s
+      # start_interval polls every second until the first success, so a rolling
+      # deploy waits about two seconds per instance instead of six. interval is
+      # what it costs afterwards, when nothing is starting.
+      interval: 30s
+      start_interval: 1s
       timeout: 5s
-      retries: 6
+      retries: 3
       start_period: 60s
     env_file:
       - ${ENV_FILE_PATH}
@@ -56,9 +60,13 @@ services:
           "-q",
           "http://127.0.0.1:9092/api/v1/health-check/",
         ]
-      interval: 10s
+      # start_interval polls every second until the first success, so a rolling
+      # deploy waits about two seconds per instance instead of six. interval is
+      # what it costs afterwards, when nothing is starting.
+      interval: 30s
+      start_interval: 1s
       timeout: 5s
-      retries: 6
+      retries: 3
       start_period: 60s
     env_file:
       - ${ENV_FILE_PATH}

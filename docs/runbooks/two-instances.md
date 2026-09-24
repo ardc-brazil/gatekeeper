@@ -21,8 +21,8 @@ deploy is an outage.
 
 ```
 upstream gatekeeper {
-    server 127.0.0.1:9092 max_fails=2 fail_timeout=10s;
-    server 127.0.0.1:9192 max_fails=2 fail_timeout=10s;
+    server 127.0.0.1:9092 max_fails=1 fail_timeout=5s;
+    server 127.0.0.1:9192 max_fails=1 fail_timeout=5s;
 }
 ```
 
@@ -99,6 +99,27 @@ sudo nginx -t && sudo systemctl reload nginx
 The second container can stay running; nothing reaches it once nginx stops
 pointing there.
 
+## How long the rollout takes, and why it is not shorter
+
+`docker compose up --wait` returns the moment the healthcheck passes. The
+timeout on it is a ceiling, not a duration: an instance is healthy in about two
+seconds, and that is when the command returns.
+
+The floor is set by nginx, not by the container. After a failure nginx ejects an
+instance for `fail_timeout`, so replacing the second one before the first is
+retried leaves it with nowhere to send. Measured with a request every 200ms:
+
+| rollout | failed requests |
+|---|---|
+| ~25s, first attempt | 0 |
+| **5s, no pause between instances** | **10 × 502** |
+| 17s, `fail_timeout 10s` and a 12s pause | 0 |
+| **11s, `fail_timeout 5s` and a 7s pause** | **0** |
+
+Making it faster is what broke it. `UPSTREAM_RECOVERY` in the Makefile is that
+pause, and it has to stay above the `fail_timeout` in the nginx config — change
+one and change the other.
+
 ## Why `proxy_connect_timeout 2s`
 
 It is the setting that makes the difference, and not the obvious one. When a
@@ -118,8 +139,8 @@ Measured against two instances with a request every 200ms, killing one:
 ## What this does and does not buy
 
 It removes the **process** as a single point of failure: a crash, an OOM or a
-deploy stops being an outage. A graceful rolling restart was measured at 313
-requests with zero failures.
+deploy stops being an outage. A graceful rolling restart was measured at 319
+requests with zero failures, in eleven seconds.
 
 It does **not** remove the machine. Two instances on one host is redundancy
 against software, not against hardware. If the host goes, everything goes.

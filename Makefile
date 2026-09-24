@@ -72,12 +72,22 @@ docker-deployment: docker-build docker-stop docker-down docker-run docker-prune
 docker-deployment-no-prune: docker-build docker-stop docker-down docker-run
 
 # One instance at a time, and without touching the database, the object storage
-# or TUSd. `--wait` blocks on the healthcheck, so the second is only replaced
-# once the first is answering again.
+# or TUSd. `--wait` returns the moment the healthcheck passes — the timeout is a
+# ceiling, not a duration — which is about two seconds.
+#
+# UPSTREAM_RECOVERY is not waiting for the container. nginx ejects an instance
+# for `fail_timeout` after a failure, so replacing the second one before the
+# first is retried leaves it with nowhere to send. Measured with a request every
+# 200ms: 10 failures without this pause, 0 with it. It must stay above the
+# fail_timeout in infrastructure/nginx/datamap.conf.
+UPSTREAM_RECOVERY ?= 7
+
 docker-deployment-rolling: docker-build
 	@echo "${On_Green}Replacing the first instance${Color_Off}"
 	docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
 		up -d --no-deps --force-recreate --wait --wait-timeout 180 gatekeeper
+	@echo "${On_Green}Waiting ${UPSTREAM_RECOVERY}s for nginx to retry it${Color_Off}"
+	sleep ${UPSTREAM_RECOVERY}
 	@echo "${On_Green}Replacing the second instance${Color_Off}"
 	docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
 		up -d --no-deps --force-recreate --wait --wait-timeout 180 gatekeeper_b
