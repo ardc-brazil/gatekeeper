@@ -1,0 +1,67 @@
+name: mirror minio
+
+# MinIO withdrew the community image from every public registry: Docker Hub
+# answers 404, quay.io answers 401 even with an anonymous token, and
+# registry.min.io wants AIStor credentials. The only copy left is the one
+# already on the production host, which is why this runs there.
+#
+# Triggered by hand, because it needs to run once and then only if the tag
+# changes. It does not pull: it pushes what is already cached.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The MinIO tag to mirror, as it exists on the host
+        required: true
+        default: RELEASE.2024-03-21T23-13-43Z
+
+concurrency:
+  group: mirror-minio
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    # Never `pull_request`: this runs on the production host.
+    runs-on: [self-hosted, production]
+
+    permissions:
+      packages: write
+
+    env:
+      SOURCE: quay.io/minio/minio
+      TARGET: ghcr.io/${{ github.repository_owner }}/minio
+
+    steps:
+      - name: The image must already be here
+        run: |
+          if ! docker image inspect "$SOURCE:${{ inputs.tag }}" >/dev/null 2>&1; then
+            echo "$SOURCE:${{ inputs.tag }} is not on this host, and it cannot be"
+            echo "pulled from anywhere. Nothing to mirror."
+            docker images | grep -i minio || true
+            exit 1
+          fi
+          docker image inspect "$SOURCE:${{ inputs.tag }}" \
+            --format 'digest: {{index .RepoDigests 0}}'
+
+      - name: Sign in to the registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push the copy
+        run: |
+          docker tag "$SOURCE:${{ inputs.tag }}" "$TARGET:${{ inputs.tag }}"
+          docker push "$TARGET:${{ inputs.tag }}"
+
+      - name: Report the digest to pin
+        run: |
+          docker image inspect "$TARGET:${{ inputs.tag }}" \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep ghcr.io
+          echo
+          echo "The package starts private. Make it public under"
+          echo "github.com/orgs/${{ github.repository_owner }}/packages, or CI"
+          echo "cannot pull it either."
+
+      - name: Sign out
+        if: always()
+        run: docker logout ghcr.io || true
