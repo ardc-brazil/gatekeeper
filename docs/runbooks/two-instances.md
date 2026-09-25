@@ -74,20 +74,26 @@ sudo systemctl reload nginx
 **6. Confirm.**
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://datamap.pcs.usp.br/api/v1/health-check/
 for i in $(seq 1 20); do
-  curl -s https://datamap.pcs.usp.br/api/v1/health-check/ >/dev/null || echo "falhou"
+  curl -s -o /dev/null https://datamap.pcs.usp.br/api/openapi.json || echo "falhou"
 done
 ```
 
-Twenty requests, no output. Then watch which instance answers:
+Twenty requests, no output. Then count them on each instance:
 
 ```bash
-docker logs --since 1m datamap_gatekeeper | grep -c '"logger": "http.access"'
-docker logs --since 1m datamap_gatekeeper_b | grep -c '"logger": "http.access"'
+docker logs --since 3m datamap_gatekeeper   | grep -c openapi.json
+docker logs --since 3m datamap_gatekeeper_b | grep -c openapi.json
 ```
 
-Both counts above zero means the upstream is balancing.
+Roughly ten each. **Not** `/api/v1/health-check/`: that path is deliberately
+kept out of the access log, so counting it returns zero however well the
+upstream is working, which looks exactly like a failed change.
+
+Requests the Archivist makes on its own reach both instances through the
+`gatekeeper` network alias, with no nginx involved — so a even split of
+`collocation/pending` proves nothing about this step. Count a path that only
+arrives from outside.
 
 ## Going back
 
