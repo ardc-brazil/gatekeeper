@@ -33,6 +33,13 @@ services:
     container_name: datamap_pgadmin
     env_file:
       - ${ENV_FILE_PATH}
+    environment:
+      # It reaches the production database with write access from the public
+      # internet, so one factor is not enough. Registration is forced at the
+      # next login; `authenticator` only, because the `email` method the image
+      # offers by default needs SMTP that is not configured.
+      - PGADMIN_CONFIG_MFA_FORCE_REGISTRATION=True
+      - PGADMIN_CONFIG_MFA_SUPPORTED_METHODS=['authenticator']
     ports:
       - 5050:5050
     volumes:
