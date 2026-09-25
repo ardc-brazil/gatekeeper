@@ -179,32 +179,41 @@ jobs:
           dir="${{ vars.LOG_ARCHIVE_DIR || '/home/datamap/logs' }}"
           mkdir -p "$dir"
           stamp=$(date -u +%Y%m%dT%H%M%SZ)
-          for c in datamap_gatekeeper datamap_tusd datamap_min_io datamap_gatekeeper_db; do
+          for c in datamap_gatekeeper datamap_gatekeeper_b datamap_tusd datamap_min_io datamap_gatekeeper_db; do
             docker inspect "$c" >/dev/null 2>&1 || continue
             docker logs -t "$c" 2>&1 | gzip > "$dir/$c-$stamp.log.gz"
           done
           find "$dir" -name '*.log.gz' -mtime +30 -delete
           du -sh "$dir"
 
-      - name: Restart the stack
-        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-deployment-no-prune
+      # One instance at a time, so nginx always has one to send to. The
+      # application runs `alembic upgrade head` at startup and the advisory lock
+      # serialises that; a failed migration means the instance never becomes
+      # healthy, `--wait` never returns, and this step fails.
+      - name: Roll the instances
+        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-deployment-rolling
 
-      # The application runs `alembic upgrade head` at startup, so a failed
-      # migration means the container never becomes healthy and this fails.
-      - name: Wait for the API to answer
+      - name: Both instances must answer
         run: |
-          for _ in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" \
-              http://localhost:9092/api/v1/health-check/ || true)
-            if [ "$code" = "200" ]; then
-              echo "healthy"
-              exit 0
+          for port in 9092 9192; do
+            ok=""
+            for _ in $(seq 1 60); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" \
+                http://localhost:$port/api/v1/health-check/ || true)
+              if [ "$code" = "200" ]; then
+                ok="yes"
+                break
+              fi
+              sleep 5
+            done
+            if [ -z "$ok" ]; then
+              echo "the instance on $port did not answer within five minutes."
+              docker logs --tail 100 datamap_gatekeeper
+              docker logs --tail 100 datamap_gatekeeper_b
+              exit 1
             fi
-            sleep 5
+            echo "$port healthy"
           done
-          echo "The API did not answer within five minutes."
-          docker logs --tail 100 datamap_gatekeeper
-          exit 1
 
       - name: Confirm the schema is at head
         run: docker exec datamap_gatekeeper python3 -m alembic current
@@ -215,7 +224,9 @@ jobs:
 
       - name: Logs on failure
         if: failure()
-        run: docker logs --tail 200 datamap_gatekeeper
+        run: |
+          docker logs --tail 200 datamap_gatekeeper
+          docker logs --tail 200 datamap_gatekeeper_b
 
       - name: Reclaim disk
         if: success()
