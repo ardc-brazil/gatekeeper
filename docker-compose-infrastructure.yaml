@@ -82,7 +82,7 @@ services:
           - gatekeeper
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-03-21T23-13-43Z
+    image: ghcr.io/ardc-brazil/minio:RELEASE.2024-03-21T23-13-43Z@sha256:9aa076e72064fb3c49ee954a028c7b9608b5c2f852b951992f6d328514a2010d
     command: server /storage --console-address ":9001"
     container_name: datamap_min_io
     restart: always
