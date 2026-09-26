@@ -20,17 +20,50 @@ ssh datamap-prod 'ss -tn state established "( sport = :1080 )" | wc -l'
 
 A count of 1 is the header alone, so it means zero connections.
 
-Two rules apply to every step below.
+Three rules apply to every step below.
 
 **`docker restart` does not re-read `env_file`.** Environment variables are
 fixed when a container is created. A restart after changing a value changes
 nothing and looks like it worked. Always `up -d --force-recreate`.
 
-**Never paste a new value into a terminal.** Generate it on the host, into the
-file. `openssl rand -base64 32 | tr -d '/+=' | cut -c1-32` is enough for a
-machine credential. The exceptions are the credentials a person logs in with —
-MinIO root, Grafana, pgAdmin, the console's basic auth, DataCite — where
-whoever will type it has to choose it.
+**Run compose from the checkout that deploys**, which is the runner's:
+
+```bash
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+export COMPOSE_PROJECT_NAME=gatekeeper
+```
+
+`~/gatekeeper` is a second, manual checkout and it lags — it was two commits
+behind while this was written. Compose read from there would quietly reinstate
+the infrastructure of whatever commit it happens to sit on, including the MinIO
+image pin.
+
+**Never paste a new value into a terminal.** `scripts/set_env_value.py` prompts
+for it with the echo off, writes it into the file, and prints only an eight
+character fingerprint:
+
+```bash
+python3 scripts/set_env_value.py ~/environment/gatekeeper.prod.env DOI_PASSWORD
+```
+
+Two files hold the same credential when they print the same fingerprint, which
+is how a shared secret is checked without anyone reading it, and the only thing
+about a credential that is safe to quote in a message:
+
+```bash
+python3 scripts/env_fingerprint.py ~/environment/frontend.prod.env AUTH_FILE_UPLOAD_TOKEN_SECRET
+```
+
+`openssl rand -base64 32 | tr -d '/+=' | cut -c1-32` is enough for a machine
+credential. The credentials a person logs in with — MinIO root, Grafana,
+pgAdmin, the console's basic auth, DataCite — have to be chosen by whoever will
+type them.
+
+**A value cannot contain `#`, `$` or a backtick.** The Makefile reads these
+files with `include`, so they are parsed as make syntax before a container sees
+them. Measured: `POSTGRES_PASSWORD=abc#def` reaches make as `abc`, silently —
+the deploy would apply a password nobody chose and report nothing. The setter
+refuses those characters rather than leave it to be discovered.
 
 ## The order, and why
 
@@ -61,12 +94,11 @@ change. The three application access keys do not move with this step.
 The console login is the reason to rotate it: the root username has been public
 since 2024, and the community console has no second factor.
 
-Edit `MINIO_ROOT_PASSWORD` in `~/environment/gatekeeper.prod.env`, then
+Set `MINIO_ROOT_PASSWORD` in `~/environment/gatekeeper.prod.env`, then
 
 ```bash
-cd ~/gatekeeper
-make ENV_FILE_PATH=~/environment/gatekeeper.prod.env docker-build
-docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
+docker compose --env-file ~/environment/gatekeeper.prod.env \
+  -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
   up -d --force-recreate --wait minio
 ```
 
@@ -104,24 +136,25 @@ Removing it before the consumer is verified turns a rotation into an outage.
 
 ## 6. Upload token
 
-`AUTH_FILE_UPLOAD_TOKEN_SECRET` is an HMAC secret shared by gatekeeper and the
-webapp. Both sign with it, so both have to move together; tokens already issued
-stop validating.
+The webapp's BFF signs a JWT with `AUTH_FILE_UPLOAD_TOKEN_SECRET`
+(`pages/api/auth/token.ts`) and gatekeeper verifies it, so the two have to hold
+the same value and move together. The tokens last a day, so rotating invalidates
+up to 24 hours of issued ones — in practice whoever has an upload open or a page
+already loaded.
 
-Update it in `~/environment/gatekeeper.prod.env` **and**
+Set it in `~/environment/gatekeeper.prod.env` **and**
 `~/environment/frontend.prod.env` — the same value in both — then recreate the
-API instances and the webapp. A mismatch here fails every upload with an
-authorisation error that says nothing about the cause, so check that the two
-files agree before recreating anything:
+API instances and the webapp. A mismatch fails every upload with an
+authorisation error that says nothing about its cause, so confirm the two files
+agree before recreating anything:
 
 ```bash
-ssh datamap-prod 'cd ~/environment;
-  for f in gatekeeper.prod.env frontend.prod.env; do
-    grep -E "^AUTH_FILE_UPLOAD_TOKEN_SECRET=" $f | cut -d= -f2- | sha1sum;
-  done'
+for f in gatekeeper.prod.env frontend.prod.env; do
+  python3 scripts/env_fingerprint.py ~/environment/$f AUTH_FILE_UPLOAD_TOKEN_SECRET
+done
 ```
 
-Two identical hashes, and no value on screen.
+Two identical fingerprints, and no value on screen.
 
 ## 7. Postgres
 
@@ -136,8 +169,14 @@ first.
 
 1. New value into all four files: `gatekeeper.prod.env`,
    `archivist.prod.env`, `archivist-test.prod.env`,
-   `scripts-gatekeeper.prod.env`. They must match, checked the way the upload
-   token is checked above.
+   `scripts-gatekeeper.prod.env`. Four identical fingerprints before anything
+   is recreated:
+
+   ```bash
+   for f in gatekeeper archivist archivist-test scripts-gatekeeper; do
+     python3 scripts/env_fingerprint.py ~/environment/$f.prod.env POSTGRES_PASSWORD
+   done
+   ```
 2. `ALTER USER gk_admin PASSWORD '<new>';`
 3. Roll the API (`docker-deployment-rolling`), then recreate the archivist.
 
