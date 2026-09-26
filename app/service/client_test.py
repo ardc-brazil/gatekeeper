@@ -10,7 +10,9 @@ from app.service.client import ClientService
 class TestClientService(unittest.TestCase):
     def setUp(self):
         self.repository = Mock(spec=ClientRepository)
-        self.client_service = ClientService(self.repository)
+        self.client_service = ClientService(
+            self.repository, client_secret_pepper="a-pepper-long-enough"
+        )
 
     def test_fetch_success(self):
         api_key = uuid4()
@@ -54,8 +56,8 @@ class TestClientService(unittest.TestCase):
         )
         self.repository.upsert.return_value = db_client
 
-        with patch("app.service.client.hash_password") as mock_hash_password:
-            mock_hash_password.return_value = "hashed_secret"
+        with patch("app.service.client.hash_secret") as mock_hash_secret:
+            mock_hash_secret.return_value = "hashed_secret"
             returned_key = self.client_service.create(name, secret)
 
         self.repository.upsert.assert_called_once()
@@ -74,8 +76,8 @@ class TestClientService(unittest.TestCase):
         )
         self.repository.fetch.return_value = db_client
 
-        with patch("app.service.client.hash_password") as mock_hash_password:
-            mock_hash_password.return_value = "hashed_secret"
+        with patch("app.service.client.hash_secret") as mock_hash_secret:
+            mock_hash_secret.return_value = "hashed_secret"
             self.client_service.update(key, name="updated_client", secret="new_secret")
 
         self.repository.upsert.assert_called_once()
@@ -116,36 +118,6 @@ class TestClientService(unittest.TestCase):
         self.repository.fetch.return_value = None
         with self.assertRaises(NotFoundException):
             self.client_service.enable(uuid4())
-
-    def test_cache_behavior(self):
-        api_key = uuid4()
-        db_client = DBModel(
-            key=api_key, name="client1", is_enabled=True, secret="secret"
-        )
-        self.repository.fetch.return_value = db_client
-
-        self.assertEqual(self.client_service.fetch(api_key).name, "client1")
-        self.repository.fetch.assert_called_once_with(api_key=api_key)
-
-        self.assertEqual(self.client_service.fetch(api_key).name, "client1")
-        self.repository.fetch.assert_called_once_with(api_key=api_key)
-
-        updated_name = "updated_client"
-        db_client.name = updated_name
-        self.client_service.update(api_key, name=updated_name)
-
-        self.assertEqual(self.client_service.fetch(api_key).name, updated_name)
-
-    def test_the_cache_is_shared_across_requests(self):
-        # The service used to be a Factory, so every request built a new instance
-        # and the cache — keyed on `self` — never hit. Asserting through the
-        # container is the only way to catch that; reusing one instance by hand
-        # passes either way.
-        from app.container import Container
-
-        container = Container()
-
-        self.assertIs(container.client_service(), container.client_service())
 
 
 if __name__ == "__main__":

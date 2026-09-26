@@ -34,6 +34,11 @@ class Config(BaseSettings):
     AUTH_FILE_UPLOAD_TOKEN_SECRET: str = Field(
         ..., description="Secret key for file upload token"
     )
+    AUTH_CLIENT_SECRET_PEPPER: str = Field(
+        ...,
+        min_length=16,
+        description="Server-side key the stored client secret hashes are derived from",
+    )
     CASBIN_MODEL_FILE: str = Field(..., description="Casbin model file")
 
     DOI_BASE_URL: str = Field(..., description="Base URL for DOI service")

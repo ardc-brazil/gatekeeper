@@ -3,7 +3,7 @@ from uuid import UUID
 import jwt
 from app.exception.unauthorized import UnauthorizedException
 from app.service.client import ClientService
-from app.service.secret import check_password
+from app.service.secret import hash_secret, is_legacy_hash, verify_secret
 from casbin import SyncedEnforcer
 
 
@@ -13,10 +13,12 @@ class AuthService:
         client_service: ClientService,
         casbin_enforcer: SyncedEnforcer,
         file_upload_token_secret: str,
+        client_secret_pepper: str,
     ) -> None:
         self._client_service = client_service
         self._casbin_enforcer = casbin_enforcer
         self._file_upload_token_secret = file_upload_token_secret
+        self._client_secret_pepper = client_secret_pepper
 
     def authorize_client(self, api_key: str, salted_api_secret: str) -> None:
         if api_key is None or salted_api_secret is None:
@@ -25,14 +27,27 @@ class AuthService:
         client = self._client_service.fetch(api_key)
 
         if client is None:
-            logging.info(f"api_key {api_key} not found")
+            logging.info("api_key not found")
             raise UnauthorizedException("wrong_credentials")
 
-        if not check_password(
-            password=salted_api_secret, hashed_password=client.secret
+        if not verify_secret(
+            secret=salted_api_secret,
+            stored=client.secret,
+            pepper=self._client_secret_pepper,
         ):
-            logging.warn(f"incorrect api_secret {salted_api_secret}")
+            logging.warning("incorrect api_secret")
             raise UnauthorizedException("wrong_credentials")
+
+        if is_legacy_hash(client.secret):
+            self._upgrade_secret_hash(client.key, salted_api_secret)
+
+    def _upgrade_secret_hash(self, key: str, secret: str) -> None:
+        try:
+            self._client_service.replace_secret_hash(
+                key=key, secret_hash=hash_secret(secret, self._client_secret_pepper)
+            )
+        except Exception:
+            logging.exception("could not upgrade a client secret hash")
 
     def validate_jwt_and_decode(self, user_token: str) -> dict:
         """Validate JWT signature and return the token payload"""
