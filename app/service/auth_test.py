@@ -12,8 +12,12 @@ class TestAuthService(unittest.TestCase):
         self.client_service = Mock()
         self.casbin_enforcer = Mock()
         self.file_upload_token_secret = "fake_secret_for_jwt_token"
+        self.client_secret_pepper = "a-pepper-long-enough-for-tests"
         self.auth_service = AuthService(
-            self.client_service, self.casbin_enforcer, self.file_upload_token_secret
+            self.client_service,
+            self.casbin_enforcer,
+            self.file_upload_token_secret,
+            self.client_secret_pepper,
         )
 
     def test_authorize_client_success(self):
@@ -23,14 +27,16 @@ class TestAuthService(unittest.TestCase):
         client_mock = Mock(secret=client_secret)
         self.client_service.fetch.return_value = client_mock
 
-        with patch("app.service.auth.check_password") as mock_check_password:
-            mock_check_password.return_value = True
+        with patch("app.service.auth.verify_secret") as mock_verify_secret:
+            mock_verify_secret.return_value = True
             self.assertIsNone(
                 self.auth_service.authorize_client(api_key, salted_api_secret)
             )
             self.client_service.fetch.assert_called_once_with(api_key)
-            mock_check_password.assert_called_once_with(
-                password=salted_api_secret, hashed_password=client_secret
+            mock_verify_secret.assert_called_once_with(
+                secret=salted_api_secret,
+                stored=client_secret,
+                pepper=self.client_secret_pepper,
             )
 
     def test_authorize_client_missing_information(self):
@@ -42,8 +48,8 @@ class TestAuthService(unittest.TestCase):
         salted_api_secret = "test_salted_secret"
         self.client_service.fetch.return_value = None
 
-        with patch("app.service.auth.check_password") as mock_check_password:
-            mock_check_password.return_value = False
+        with patch("app.service.auth.verify_secret") as mock_verify_secret:
+            mock_verify_secret.return_value = False
             with self.assertRaises(UnauthorizedException):
                 self.auth_service.authorize_client(api_key, salted_api_secret)
 

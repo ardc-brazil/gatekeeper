@@ -66,6 +66,7 @@ class Container(containers.DeclarativeContainer):
     client_service = providers.Singleton(
         ClientService,
         repository=client_repository,
+        client_secret_pepper=config.AUTH_CLIENT_SECRET_PEPPER,
     )
 
     tenancy_repository = providers.Factory(
@@ -104,6 +105,7 @@ class Container(containers.DeclarativeContainer):
         client_service=client_service,
         casbin_enforcer=casbin_enforcer,
         file_upload_token_secret=config.AUTH_FILE_UPLOAD_TOKEN_SECRET,
+        client_secret_pepper=config.AUTH_CLIENT_SECRET_PEPPER,
     )
 
     doi_gateway = providers.Factory(
