@@ -20,10 +20,8 @@ class ClientService:
             secret=client.secret,
         )
 
-    # Deliberately not cached. There are two instances, and an lru_cache here
-    # meant a rotated secret or a disabled client kept working on whichever one
-    # did not serve the change until it restarted. Verification no longer costs
-    # 150ms, so the lookup is the only cost left and it is under a millisecond.
+    # Do not memoise: the cache was per process, and a disable did not reach the
+    # other instance.
     def fetch(self, api_key: UUID) -> Client | None:
         res: DBModel = self._repository.fetch(api_key=api_key)
         if res is None:

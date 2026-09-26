@@ -1,13 +1,9 @@
 import hashlib
 import hmac
+import logging
 
 import bcrypt
 
-# An API secret is a random, system-generated value, not a human password.
-# bcrypt's cost exists to make brute force against low-entropy passwords
-# expensive; against 120 bits of randomness it defends nothing and costs 150ms
-# of blocked event loop per request. The pepper is what keeps a leaked database
-# useless on its own: it lives in the environment, not in the table.
 HMAC_PREFIX = "hmac-sha256$"
 
 MIN_PEPPER_LENGTH = 16
@@ -43,7 +39,19 @@ def is_legacy_hash(stored: str) -> bool:
     return not stored.startswith(HMAC_PREFIX)
 
 
+# Do not hand bcrypt a value of another shape: a truncated one panics inside its
+# Rust extension, past `except Exception`.
+BCRYPT_LENGTH = 60
+
+
+def _is_bcrypt_hash(stored: str) -> bool:
+    return len(stored) == BCRYPT_LENGTH and stored.startswith("$2")
+
+
 def verify_secret(secret: str, stored: str, pepper: str) -> bool:
     if is_legacy_hash(stored):
+        if not _is_bcrypt_hash(stored):
+            logging.warning("stored client secret is not in a readable format")
+            return False
         return check_password(password=secret, hashed_password=stored)
     return hmac.compare_digest(stored, hash_secret(secret, pepper))

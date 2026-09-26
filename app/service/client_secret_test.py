@@ -59,6 +59,21 @@ def test_an_empty_pepper_is_refused_rather_than_silently_weakening_the_hash():
         hash_secret("x", "")
 
 
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "",
+        "not-a-hash",
+        "sha512$deadbeef",
+        "$2b$12$too-short",
+        "$2b$12$" + "x" * 60,
+        "hmac-sha256",
+    ],
+)
+def test_a_stored_value_that_cannot_be_read_is_a_failed_verification(stored: str):
+    assert verify_secret("the-real-secret", stored, PEPPER) is False
+
+
 def test_verification_is_fast_enough_not_to_block_the_event_loop():
     stored = hash_secret("the-real-secret", PEPPER)
 
