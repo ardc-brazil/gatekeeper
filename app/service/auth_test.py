@@ -29,8 +29,9 @@ class TestAuthService(unittest.TestCase):
 
         with patch("app.service.auth.verify_secret") as mock_verify_secret:
             mock_verify_secret.return_value = True
-            self.assertIsNone(
-                self.auth_service.authorize_client(api_key, salted_api_secret)
+            self.assertIs(
+                self.auth_service.authorize_client(api_key, salted_api_secret),
+                client_mock,
             )
             self.client_service.fetch.assert_called_once_with(api_key)
             mock_verify_secret.assert_called_once_with(

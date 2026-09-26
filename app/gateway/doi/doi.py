@@ -3,6 +3,7 @@ import requests
 
 from app.exception.not_found import NotFoundException
 from app.gateway.doi.resource import DOIPayload
+from app.metrics import metrics
 
 
 class DOIGateway:
@@ -17,27 +18,31 @@ class DOIGateway:
 
     def post(self, doi: DOIPayload) -> dict:
         url = f"{self._base_url}/dois"
-        response = requests.post(
-            url,
-            headers=self._base_headers,
-            auth=(self._login, self._password),
-            timeout=self._timeout,
-            json=dataclasses.asdict(doi),
-        )
+        with metrics.external_call("datacite", "doi.create") as call:
+            response = requests.post(
+                url,
+                headers=self._base_headers,
+                auth=(self._login, self._password),
+                timeout=self._timeout,
+                json=dataclasses.asdict(doi),
+            )
+            call.status = response.status_code
 
-        if not response.status_code == 201:
-            raise Exception(f"Error creating DOI: {response.text}")
+            if not response.status_code == 201:
+                raise Exception(f"Error creating DOI: {response.text}")
 
         return response.json()
 
     def get(self, repository: str, identifier: str) -> dict:
         url = f"{self._base_url}/dois/{repository}/{identifier}"
-        response = requests.get(
-            url,
-            headers=self._base_headers,
-            auth=(self._login, self._password),
-            timeout=self._timeout,
-        )
+        with metrics.external_call("datacite", "doi.get") as call:
+            response = requests.get(
+                url,
+                headers=self._base_headers,
+                auth=(self._login, self._password),
+                timeout=self._timeout,
+            )
+            call.status = response.status_code
 
         if response.status_code == 404:
             raise NotFoundException(f"not_found: {identifier}")
@@ -49,27 +54,31 @@ class DOIGateway:
 
     def update(self, doi: DOIPayload, identifier: str) -> dict:
         url = f"{self._base_url}/dois/{identifier}"
-        response = requests.put(
-            url,
-            headers=self._base_headers,
-            auth=(self._login, self._password),
-            timeout=self._timeout,
-            json=dataclasses.asdict(doi),
-        )
+        with metrics.external_call("datacite", "doi.update") as call:
+            response = requests.put(
+                url,
+                headers=self._base_headers,
+                auth=(self._login, self._password),
+                timeout=self._timeout,
+                json=dataclasses.asdict(doi),
+            )
+            call.status = response.status_code
 
-        if not response.status_code == 200:
-            raise Exception(f"Error updating DOI: {response.text}")
+            if not response.status_code == 200:
+                raise Exception(f"Error updating DOI: {response.text}")
 
         return response.json()
 
     def delete(self, repository: str, identifier: str) -> None:
         url = f"{self._base_url}/dois/{repository}/{identifier}"
-        response = requests.delete(
-            url,
-            headers=self._base_headers,
-            auth=(self._login, self._password),
-            timeout=self._timeout,
-        )
+        with metrics.external_call("datacite", "doi.delete") as call:
+            response = requests.delete(
+                url,
+                headers=self._base_headers,
+                auth=(self._login, self._password),
+                timeout=self._timeout,
+            )
+            call.status = response.status_code
 
-        if not response.status_code == 204:
-            raise Exception(f"Error deleting DOI: {response.text}")
+            if not response.status_code == 204:
+                raise Exception(f"Error deleting DOI: {response.text}")

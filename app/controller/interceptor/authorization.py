@@ -12,6 +12,7 @@ from app.controller.interceptor.user_parser import (
     parse_user_header,
 )
 from app.exception.unauthorized import UnauthorizedException
+from app.metrics import metrics
 from app.model.tus import TusResult
 from app.service.auth import AuthService
 
@@ -25,7 +26,11 @@ def authorize(
     resource = request.url.path
     action = request.method
 
-    auth_service.authorize_user(user_id, resource, action)
+    try:
+        auth_service.authorize_user(user_id, resource, action)
+    except UnauthorizedException as e:
+        metrics.auth_failure("authz", str(e))
+        raise
 
 
 def _adapt_tus_response(res: TusResult):
@@ -60,6 +65,7 @@ def authorize_tus(
 
         auth_service.authorize_user(user_id=user_id, resource=resource, action=action)
     except UnauthorizedException as e:
+        metrics.auth_failure("tus", str(e))
         # Must raise: a dependency that returns a Response does not stop the request.
         raise HTTPException(
             status_code=401, detail=_adapt_tus_response(TusResult(401, str(e), True))

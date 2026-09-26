@@ -25,6 +25,7 @@ from app.service.tenancy import TenancyService
 from app.service.auth import AuthService
 from app.database import Database
 from app.repository.client import ClientRepository
+from app.repository.platform_state import PlatformStateRepository
 from app.service.client import ClientService
 from app.config import settings
 
@@ -62,6 +63,11 @@ class Container(containers.DeclarativeContainer):
 
     client_repository = providers.Factory(
         ClientRepository,
+        session_factory=db.provided.session,
+    )
+
+    platform_state_repository = providers.Factory(
+        PlatformStateRepository,
         session_factory=db.provided.session,
     )
 

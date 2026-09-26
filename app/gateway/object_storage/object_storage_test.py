@@ -2,6 +2,9 @@ import unittest
 from unittest.mock import MagicMock
 from datetime import timedelta
 from minio import Minio
+from minio.error import S3Error
+from prometheus_client import REGISTRY
+
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
 
 
@@ -186,6 +189,62 @@ class TestObjectStorageGateway(unittest.TestCase):
         self.mock_minio_client.bucket_exists.return_value = False
 
         self.assertFalse(self.gateway.bucket_exists("datamap"))
+
+
+def _calls(operation: str, outcome: str) -> float:
+    return (
+        REGISTRY.get_sample_value(
+            "datamap_external_request_duration_seconds_count",
+            {"service": "minio", "operation": operation, "outcome": outcome},
+        )
+        or 0.0
+    )
+
+
+def _s3_error(status: int) -> S3Error:
+    return S3Error(
+        "NoSuchKey", "missing", "/datamap/x", "id", "host", MagicMock(status=status)
+    )
+
+
+class TestObjectStorageGatewayMetrics(unittest.TestCase):
+    def setUp(self):
+        self.minio = MagicMock(spec=Minio)
+        self.gateway = ObjectStorageGateway(minio_client=self.minio)
+
+    def test_a_missing_object_is_recorded_as_a_client_error_not_a_failure(self):
+        self.minio.get_object.side_effect = _s3_error(404)
+        before = _calls("object.get", "client_error")
+
+        with self.assertRaises(FileNotFoundError):
+            self.gateway.get_file("datamap", "snapshots/x.json")
+
+        self.assertEqual(_calls("object.get", "client_error"), before + 1)
+
+    def test_a_failing_upload_is_recorded_as_a_server_error(self):
+        self.minio.put_object.side_effect = _s3_error(503)
+        before = _calls("object.put", "server_error")
+
+        with self.assertRaises(S3Error):
+            self.gateway.put_file("datamap", "snapshots/x.json", b"{}")
+
+        self.assertEqual(_calls("object.put", "server_error"), before + 1)
+
+    def test_presigning_is_recorded(self):
+        self.minio.presigned_get_object.return_value = "http://signed"
+        before = _calls("object.presign", "success")
+
+        self.gateway.get_pre_signed_url("datamap", "a/b", "b.csv")
+
+        self.assertEqual(_calls("object.presign", "success"), before + 1)
+
+    def test_a_bucket_check_is_recorded(self):
+        self.minio.bucket_exists.return_value = True
+        before = _calls("bucket.exists", "success")
+
+        self.gateway.bucket_exists("datamap")
+
+        self.assertEqual(_calls("bucket.exists", "success"), before + 1)
 
 
 if __name__ == "__main__":

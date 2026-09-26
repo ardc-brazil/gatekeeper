@@ -1,11 +1,15 @@
 from contextlib import contextmanager, AbstractContextManager
 from alembic import command
 from alembic.config import Config
+from time import perf_counter
 from typing import Callable
 import logging
 
 from pydantic import PostgresDsn
-from sqlalchemy import create_engine, orm, text
+from sqlalchemy import create_engine, event, orm, text
+from sqlalchemy.engine import Engine
+
+from app.metrics import metrics
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
@@ -15,10 +19,49 @@ Base = declarative_base()
 MIGRATION_LOCK_KEY = 4915623
 
 
+_CRUD = frozenset({"select", "insert", "update", "delete"})
+
+
+def _statement_type(statement: str) -> str:
+    words = statement.lstrip().split(None, 1)
+    kind = words[0].lower() if words else ""
+    return kind if kind in _CRUD else "other"
+
+
+def instrument_engine(engine: Engine) -> None:
+    """Time every statement as a call to postgres, and expose the pool."""
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _started(conn, cursor, statement, parameters, context, executemany):
+        conn.info.setdefault("query_started", []).append(perf_counter())
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _finished(conn, cursor, statement, parameters, context, executemany):
+        _record(conn, statement, "success")
+
+    @event.listens_for(engine, "handle_error")
+    def _failed(context):
+        if context.connection is not None:
+            _record(context.connection, context.statement or "", "error")
+
+    if hasattr(engine.pool, "checkedout"):
+        metrics.watch_pool(engine.pool)
+
+
+def _record(conn, statement: str, outcome: str) -> None:
+    started = conn.info.get("query_started")
+    if not started:
+        return
+    metrics.external_call_finished(
+        "postgres", _statement_type(statement), outcome, perf_counter() - started.pop()
+    )
+
+
 class Database:
     def __init__(self, db_url: PostgresDsn, log_enabled: bool) -> None:
         self._logger = logging.getLogger("database")
         self._engine = create_engine(db_url.unicode_string(), echo=log_enabled)
+        instrument_engine(self._engine)
         self._session_factory = orm.scoped_session(
             orm.sessionmaker(
                 autocommit=False,

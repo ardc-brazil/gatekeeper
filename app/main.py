@@ -1,8 +1,10 @@
 import uvicorn
 from fastapi import FastAPI
+from prometheus_client import REGISTRY
 from app.config import settings
 from app.container import Container
 from app.metrics_server import start_metrics_server
+from app.platform_state import PlatformStateCollector
 from app import setup
 
 container = Container()
@@ -17,6 +19,8 @@ start_metrics_server(settings.METRICS_PORT)
 # Bring the schema up to head before anything serves a request.
 db = container.db()
 db.run_migrations()
+
+REGISTRY.register(PlatformStateCollector(container.platform_state_repository()))
 
 # Setup casbin auto reload policy
 casbin_enforcer = container.casbin_enforcer()

@@ -29,14 +29,13 @@ def _scrape() -> str:
 
 
 def _sample(body: str, name: str, **labels) -> float:
-    wanted = ",".join(f'{key}="{value}"' for key, value in sorted(labels.items()))
+    wanted = [f'{key}="{value}"' for key, value in labels.items()]
     for line in body.splitlines():
-        if line.startswith("#") or not line.startswith(name):
+        if line.startswith("#") or not line.startswith(name + "{"):
             continue
         head, _, value = line.rpartition(" ")
-        if wanted and wanted not in head:
-            continue
-        return float(value)
+        if all(pair in head for pair in wanted):
+            return float(value)
     return 0.0
 
 
@@ -80,7 +79,7 @@ class TestTheCountersMove:
         )
         assert after == before + 1
 
-    def test_a_request_is_counted_under_a_path_without_its_id(
+    def test_a_request_is_counted_under_its_route_template_not_its_id(
         self, http_client, valid_headers, dataset_fixture
     ):
         dataset = dataset_fixture.create_test_dataset()
@@ -88,5 +87,62 @@ class TestTheCountersMove:
         http_client.get(f"/datasets/{dataset['id']}", headers=valid_headers)
 
         body = _scrape()
-        assert 'path="/api/v1/datasets/{id}"' in body
+        assert 'route="/api/v1/datasets/{id}"' in body
         assert dataset["id"] not in body
+
+    def test_a_tenancy_name_in_the_path_does_not_become_a_label(
+        self, http_client, valid_headers
+    ):
+        http_client.get(
+            "/tenancies/datamap/production/amazon-face", headers=valid_headers
+        )
+
+        body = _scrape()
+        assert 'route="/api/v1/tenancies/{name:path}"' in body
+        assert "amazon-face" not in body
+
+    def test_a_request_is_attributed_to_the_client_that_authenticated_it(
+        self, http_client, valid_headers
+    ):
+        http_client.get("/clients/", headers=valid_headers)
+
+        assert 'client="Integration Test Client"' in _scrape()
+
+
+class TestBusinessAndDependencyMetrics:
+    def test_a_rejected_credential_is_counted_as_an_authentication_failure(
+        self, http_client, valid_headers
+    ):
+        labels = {"kind": "authn", "reason": "wrong_credentials"}
+        before = _sample(_scrape(), "datamap_auth_failures_total", **labels)
+
+        response = http_client.get(
+            "/datasets/", headers={**valid_headers, "X-Api-Secret": "not-the-secret"}
+        )
+
+        assert response.status_code == 401, response.status_code
+
+        assert _sample(_scrape(), "datamap_auth_failures_total", **labels) == before + 1
+
+    def test_database_queries_are_timed_as_calls_to_postgres(
+        self, http_client, valid_headers
+    ):
+        http_client.get("/clients/", headers=valid_headers)
+
+        assert 'service="postgres"' in _scrape()
+
+    def test_a_search_is_counted(self, http_client, valid_headers):
+        labels = {"has_text": "true", "has_filters": "false", "empty": "true"}
+        before = _sample(_scrape(), "datamap_search_total", **labels)
+
+        http_client.get(
+            "/datasets/?full_text=nothing-matches-this-zzqx", headers=valid_headers
+        )
+
+        assert _sample(_scrape(), "datamap_search_total", **labels) == before + 1
+
+    def test_the_platform_totals_are_read_from_the_database(self):
+        body = _scrape()
+
+        assert "datamap_datasets{" in body
+        assert "datamap_stored_bytes " in body

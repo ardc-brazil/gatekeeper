@@ -2,6 +2,8 @@ from dataclasses import dataclass
 import datetime
 import json
 import unittest
+
+from prometheus_client import REGISTRY
 from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.exception.bad_request import BadRequestException
@@ -267,10 +269,7 @@ class TestDatasetService(unittest.TestCase):
             self.assertEqual(filters, {"filters": "data"})
 
     def test_search_datasets(self):
-        query = Mock(spec=DatasetQuery)
-        query.page = 1
-        query.page_size = 20
-        query.minimal = False
+        query = DatasetQuery(page=1, page_size=20, minimal=False)
         user_id = uuid4()
         tenancies = ["tenancy1"]
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
@@ -2845,6 +2844,55 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(no_ext["count"], 1)  # readme only
         self.assertEqual(no_ext["total_size_bytes"], 256)
+
+
+def _sample(name: str, **labels) -> float:
+    return REGISTRY.get_sample_value(name, labels) or 0.0
+
+
+class TestDatasetServiceMetrics(unittest.TestCase):
+    def setUp(self):
+        self.repository = Mock(spec=DatasetRepository)
+        self.version_repository = Mock(spec=DatasetVersionRepository)
+        self.user_service = Mock(spec=UserService)
+        self.service = DatasetService(
+            repository=self.repository,
+            version_repository=self.version_repository,
+            data_file_repository=Mock(spec=DataFileRepository),
+            user_service=self.user_service,
+            minio_gateway=Mock(spec=ObjectStorageGateway),
+            dataset_bucket="datamap",
+            doi_service=Mock(spec=DOIService),
+            tenancy_service=Mock(spec=TenancyService),
+        )
+
+    def test_creating_a_dataset_is_counted(self):
+        self.repository.upsert.side_effect = lambda dataset: dataset
+        before = _sample("datamap_dataset_events_total", action="created")
+
+        with patch.object(DatasetService, "_adapt_dataset"):
+            self.service.create_dataset(
+                dataset=Dataset(name="d", data={}, tenancy="t"), user_id=uuid4()
+            )
+
+        self.assertEqual(
+            _sample("datamap_dataset_events_total", action="created"), before + 1
+        )
+
+    def test_a_search_that_finds_nothing_is_counted_as_empty(self):
+        self.user_service.fetch_by_id.return_value = Mock(tenancies=[])
+        self.repository.search.return_value = PaginatedResult(
+            items=[], total_count=0, page=1, page_size=10
+        )
+        labels = {"has_text": "true", "has_filters": "true", "empty": "true"}
+        before = _sample("datamap_search_total", **labels)
+
+        self.service.search_datasets(
+            query=DatasetQuery(full_text="ozone", categories=["air"]),
+            user_id=uuid4(),
+        )
+
+        self.assertEqual(_sample("datamap_search_total", **labels), before + 1)
 
 
 if __name__ == "__main__":

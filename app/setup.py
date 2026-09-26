@@ -97,7 +97,8 @@ def setup_middleware(fastAPIApp: FastAPI) -> None:
         started = perf_counter()
         body = await _body_for_log(request)
         try:
-            response = await call_next(request)
+            with metrics.in_progress(request.method):
+                response = await call_next(request)
         except Exception:
             # uvicorn's own line is emitted outside this context, without the id.
             _log_access(request, 500, started, body)
@@ -106,23 +107,61 @@ def setup_middleware(fastAPIApp: FastAPI) -> None:
 
         try:
             response.headers["X-Request-Id"] = request_id
-            _log_access(request, response.status_code, started, body)
+            _log_access(
+                request,
+                response.status_code,
+                started,
+                body,
+                response_bytes=_declared_length(response.headers),
+            )
             return response
         finally:
             request_id_var.reset(token)
 
 
+def route_of(request: Request) -> str:
+    """The template the request matched, so ids never become label values."""
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    if path is None:
+        return "unmatched"
+    return request.scope.get("root_path", "") + path
+
+
+def _declared_length(headers) -> int | None:
+    try:
+        return int(headers["content-length"])
+    except (KeyError, ValueError):
+        return None
+
+
 def _log_access(
-    request: Request, status_code: int, started: float, body: object = None
+    request: Request,
+    status_code: int,
+    started: float,
+    body: object = None,
+    response_bytes: int | None = None,
 ) -> None:
     if is_probe(request.url.path):
         return
 
     elapsed = perf_counter() - started
-    metrics.request(request.method, request.url.path, status_code, elapsed)
+    route = route_of(request)
+    client = getattr(request.state, "client_name", None)
+    metrics.request(
+        request.method,
+        route,
+        status_code,
+        elapsed,
+        client=client,
+        request_bytes=_declared_length(request.headers),
+        response_bytes=response_bytes,
+    )
     entry = fields(
         method=request.method,
         path=request.url.path,
+        route=route,
+        client=client,
         status_code=status_code,
         duration_ms=round(elapsed * 1000, 1),
         # Identifiers, not credentials: who asked, and under which tenancy —
