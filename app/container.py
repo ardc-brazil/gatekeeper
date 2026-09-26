@@ -34,6 +34,10 @@ logger = logging.getLogger("uvicorn")
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
         modules=[
+            # dependency-injector 4.41 injects into a sync @inject dependency
+            # only when its own module is wired.
+            "app.controller.interceptor.authentication",
+            "app.controller.interceptor.authorization",
             "app.controller.v1.client.client",
             "app.controller.v1.dataset.dataset",
             "app.controller.v1.dataset.dataset_filter",
@@ -111,6 +115,7 @@ class Container(containers.DeclarativeContainer):
         base_url=config.DOI_BASE_URL,
         login=config.DOI_LOGIN,
         password=config.DOI_PASSWORD,
+        timeout_seconds=config.DOI_TIMEOUT_SECONDS,
     )
 
     doi_repository = providers.Factory(
@@ -127,7 +132,8 @@ class Container(containers.DeclarativeContainer):
 
     minio_http_client = providers.Factory(
         build_http_client,
-        timeout_seconds=config.MINIO_TIMEOUT_SECONDS,
+        connect_timeout_seconds=config.MINIO_CONNECT_TIMEOUT_SECONDS,
+        read_timeout_seconds=config.MINIO_TIMEOUT_SECONDS,
         retries=config.MINIO_RETRIES,
     )
 
@@ -149,10 +155,25 @@ class Container(containers.DeclarativeContainer):
         minio_client=minio_client,
     )
 
+    # A health check reports the state now: no retries, and no long wait on a
+    # storage that has stopped answering.
+    health_minio_gateway = providers.Factory(
+        ObjectStorageGateway,
+        minio_client=providers.Factory(
+            minio_client,
+            http_client=providers.Factory(
+                build_http_client,
+                connect_timeout_seconds=config.MINIO_CONNECT_TIMEOUT_SECONDS,
+                read_timeout_seconds=config.MINIO_CONNECT_TIMEOUT_SECONDS,
+                retries=0,
+            ),
+        ),
+    )
+
     dependency_health_service = providers.Factory(
         DependencyHealthService,
         database=db,
-        object_storage=minio_gateway,
+        object_storage=health_minio_gateway,
         bucket=config.MINIO_DATASET_BUCKET,
     )
 

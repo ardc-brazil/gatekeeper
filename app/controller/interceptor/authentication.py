@@ -14,7 +14,7 @@ api_secret = APIKeyHeader(
 
 
 @inject
-async def authenticate(
+def authenticate(
     api_key: str = Depends(api_key),
     api_secret: str = Depends(api_secret),
     auth_service: AuthService = Depends(Provide[Container.auth_service]),

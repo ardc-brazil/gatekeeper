@@ -17,7 +17,7 @@ router = APIRouter(
 # GET /filters
 @router.get("/filters")
 @inject
-async def get_filters(
+def get_filters(
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ):
     return service.fetch_available_filters()

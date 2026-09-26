@@ -27,7 +27,7 @@ router = APIRouter(
     response_model=List[DatasetPendingCollocationResponse],
 )
 @inject
-async def get_pending_datasets(
+def get_pending_datasets(
     service: DatasetCollocationService = Depends(
         Provide[Container.dataset_collocation_service]
     ),
@@ -62,7 +62,7 @@ async def get_pending_datasets(
     response_model=List[DataFileCollocationResponse],
 )
 @inject
-async def get_dataset_files(
+def get_dataset_files(
     dataset_id: UUID,
     service: DatasetCollocationService = Depends(
         Provide[Container.dataset_collocation_service]
@@ -96,7 +96,7 @@ async def get_dataset_files(
     status_code=204,
 )
 @inject
-async def update_file_path(
+def update_file_path(
     dataset_id: UUID,
     file_id: UUID,
     payload: UpdateFilePathRequest,
@@ -117,7 +117,7 @@ async def update_file_path(
     status_code=204,
 )
 @inject
-async def update_collocation_status(
+def update_collocation_status(
     dataset_id: UUID,
     payload: UpdateCollocationStatusRequest,
     service: DatasetCollocationService = Depends(

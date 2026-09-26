@@ -40,6 +40,9 @@ class Config(BaseSettings):
     DOI_PREFIX: str = Field(..., description="Prefix/Repository for DOI service")
     DOI_LOGIN: str = Field(..., description="Login for DOI service")
     DOI_PASSWORD: str = Field(..., description="Password for DOI service")
+    DOI_TIMEOUT_SECONDS: float = Field(
+        15, description="Connect and read timeout for DOI service calls"
+    )
 
     MINIO_URL: str = Field(..., description="Minio URL")
     MINIO_ACCESS_KEY: str = Field(..., description="Minio access key")
@@ -48,7 +51,10 @@ class Config(BaseSettings):
     MINIO_DEFAULT_REGION_ID: str = Field(..., description="Minio default region id")
     MINIO_USE_SSL: bool = Field(..., description="Minio use SSL")
     MINIO_TIMEOUT_SECONDS: int = Field(
-        10, description="Connect and read timeout for object storage calls"
+        10, description="Read timeout for object storage calls"
+    )
+    MINIO_CONNECT_TIMEOUT_SECONDS: float = Field(
+        2, description="Connect timeout for object storage calls"
     )
     MINIO_RETRIES: int = Field(2, description="Retries for object storage calls")
 
