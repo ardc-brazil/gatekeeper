@@ -147,6 +147,30 @@ jobs:
       - name: Run integration tests
         run: pytest tests/integration -q --durations=15
 
+      - name: TEMPORARY diagnose the slow response while MinIO is down
+        if: always()
+        run: |
+          docker exec datamap_gatekeeper_test_integration cat /etc/resolv.conf
+          docker stop datamap_min_io_test_integration
+          for name in minio minio_test_integration; do
+            docker exec datamap_gatekeeper_test_integration python3 -c "
+          import socket, time
+          t = time.monotonic()
+          try:
+              print(socket.getaddrinfo('$name', 9000)[0][4])
+          except Exception as e:
+              print(repr(e))
+          print('$name lookup took', round(time.monotonic() - t, 2))
+          "
+          done
+          curl -s -o /dev/null -w "dependencies: %{http_code} in %{time_total}s\n" \
+            -H "X-Api-Key: 5060b1a2-9aaf-48db-871a-0839007fd478" \
+            -H "X-Api-Secret: integration-test-not-a-real-secret" \
+            -H "X-User-Id: cbb0a683-630f-4b86-8b45-91b90a6fce1c" \
+            http://localhost:9094/api/v1/health-check/dependencies
+          docker logs --since 30s datamap_gatekeeper_test_integration 2>&1 | grep -iE "degraded|error|resol" | tail -5
+          docker start datamap_min_io_test_integration
+
       - name: Service logs
         if: failure()
         run: |
