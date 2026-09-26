@@ -32,6 +32,7 @@ class TestDOIGateway(unittest.TestCase):
             base_url=self.base_url,
             login=self.login,
             password=self.password,
+            timeout_seconds=7,
         )
 
     @patch("app.gateway.doi.doi.requests.post")
@@ -47,6 +48,7 @@ class TestDOIGateway(unittest.TestCase):
             f"{self.base_url}/dois",
             headers=self.gateway._base_headers,
             auth=(self.login, self.password),
+            timeout=7,
             json=dataclasses.asdict(self.doi_payload),
         )
 
@@ -77,6 +79,7 @@ class TestDOIGateway(unittest.TestCase):
             f"{self.base_url}/dois/{self.repository}/test-doi",
             headers=self.gateway._base_headers,
             auth=(self.login, self.password),
+            timeout=7,
         )
 
         self.assertEqual(response, {"data": {"id": "10.1234/test-doi"}})
@@ -99,6 +102,7 @@ class TestDOIGateway(unittest.TestCase):
             f"{self.base_url}/dois/{self.doi_payload.data.attributes.prefix}/test-doi",
             headers=self.gateway._base_headers,
             auth=(self.login, self.password),
+            timeout=7,
             json=dataclasses.asdict(self.doi_payload),
         )
 
@@ -119,6 +123,7 @@ class TestDOIGateway(unittest.TestCase):
             f"{self.base_url}/dois/{self.repository}/test-doi",
             headers=self.gateway._base_headers,
             auth=(self.login, self.password),
+            timeout=7,
         )
 
     @patch("app.gateway.doi.doi.requests.delete")

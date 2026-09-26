@@ -6,7 +6,7 @@ tenancies = APIKeyHeader(
 )
 
 
-async def parse_tenancy_header(tenancies: str = Depends(tenancies)) -> list[str]:
+def parse_tenancy_header(tenancies: str = Depends(tenancies)) -> list[str]:
     if not tenancies:
         return []
 

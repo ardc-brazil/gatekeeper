@@ -19,6 +19,7 @@ protected_router = APIRouter(
 
 
 @router.get("/")
+# async on purpose: it does no I/O, so it answers even when every worker thread is busy.
 async def health_check():
     """Liveness. Deliberately shallow: the deploy waits on this, and a degraded
     object storage must not stop a deploy that is fixing something else."""
@@ -27,7 +28,7 @@ async def health_check():
 
 @protected_router.get("/dependencies")
 @inject
-async def dependencies(
+def dependencies(
     service: DependencyHealthService = Depends(
         Provide[Container.dependency_health_service]
     ),

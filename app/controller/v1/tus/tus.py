@@ -36,7 +36,7 @@ def _adapt(res: TusResult) -> dict:
 
 @router.post("/hooks")
 @inject
-async def post(
+def post(
     payload: dict,
     response: Response,
     user_id: UUID = Depends(parse_tus_user_id),

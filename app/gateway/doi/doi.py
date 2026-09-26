@@ -6,10 +6,13 @@ from app.gateway.doi.resource import DOIPayload
 
 
 class DOIGateway:
-    def __init__(self, base_url: str, login: str, password: str):
+    def __init__(
+        self, base_url: str, login: str, password: str, timeout_seconds: float
+    ):
         self._base_url = base_url
         self._login = login
         self._password = password
+        self._timeout = timeout_seconds
         self._base_headers = {"Content-Type": "application/vnd.api+json"}
 
     def post(self, doi: DOIPayload) -> dict:
@@ -18,6 +21,7 @@ class DOIGateway:
             url,
             headers=self._base_headers,
             auth=(self._login, self._password),
+            timeout=self._timeout,
             json=dataclasses.asdict(doi),
         )
 
@@ -29,7 +33,10 @@ class DOIGateway:
     def get(self, repository: str, identifier: str) -> dict:
         url = f"{self._base_url}/dois/{repository}/{identifier}"
         response = requests.get(
-            url, headers=self._base_headers, auth=(self._login, self._password)
+            url,
+            headers=self._base_headers,
+            auth=(self._login, self._password),
+            timeout=self._timeout,
         )
 
         if response.status_code == 404:
@@ -46,6 +53,7 @@ class DOIGateway:
             url,
             headers=self._base_headers,
             auth=(self._login, self._password),
+            timeout=self._timeout,
             json=dataclasses.asdict(doi),
         )
 
@@ -57,7 +65,10 @@ class DOIGateway:
     def delete(self, repository: str, identifier: str) -> None:
         url = f"{self._base_url}/dois/{repository}/{identifier}"
         response = requests.delete(
-            url, headers=self._base_headers, auth=(self._login, self._password)
+            url,
+            headers=self._base_headers,
+            auth=(self._login, self._password),
+            timeout=self._timeout,
         )
 
         if not response.status_code == 204:
