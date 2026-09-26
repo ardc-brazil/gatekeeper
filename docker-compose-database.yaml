@@ -20,7 +20,7 @@ services:
     env_file:
       - ${ENV_FILE_PATH}
     ports:
-      - 5432:5432
+      - 127.0.0.1:5432:5432
     volumes:
       - database:/var/lib/postgresql/data
     networks:
