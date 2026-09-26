@@ -20,11 +20,23 @@ ssh datamap-prod 'ss -tn state established "( sport = :1080 )" | wc -l'
 
 A count of 1 is the header alone, so it means zero connections.
 
-Two rules apply to every step below.
+Three rules apply to every step below.
 
 **`docker restart` does not re-read `env_file`.** Environment variables are
 fixed when a container is created. A restart after changing a value changes
 nothing and looks like it worked. Always `up -d --force-recreate`.
+
+**Run compose from the checkout that deploys**, which is the runner's:
+
+```bash
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+export COMPOSE_PROJECT_NAME=gatekeeper
+```
+
+`~/gatekeeper` is a second, manual checkout and it lags — it was two commits
+behind while this was written. Compose read from there would quietly reinstate
+the infrastructure of whatever commit it happens to sit on, including the MinIO
+image pin.
 
 **Never paste a new value into a terminal.** `scripts/set_env_value.py` prompts
 for it with the echo off, writes it into the file, and prints only an eight
@@ -82,12 +94,11 @@ change. The three application access keys do not move with this step.
 The console login is the reason to rotate it: the root username has been public
 since 2024, and the community console has no second factor.
 
-Edit `MINIO_ROOT_PASSWORD` in `~/environment/gatekeeper.prod.env`, then
+Set `MINIO_ROOT_PASSWORD` in `~/environment/gatekeeper.prod.env`, then
 
 ```bash
-cd ~/gatekeeper
-make ENV_FILE_PATH=~/environment/gatekeeper.prod.env docker-build
-docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
+docker compose --env-file ~/environment/gatekeeper.prod.env \
+  -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
   up -d --force-recreate --wait minio
 ```
 
