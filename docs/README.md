@@ -18,6 +18,7 @@ RFCs (Request for Comments) document significant architectural decisions and fea
 | RFC | Title | Status |
 |-----|-------|--------|
 | [001](rfcs/001-dataset-pagination-fulltext-search.md) | Dataset Pagination and Full-Text Search | Implemented |
+| [005](rfcs/005-platform-metrics-and-dashboards.md) | Platform Metrics and Dashboards | Accepted |
 
 ## Contributing
 
