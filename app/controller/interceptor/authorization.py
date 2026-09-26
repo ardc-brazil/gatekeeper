@@ -17,7 +17,7 @@ from app.service.auth import AuthService
 
 
 @inject
-async def authorize(
+def authorize(
     request: Request,
     user_id: UUID = Depends(parse_user_header),
     auth_service: AuthService = Depends(Provide[Container.auth_service]),
@@ -39,7 +39,7 @@ def _adapt_tus_response(res: TusResult):
 
 
 @inject
-async def authorize_tus(
+def authorize_tus(
     request: Request,
     user_id: UUID = Depends(parse_tus_user_id),
     user_token: str = Depends(parse_tus_user_token),

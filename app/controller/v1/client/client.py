@@ -23,7 +23,7 @@ router = APIRouter(
 # GET /clients
 @router.get("/", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
-async def get_all(
+def get_all(
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> list[ClientGetResponse]:
     clients: list[Client] = service.fetch_all()
@@ -38,7 +38,7 @@ async def get_all(
 # GET /clients/{key}
 @router.get("/{key}", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
-async def get_by_key(
+def get_by_key(
     key: UUID,
     response: Response,
     service: ClientService = Depends(Provide[Container.client_service]),
@@ -56,7 +56,7 @@ async def get_by_key(
 # PUT /clients/{key}
 @router.put("/{key}", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
-async def update_by_key(
+def update_by_key(
     key: UUID,
     payload: ClientUpdateRequest,
     service: ClientService = Depends(Provide[Container.client_service]),
@@ -70,7 +70,7 @@ async def update_by_key(
     "/", status_code=201, dependencies=[Depends(authenticate), Depends(authorize)]
 )
 @inject
-async def create(
+def create(
     payload: ClientCreateRequest,
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> ClientCreateResponse:
@@ -83,7 +83,7 @@ async def create(
     "/{key}", status_code=204, dependencies=[Depends(authenticate), Depends(authorize)]
 )
 @inject
-async def delete(
+def delete(
     key: UUID,
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> None:
@@ -94,7 +94,7 @@ async def delete(
 # POST /clients/{key}/enable
 @router.post("/{key}/enable", dependencies=[Depends(authenticate), Depends(authorize)])
 @inject
-async def enable(
+def enable(
     key: UUID,
     service: ClientService = Depends(Provide[Container.client_service]),
 ) -> None:

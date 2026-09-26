@@ -166,7 +166,7 @@ def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetVersionGetRespon
 # GET /datasets
 @router.get("/")
 @inject
-async def get_datasets(
+def get_datasets(
     categories: str = None,
     level: str = None,
     data_types: str = None,
@@ -228,7 +228,7 @@ async def get_datasets(
 # GET /datasets/{id}
 @router.get("/{id}")
 @inject
-async def get_dataset(
+def get_dataset(
     id: str,
     response: Response,
     user_id: UUID = Depends(parse_user_header),
@@ -259,7 +259,7 @@ async def get_dataset(
 # PUT /datasets/{id}
 @router.put("/{id}")
 @inject
-async def update_dataset(
+def update_dataset(
     id: str,
     dataset_request: DatasetUpdateRequest,
     user_id: UUID = Depends(parse_user_header),
@@ -283,7 +283,7 @@ async def update_dataset(
 # DELETE /datasets/{id}
 @router.delete("/{id}")
 @inject
-async def delete_dataset(
+def delete_dataset(
     id: str,
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
@@ -295,7 +295,7 @@ async def delete_dataset(
 # POST /datasets
 @router.post("/", status_code=201)
 @inject
-async def create_dataset(
+def create_dataset(
     dataset_request: DatasetCreateRequest,
     user_id: UUID = Depends(parse_user_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
@@ -324,7 +324,7 @@ async def create_dataset(
 # PUT /datasets/:dataset_id/enable
 @router.put("/{id}/enable")
 @inject
-async def enable_dataset(
+def enable_dataset(
     id: str,
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
@@ -336,7 +336,7 @@ async def enable_dataset(
 # DELETE /datasets/:dataset_id/versions/:version
 @router.delete("/{dataset_id}/versions/{version_name}")
 @inject
-async def delete_dataset_version(
+def delete_dataset_version(
     dataset_id: str,
     version_name: str,
     user_id: UUID = Depends(parse_user_header),
@@ -355,7 +355,7 @@ async def delete_dataset_version(
 # PUT /datasets/:dataset_id/versions/:version/publish
 @router.put("/{dataset_id}/versions/{version_name}/publish")
 @inject
-async def publish_dataset_version(
+def publish_dataset_version(
     dataset_id: str,
     version_name: str,
     user_id: UUID = Depends(parse_user_header),
@@ -374,7 +374,7 @@ async def publish_dataset_version(
 # PUT /datasets/:dataset_id/versions/:version/enable
 @router.put("/{dataset_id}/versions/{version_name}/enable")
 @inject
-async def enable_dataset_version(
+def enable_dataset_version(
     dataset_id: str,
     version_name: str,
     user_id: UUID = Depends(parse_user_header),
@@ -393,7 +393,7 @@ async def enable_dataset_version(
 # PUT /datasets/:dataset_id/versions/:version/doi
 @router.put("/{dataset_id}/versions/{version_name}/doi")
 @inject
-async def change_doi_state(
+def change_doi_state(
     dataset_id: str,
     version_name: str,
     change_state_request: DOIChangeStateRequest,
@@ -415,7 +415,7 @@ async def change_doi_state(
 # POST /datasets/:dataset_id/versions/:version/doi
 @router.post("/{dataset_id}/versions/{version_name}/doi")
 @inject
-async def create_doi(
+def create_doi(
     dataset_id: UUID,
     version_name: str,
     create_doi_request: DOICreateRequest,
@@ -449,7 +449,7 @@ async def create_doi(
 # GET /datasets/:dataset_id/versions/:version/doi
 @router.get("/{dataset_id}/versions/{version_name}/doi")
 @inject
-async def get_doi(
+def get_doi(
     dataset_id: str,
     version_name: str,
     user_id: UUID = Depends(parse_user_header),
@@ -470,7 +470,7 @@ async def get_doi(
 # DELETE /datasets/:dataset_id/versions/:version/doi
 @router.delete("/{dataset_id}/versions/{version_name}/doi", status_code=204)
 @inject
-async def delete_doi(
+def delete_doi(
     dataset_id: str,
     version_name: str,
     user_id: UUID = Depends(parse_user_header),
@@ -489,7 +489,7 @@ async def delete_doi(
 # GET /datasets/:dataset_id/versions/:version/files/:file_id
 @router.get("/{dataset_id}/versions/{version_name}/files/{file_id}")
 @inject
-async def get_file_download_url(
+def get_file_download_url(
     dataset_id: UUID,
     version_name: str,
     file_id: UUID,
@@ -510,7 +510,7 @@ async def get_file_download_url(
 # POST /datasets/:dataset_id/versions
 @router.post("/{dataset_id}/versions")
 @inject
-async def create_dataset_version(
+def create_dataset_version(
     dataset_id: UUID,
     dataset_request: DatasetVersionCreateRequest,
     user_id: UUID = Depends(parse_user_header),
@@ -530,7 +530,7 @@ async def create_dataset_version(
 # GET /datasets/:dataset_id/versions/:version
 @router.get("/{dataset_id}/versions/{version_name}")
 @inject
-async def get_dataset_version(
+def get_dataset_version(
     dataset_id: UUID,
     version_name: str,
     user_id: UUID = Depends(parse_user_header),

@@ -25,7 +25,7 @@ router = APIRouter(
 # GET /tenancies
 @router.get("/")
 @inject
-async def get_all(
+def get_all(
     service: TenancyService = Depends(Provide[Container.tenancy_service]),
 ) -> list[TenancyGetResponse]:
     tenancies = service.fetch_all()
@@ -38,7 +38,7 @@ async def get_all(
 # GET /tenancies/{name}
 @router.get("/{name:path}")
 @inject
-async def get_by_name(
+def get_by_name(
     name: str,
     response: Response,
     is_enabled: Union[bool, None] = True,
@@ -55,7 +55,7 @@ async def get_by_name(
 # PUT /tenancies/{name}
 @router.put("/{name:path}")
 @inject
-async def update_by_name(
+def update_by_name(
     name: str,
     payload: TenancyUpdateRequest,
     service: TenancyService = Depends(Provide[Container.tenancy_service]),
@@ -67,7 +67,7 @@ async def update_by_name(
 # POST /tenancies
 @router.post("/", status_code=201)
 @inject
-async def create(
+def create(
     payload: TenancyCreateRequest,
     service: TenancyService = Depends(Provide[Container.tenancy_service]),
 ) -> None:
@@ -78,7 +78,7 @@ async def create(
 # DELETE /tenancies/{name}
 @router.delete("/{name:path}", status_code=204)
 @inject
-async def delete(
+def delete(
     name: str,
     service: TenancyService = Depends(Provide[Container.tenancy_service]),
 ) -> None:
@@ -89,7 +89,7 @@ async def delete(
 # POST /tenancies/{name}/enable
 @router.post("/{name:path}/enable")
 @inject
-async def enable(
+def enable(
     name: str,
     service: TenancyService = Depends(Provide[Container.tenancy_service]),
 ) -> None:

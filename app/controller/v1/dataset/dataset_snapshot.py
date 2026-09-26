@@ -125,7 +125,7 @@ def _adapt_latest_snapshot_response(
 # GET /datasets/{dataset_id}/snapshot
 @router.get("/{dataset_id}/snapshot", response_model=DatasetLatestSnapshotResponse)
 @inject
-async def get_dataset_latest_snapshot(
+def get_dataset_latest_snapshot(
     dataset_id: UUID,
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> DatasetLatestSnapshotResponse:
@@ -152,7 +152,7 @@ async def get_dataset_latest_snapshot(
     response_model=DatasetSnapshotResponse,
 )
 @inject
-async def get_dataset_version_snapshot(
+def get_dataset_version_snapshot(
     dataset_id: UUID,
     version_name: str,
     service: DatasetService = Depends(Provide[Container.dataset_service]),
