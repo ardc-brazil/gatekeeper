@@ -1,11 +1,11 @@
-{
+{{#assign 'suffix'}}{{randomValue length=12 type='ALPHANUMERIC' uppercase=true}}{{/assign}}{
   "data": {
-    "id": "{{now format='yyyyMMddHHmmss'}}",
+    "id": "{{suffix}}",
     "type": "dois",
     "attributes": {
-      "doi": "10.82978/{{now format='yyyyMMddHHmmss'}}",
+      "doi": "10.82978/{{suffix}}",
       "prefix": "10.82978",
-      "suffix": "{{now format='yyyyMMddHHmmss'}}",
+      "suffix": "{{suffix}}",
       "identifiers": [],
       "alternateIdentifiers": [],
       "creators": [

@@ -1,7 +1,7 @@
-import subprocess
-import time
+import uuid
 
 from tests.integration.utils.assertions import assert_status_code
+from tests.integration.utils.container_log import wait_for_log
 
 
 class TestDependencyReport:
@@ -46,17 +46,19 @@ class TestDependencyReportWhenSomethingIsDown:
     def test_the_degradation_reaches_the_log(
         self, http_client, valid_headers, object_storage_down
     ):
-        http_client.get("/health-check/dependencies", headers=valid_headers)
-        time.sleep(1)
-
-        log = subprocess.run(
-            ["docker", "logs", "--since", "60s", "datamap_gatekeeper_test_integration"],
-            capture_output=True,
-            text=True,
-            check=True,
+        marker = f"req-{uuid.uuid4()}"
+        http_client.get(
+            "/health-check/dependencies",
+            headers={**valid_headers, "X-Request-Id": marker},
         )
 
-        assert "dependency check degraded" in log.stdout + log.stderr
+        def degraded(log: str) -> bool:
+            return any(
+                "dependency check degraded" in line and marker in line
+                for line in log.splitlines()
+            )
+
+        assert degraded(wait_for_log(degraded))
 
     def test_the_database_is_still_reported_as_up(
         self, http_client, valid_headers, object_storage_down

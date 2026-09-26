@@ -1,31 +1,15 @@
-import json
-import subprocess
-import time
 import uuid
 
 from tests.integration.utils.assertions import assert_status_code
-
-API_CONTAINER = "datamap_gatekeeper_test_integration"
-
-
-def _log(since_seconds: int = 30) -> str:
-    result = subprocess.run(
-        ["docker", "logs", "--since", f"{since_seconds}s", API_CONTAINER],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout + result.stderr
+from tests.integration.utils.container_log import (
+    access_lines,
+    flush_log,
+    wait_for_log,
+)
 
 
 def _access_lines(marker: str) -> list[dict]:
-    return [
-        entry
-        for line in _log().splitlines()
-        if marker in line
-        for entry in [json.loads(line)]
-        if entry.get("logger") == "http.access"
-    ]
+    return access_lines(wait_for_log(lambda log: marker in log), marker)
 
 
 class TestTheRequestStillWorks:
@@ -81,7 +65,6 @@ class TestWhatIsLogged:
             },
             headers={**valid_headers, "X-Request-Id": marker},
         )
-        time.sleep(1)
 
         lines = _access_lines(marker)
         assert lines, "no access line was written"
@@ -91,7 +74,6 @@ class TestWhatIsLogged:
         marker = f"req-{uuid.uuid4()}"
 
         http_client.get("/datasets/", headers={**valid_headers, "X-Request-Id": marker})
-        time.sleep(1)
 
         lines = _access_lines(marker)
         assert lines
@@ -109,7 +91,6 @@ class TestWhatIsLogged:
             },
             headers={**valid_headers, "X-Request-Id": marker},
         )
-        time.sleep(1)
 
         assert _access_lines(marker)[0]["request_id"] == marker
 
@@ -131,7 +112,6 @@ class TestTheTenancy:
             },
             headers={**valid_headers, "X-Request-Id": marker},
         )
-        time.sleep(1)
 
         assert _access_lines(marker)[0]["tenancies"] == [
             "datamap/production/data-amazon"
@@ -141,7 +121,6 @@ class TestTheTenancy:
         marker = f"req-{uuid.uuid4()}"
 
         http_client.get("/datasets/", headers={**valid_headers, "X-Request-Id": marker})
-        time.sleep(1)
 
         assert _access_lines(marker)[0]["tenancies"] == [
             "datamap/production/data-amazon"
@@ -154,7 +133,6 @@ class TestTheTenancy:
             f"/datasets/{uuid.uuid4()}",
             headers={**valid_headers, "X-Request-Id": marker},
         )
-        time.sleep(1)
 
         line = _access_lines(marker)[0]
         assert line["status_code"] >= 400
@@ -171,22 +149,19 @@ class TestTheTenancy:
                 "X-Datamap-Tenancies": "datamap/production/data-amazon;datamap/lab",
             },
         )
-        time.sleep(1)
 
         assert _access_lines(marker)[0]["tenancies"] == [
             "datamap/production/data-amazon",
             "datamap/lab",
         ]
 
-    def test_a_request_without_one_says_so(self, http_client):
+    def test_a_request_without_one_says_so(self, http_client, valid_headers):
         marker = f"req-{uuid.uuid4()}"
 
         http_client.get("/health-check/dependencies", headers={"X-Request-Id": marker})
-        time.sleep(1)
 
-        assert (
-            _access_lines(marker) == [] or _access_lines(marker)[0]["tenancies"] == []
-        )
+        lines = access_lines(flush_log(http_client, valid_headers), marker)
+        assert lines == [] or lines[0]["tenancies"] == []
 
 
 class TestTheUser:
@@ -197,7 +172,6 @@ class TestTheUser:
         marker = f"req-{uuid.uuid4()}"
 
         http_client.get("/datasets/", headers={**valid_headers, "X-Request-Id": marker})
-        time.sleep(1)
 
         assert _access_lines(marker)[0]["user_id"] == valid_headers["X-User-Id"]
 
@@ -208,21 +182,19 @@ class TestTheUser:
             f"/datasets/{uuid.uuid4()}",
             headers={**valid_headers, "X-Request-Id": marker},
         )
-        time.sleep(1)
 
         line = _access_lines(marker)[0]
         assert line["status_code"] >= 400
         assert line["user_id"] == valid_headers["X-User-Id"]
 
     def test_a_request_without_one_reports_nothing_rather_than_guessing(
-        self, http_client
+        self, http_client, valid_headers
     ):
         marker = f"req-{uuid.uuid4()}"
 
         http_client.get("/health-check/dependencies", headers={"X-Request-Id": marker})
-        time.sleep(1)
 
-        lines = _access_lines(marker)
+        lines = access_lines(flush_log(http_client, valid_headers), marker)
         assert lines == [] or lines[0]["user_id"] is None
 
 
@@ -237,9 +209,9 @@ class TestCredentialsInABody:
             json={"name": f"client-{uuid.uuid4()}", "secret": secret},
             headers=valid_headers,
         )
-        time.sleep(1)
 
-        assert secret not in _log(), "a client secret was written to the log"
+        log = flush_log(http_client, valid_headers)
+        assert secret not in log, "a client secret was written to the log"
 
     def test_the_rest_of_that_body_is_still_logged(self, http_client, valid_headers):
         marker = f"req-{uuid.uuid4()}"
@@ -250,7 +222,6 @@ class TestCredentialsInABody:
             json={"name": name, "secret": "irrelevant"},
             headers={**valid_headers, "X-Request-Id": marker},
         )
-        time.sleep(1)
 
         lines = _access_lines(marker)
         assert lines
@@ -262,8 +233,7 @@ class TestHeadersAreNeverLogged:
     def test_no_header_reaches_the_log(self, http_client, valid_headers):
         """Headers carry the credentials. The body may be logged; they may not."""
         http_client.get("/datasets/", headers=valid_headers)
-        time.sleep(1)
 
-        log = _log()
+        log = flush_log(http_client, valid_headers)
         assert valid_headers["X-Api-Secret"] not in log
         assert "X-Api-Secret" not in log
