@@ -56,7 +56,7 @@ The design and the metric contract are in
 | `gatekeeper` | `datamap_gatekeeper:9095`, `datamap_gatekeeper_b:9095` | the application |
 | `webapp` | `datamap_frontend:9095` | the BFF, its calls to the gatekeeper, and the browser's telemetry |
 | `archivist` | `datamap_archivist:9096` | collocation runs, files and bytes moved |
-| `zipper` | `datamap_zipper:9095` | zips built, failed, duration and size |
+| `zipper` | `datamap_zipper:9095`, once it is deployed (commented out in `prometheus.yml`) | zips built, failed, duration and size |
 | `node` | `host.docker.internal:9100` | the host: CPU, memory, disk, network |
 | `cadvisor` | `datamap_cadvisor:8080` | every `datamap_*` container |
 | `postgres` | `datamap_postgres_exporter:9187` | the gatekeeper database |
