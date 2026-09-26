@@ -123,7 +123,7 @@ DOI_PASSWORD=MOCK_PASS
 # Integration Test Specific
 INTEGRATION_BASE_URL=http://localhost:9092
 INTEGRATION_API_KEY=5060b1a2-9aaf-48db-871a-0839007fd478
-INTEGRATION_API_SECRET=g*aZkbWom3deiAX-vtoT
+INTEGRATION_API_SECRET=integration-test-not-a-real-secret
 INTEGRATION_USER_ID=cbb0a683-630f-4b86-8b45-91b90a6fce1c
 INTEGRATION_TENANCY=datamap/production/data-amazon
 ```

@@ -13,7 +13,9 @@ class IntegrationTestConfig:
         self.api_key = os.getenv(
             "INTEGRATION_API_KEY", "5060b1a2-9aaf-48db-871a-0839007fd478"
         )
-        self.api_secret = os.getenv("INTEGRATION_API_SECRET", "g*aZkbWom3deiAX-vtoT")
+        self.api_secret = os.getenv(
+            "INTEGRATION_API_SECRET", "integration-test-not-a-real-secret"
+        )
         self.user_id = os.getenv(
             "INTEGRATION_USER_ID", "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
         )

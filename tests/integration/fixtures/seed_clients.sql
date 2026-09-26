@@ -35,7 +35,7 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'clients_ad
 INSERT INTO clients (key, secret, name, is_enabled, created_at, updated_at) 
 VALUES (
     '5060b1a2-9aaf-48db-871a-0839007fd478'::uuid,
-    '$2b$12$TdLefTKhOuWHbm7D4ZN35eoFg7U9zmQOTKTNTfVbn.TLAFTPsCJ7W', -- hashed 'g*aZkbWom3deiAX-vtoT'
+    '$2b$12$aqqi6PUFYXfCUtUme0zaz.TSl4SZ7k7gJtKE49AWCUzf131SdxT1q',
     'Integration Test Client',
     true,
     now(),

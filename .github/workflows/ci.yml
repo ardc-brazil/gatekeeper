@@ -115,7 +115,7 @@ jobs:
           for _ in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "X-Api-Key: 5060b1a2-9aaf-48db-871a-0839007fd478" \
-              -H "X-Api-Secret: g*aZkbWom3deiAX-vtoT" \
+              -H "X-Api-Secret: integration-test-not-a-real-secret" \
               -H "X-User-Id: cbb0a683-630f-4b86-8b45-91b90a6fce1c" \
               http://localhost:9094/api/v1/clients/)
             if [ "$code" = "200" ]; then exit 0; fi
@@ -168,6 +168,11 @@ jobs:
 
       - name: Show what is being deployed
         run: git log --oneline -1
+
+      # This repository is public. The production environment files only exist
+      # on this host, so this is the only place the comparison can be made.
+      - name: No production credential may be tracked
+        run: python3 scripts/check_tracked_secrets.py "$(dirname "$ENV_FILE_PATH")"
 
       - name: Build the image
         run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-build
