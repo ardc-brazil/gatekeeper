@@ -145,7 +145,7 @@ jobs:
           exit 1
 
       - name: Run integration tests
-        run: pytest tests/integration -q
+        run: pytest tests/integration -q --durations=15
 
       - name: Service logs
         if: failure()
