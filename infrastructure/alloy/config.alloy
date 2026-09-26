@@ -60,6 +60,22 @@ loki.process "datamap" {
 	}
 }
 
+// nginx runs on the host, so its log is a file rather than a container stream.
+// The JSON format is set up by hand (docs/runbooks/observability.md); until it
+// is, the file does not exist and this waits for it.
+local.file_match "nginx" {
+	path_targets = [{
+		__path__  = "/var/log/nginx/datamap.access.json.log",
+		container = "nginx",
+		host      = "datamap-prod",
+	}]
+}
+
+loki.source.file "nginx" {
+	targets    = local.file_match.nginx.targets
+	forward_to = [loki.write.default.receiver]
+}
+
 loki.write "default" {
 	endpoint {
 		url = "http://datamap_loki:3100/loki/api/v1/push"

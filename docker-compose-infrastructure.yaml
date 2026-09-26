@@ -92,6 +92,10 @@ services:
       - "9001:9001"
     env_file:
       - ${ENV_FILE_PATH}
+    environment:
+      # Scraped by Prometheus over the docker network, like the gatekeeper's
+      # metrics port. A bearer token would break on every credential rotation.
+      - MINIO_PROMETHEUS_AUTH_TYPE=public
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s

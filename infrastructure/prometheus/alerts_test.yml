@@ -115,3 +115,183 @@ tests:
                 Loki and Alloy have no healthcheck of their own: their images
                 carry no shell to run one with, so this is how their absence is
                 noticed.
+
+  - interval: 1m
+    name: server errors are judged per service, not diluted by another's traffic
+    input_series:
+      - series: 'datamap_http_requests_total{job="gatekeeper",status="500"}'
+        values: "0+10x30"
+      - series: 'datamap_http_requests_total{job="gatekeeper",status="200"}'
+        values: "0+90x30"
+      - series: 'datamap_http_requests_total{job="webapp",status="200"}'
+        values: "0+10000x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: ServerErrorsElevated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: gatekeeper
+            exp_annotations:
+              summary: "More than 5% of gatekeeper requests are failing"
+
+  - interval: 1m
+    name: a slow service alerts on latency
+    input_series:
+      - series: 'datamap_http_request_duration_seconds_bucket{job="gatekeeper",le="1"}'
+        values: "0+0x40"
+      - series: 'datamap_http_request_duration_seconds_bucket{job="gatekeeper",le="5"}'
+        values: "0+60x40"
+      - series: 'datamap_http_request_duration_seconds_bucket{job="gatekeeper",le="+Inf"}'
+        values: "0+60x40"
+      - series: 'datamap_http_requests_total{job="gatekeeper",status="200"}'
+        values: "0+60x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: LatencyHigh
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: LatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: gatekeeper
+            exp_annotations:
+              summary: "gatekeeper p95 latency has been over 2s for fifteen minutes"
+
+  - interval: 1m
+    name: one slow request on an idle service does not alert
+    input_series:
+      - series: 'datamap_http_request_duration_seconds_bucket{job="gatekeeper",le="1"}'
+        values: "0+0x40"
+      - series: 'datamap_http_request_duration_seconds_bucket{job="gatekeeper",le="5"}'
+        values: "0+0x20 1+0x20"
+      - series: 'datamap_http_request_duration_seconds_bucket{job="gatekeeper",le="+Inf"}'
+        values: "0+0x20 1+0x20"
+      - series: 'datamap_http_requests_total{job="gatekeeper",status="200"}'
+        values: "0+0x20 1+0x20"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: LatencyHigh
+        exp_alerts: []
+
+  - interval: 1m
+    name: a nearly full disk alerts
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/",fstype="ext4",job="node"}'
+        values: "10+0x60"
+      - series: 'node_filesystem_size_bytes{mountpoint="/",fstype="ext4",job="node"}'
+        values: "100+0x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: HostDiskFillingUp
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              mountpoint: /
+              fstype: ext4
+              job: node
+            exp_annotations:
+              summary: "/ is over 85% full or will be full within a day"
+              description: >-
+                Loki, Prometheus, Postgres and MinIO's staging area all write to
+                this host. A full disk stops uploads first.
+
+  - interval: 1m
+    name: a disk with room and a steady level does not alert
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/",fstype="ext4",job="node"}'
+        values: "60+0x60"
+      - series: 'node_filesystem_size_bytes{mountpoint="/",fstype="ext4",job="node"}'
+        values: "100+0x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: HostDiskFillingUp
+        exp_alerts: []
+
+  - interval: 1m
+    name: a disk filling fast alerts before it is 85% full
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/data",fstype="ext4",job="node"}'
+        values: "35-0.1x400"
+      - series: 'node_filesystem_size_bytes{mountpoint="/data",fstype="ext4",job="node"}'
+        values: "100+0x400"
+    alert_rule_test:
+      - eval_time: 400m
+        alertname: HostDiskFillingUp
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              mountpoint: /data
+              fstype: ext4
+              job: node
+            exp_annotations:
+              summary: "/data is over 85% full or will be full within a day"
+              description: >-
+                Loki, Prometheus, Postgres and MinIO's staging area all write to
+                this host. A full disk stops uploads first.
+
+  - interval: 1m
+    name: low memory alerts
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{job="node"}'
+        values: "5+0x30"
+      - series: 'node_memory_MemTotal_bytes{job="node"}'
+        values: "100+0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostMemoryLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: node
+            exp_annotations:
+              summary: "Less than 10% of the host's memory is available"
+              description: >-
+                The host is shared. Check the Containers dashboard before
+                assuming it is a DataMap container.
+
+  - interval: 1m
+    name: a container restarting in a loop alerts
+    input_series:
+      - series: 'container_start_time_seconds{name="datamap_zipper",job="cadvisor"}'
+        values: "100 100 400 400 700 700 1000 1000"
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: ContainerRestarting
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              name: datamap_zipper
+              job: cadvisor
+            exp_annotations:
+              summary: "datamap_zipper has restarted more than twice in an hour"
+
+  - interval: 1m
+    name: a container that restarted once, for a deploy, does not alert
+    input_series:
+      - series: 'container_start_time_seconds{name="datamap_gatekeeper",job="cadvisor"}'
+        values: "100 100 400 400 400 400 400 400"
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: ContainerRestarting
+        exp_alerts: []
+
+  - interval: 1m
+    name: postgres near its connection limit alerts
+    input_series:
+      - series: 'pg_stat_database_numbackends{datname="gatekeeper_db",job="postgres"}'
+        values: "90+0x20"
+      - series: 'pg_settings_max_connections{job="postgres"}'
+        values: "100+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PostgresConnectionsHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Postgres is using over 80% of its connections"
+              description: >-
+                Each gatekeeper instance holds up to fifteen (pool of five plus
+                ten overflow), and the archivist has its own.
