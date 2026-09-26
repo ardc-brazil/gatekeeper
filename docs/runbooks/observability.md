@@ -54,6 +54,9 @@ The design and the metric contract are in
 | Job | Target | What |
 |---|---|---|
 | `gatekeeper` | `datamap_gatekeeper:9095`, `datamap_gatekeeper_b:9095` | the application |
+| `webapp` | `datamap_frontend:9095` | the BFF, its calls to the gatekeeper, and the browser's telemetry |
+| `archivist` | `datamap_archivist:9096` | collocation runs, files and bytes moved |
+| `zipper` | `datamap_zipper:9095` | zips built, failed, duration and size |
 | `node` | `host.docker.internal:9100` | the host: CPU, memory, disk, network |
 | `cadvisor` | `datamap_cadvisor:8080` | every `datamap_*` container |
 | `postgres` | `datamap_postgres_exporter:9187` | the gatekeeper database |
@@ -228,6 +231,9 @@ docker exec datamap_prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/targets?s
 | `HostMemoryLow` | under 10% of memory available for fifteen minutes | the host is shared: check Containers first |
 | `ContainerRestarting` | a `datamap_*` container restarted more than twice in an hour | |
 | `PostgresConnectionsHigh` | over 80% of `max_connections` for ten minutes | |
+| `DataCiteFailing` | a call to DataCite failed, timed out or found nobody, in fifteen minutes | DOIs cannot be created or published |
+| `ArchivistStalled` | no successful archivist run in an hour, an hour after it started | files stay in `staged/` |
+| `ZipsFailing` | a zip failed in the last half hour | |
 
 **Nothing delivers these anywhere yet.** They are visible in Prometheus under
 Alerts and in Grafana, but there is no Alertmanager, so nobody is paged or

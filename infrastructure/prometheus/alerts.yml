@@ -80,6 +80,43 @@ groups:
         annotations:
           summary: "{{ $labels.job }} p95 latency has been over 2s for fifteen minutes"
 
+      - alert: DataCiteFailing
+        # A refusal (client_error) is DataCite judging the request; this is
+        # DataCite failing, timing out, or unreachable.
+        expr: >-
+          sum(increase(datamap_external_request_duration_seconds_count{service="datacite",outcome=~"server_error|timeout|error"}[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Calls to DataCite are failing"
+          description: >-
+            DOI creation and publication depend on it. Check the Integrations
+            dashboard for which operation.
+
+      - alert: ArchivistStalled
+        # The process must have been up an hour too: right after a restart the
+        # timestamp is zero, and every deploy would page.
+        expr: >-
+          time() - max(datamap_archivist_last_success_timestamp_seconds) > 3600
+          and time() - max(process_start_time_seconds{job="archivist"}) > 3600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "The archivist has not completed a run in an hour"
+          description: >-
+            Uploaded files stay in staged/ until it does. A run that fails
+            every time looks like this too; see the Pipelines dashboard.
+
+      - alert: ZipsFailing
+        expr: sum(increase(datamap_zip_jobs_total{outcome="failed"}[30m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A zip failed to build in the last half hour"
+
   - name: datamap-infrastructure
     rules:
       - alert: HostDiskFillingUp

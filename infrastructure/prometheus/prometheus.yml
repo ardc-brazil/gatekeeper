@@ -17,6 +17,21 @@ scrape_configs:
           - "datamap_gatekeeper:9095"
           - "datamap_gatekeeper_b:9095"
 
+  # The BFF and the browser telemetry it collects. Port 9095 is served by
+  # instrumentation.ts and published to no host.
+  - job_name: webapp
+    static_configs:
+      - targets: ["datamap_frontend:9095"]
+
+  - job_name: archivist
+    static_configs:
+      - targets: ["datamap_archivist:9096"]
+
+  # Three uvicorn workers, aggregated by the zipper's own metrics process.
+  - job_name: zipper
+    static_configs:
+      - targets: ["datamap_zipper:9095"]
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]

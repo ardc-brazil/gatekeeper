@@ -191,10 +191,15 @@ instances, never `sum()`.
 - Calls to the gatekeeper, through an axios interceptor in `lib/rpc.ts`:
   `datamap_external_request_duration_seconds{service="gatekeeper"}`.
 - `datamap_webapp_logins_total{provider, outcome}` from NextAuth's events.
-- Served at `/api/metrics`. nginx forwards everything on port 3000 to the
-  internet, so the route answers only requests carrying
-  `Authorization: Bearer $METRICS_TOKEN`. Prometheus reads the same token from
-  the env file; it is a static shared secret, not one that expires.
+- Served on port 9095 by a small HTTP server that `instrumentation.ts` starts
+  once per process, never on 3000: nginx forwards everything on 3000 to the
+  internet. The docker network is the boundary, as for the gatekeeper, and there
+  is no token to keep.
+- The registry lives on `globalThis`. Next compiles pages and API routes into
+  bundles with their own copies of each module, and one registry per bundle
+  would split every counter.
+- `rpc.ts` is imported by the browser bundle too, so its axios interceptor
+  reports through a hook the server installs rather than importing prom-client.
 
 **Browser.** Nothing the browser experiences reaches any log today. A beacon
 posts batches to `POST /api/telemetry`:
@@ -252,9 +257,14 @@ HTTP contract, plus:
 | `datamap_zip_duration_seconds` | — |
 | `datamap_zip_input_bytes_total`, `datamap_zip_output_bytes_total` | — |
 
-**Prerequisite:** the zipper reports `SUCCESS` to the gatekeeper from a
-`finally` block, whether zipping succeeded or not. That is fixed first, in its
-own change; a success metric on top of it would repeat the lie.
+On `main` the zipper answers synchronously and reports success or failure
+correctly. The unmerged `zip-async` branch reports `SUCCESS` to the gatekeeper
+from a `finally` block whether zipping succeeded or not; that must be fixed
+before it merges, or `datamap_zip_jobs_total` will repeat the lie.
+
+A separate metrics process (`python -m app.metrics_server`), started before
+uvicorn forks, serves the multiprocess directory on 9095, so the port is bound
+exactly once whichever workers are alive.
 
 ## Infrastructure
 
@@ -359,7 +369,7 @@ Each phase is a separate change in its own repository.
 | 3 | datamap-webapp | server metrics, `/api/metrics`, telemetry beacon; Webapp dashboard |
 | 4 | gatekeeper | integrations, auth, business metrics; Integrations and Business dashboards |
 | 5 | archivist | metrics; scrape; Pipelines dashboard |
-| 6 | zipper | SUCCESS fix; multiprocess metrics; scrape |
+| 6 | zipper | multiprocess metrics; health check; scrape |
 
 The label rename from `path` to `route` in phase 1 breaks the continuity of
 `datamap_http_requests_total` history; `ServerErrorsElevated` sums over the
