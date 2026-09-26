@@ -125,9 +125,11 @@ Removing it before the consumer is verified turns a rotation into an outage.
 
 ## 6. Upload token
 
-`AUTH_FILE_UPLOAD_TOKEN_SECRET` is an HMAC secret shared by gatekeeper and the
-webapp. Both sign with it, so both have to move together; tokens already issued
-stop validating.
+The webapp's BFF signs a JWT with `AUTH_FILE_UPLOAD_TOKEN_SECRET`
+(`pages/api/auth/token.ts`) and gatekeeper verifies it, so the two have to hold
+the same value and move together. The tokens last a day, so rotating invalidates
+up to 24 hours of issued ones — in practice whoever has an upload open or a page
+already loaded.
 
 Set it in `~/environment/gatekeeper.prod.env` **and**
 `~/environment/frontend.prod.env` — the same value in both — then recreate the
