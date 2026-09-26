@@ -57,8 +57,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # app/config.py reads `${ENVIRONMENT}.env` at import time, so without a
+      # file the suite fails during collection rather than in a test.
+      - name: Create the configuration the suite imports
+        run: cp local.env.template local.env
+
+      # Not `pytest app`: an explicit path overrides testpaths, and the
+      # scripts/ tests would silently never run.
       - name: Run unit tests
-        run: pytest app -q
+        run: pytest -q
 
   integration:
     runs-on: ubuntu-latest

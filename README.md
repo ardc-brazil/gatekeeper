@@ -24,8 +24,14 @@ Follow the tutorial at https://code.visualstudio.com/docs/python/environments#_c
 make ENV_FILE_PATH={env_file_path} docker-run
 ```
 
-The `env_file_path` is the path for the `{env-name}.env` file on your project. We have a `local.env` with a local configuration that could be used by you 
-to configure you local environment.
+The `env_file_path` is the path for the `{env-name}.env` file on your project. Start from the template and fill in your own values:
+
+```sh
+cp local.env.template local.env
+```
+
+`local.env` is not tracked, and it is also what `app/config.py` reads at import
+time, so the unit tests need it to exist.
 
 
 2. Access pgAdmin in your browser at <http://localhost:5050> to use PgAdmin to connect to
