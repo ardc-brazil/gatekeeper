@@ -28,3 +28,8 @@ datamap_zip_jobs_in_progress
 datamap_zip_duration_seconds
 datamap_zip_input_bytes_total
 datamap_zip_output_bytes_total
+
+# database backup (scripts/backup_database.py, a textfile read by node-exporter)
+datamap_backup_last_success_timestamp_seconds
+datamap_backup_last_size_bytes
+datamap_backup_kept
