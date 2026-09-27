@@ -370,3 +370,50 @@ tests:
               description: >-
                 Each gatekeeper instance holds up to fifteen (pool of five plus
                 ten overflow), and the archivist has its own.
+
+  - interval: 1m
+    name: a backup that stopped running alerts
+    input_series:
+      - series: "datamap_backup_last_success_timestamp_seconds"
+        values: "0+0x2400"
+    alert_rule_test:
+      - eval_time: 39h
+        alertname: DatabaseBackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "No database backup has succeeded in 36 hours"
+              description: >-
+                The daily timer runs at 03:20, so 36 hours means it missed one
+                and nobody noticed. There were no backups at all between October
+                2024 and September 2026, which is the condition this exists to
+                prevent.
+
+  - interval: 1m
+    name: a backup from a few hours ago does not alert
+    input_series:
+      - series: "datamap_backup_last_success_timestamp_seconds"
+        values: "129600+0x2400"
+    alert_rule_test:
+      - eval_time: 37h
+        alertname: DatabaseBackupStale
+        exp_alerts: []
+
+  - interval: 1m
+    name: no backup metric at all alerts
+    input_series:
+      - series: "up{job=\"node\"}"
+        values: "1+0x300"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: DatabaseBackupMetricMissing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "The backup metric is not being reported at all"
+              description: >-
+                A stale timestamp says the backup failed; an absent one says the
+                backup, the textfile collector or node_exporter is gone. Both
+                mean the same thing about the backups: nobody is watching them.

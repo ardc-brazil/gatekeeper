@@ -121,12 +121,18 @@ services:
       - --path.procfs=/host/proc
       - --path.sysfs=/host/sys
       - --path.rootfs=/rootfs
+      # The database backup writes backup.prom here (docs/runbooks/database-backup.md).
+      - --collector.textfile.directory=/textfile
+      # An unresponsive NFS mount makes the filesystem collector hang, and a
+      # hung collector costs every metric on the host, not just that mount.
+      - --collector.filesystem.fs-types-exclude=^(autofs|nfs|nfs4|cifs|smb3|tmpfs|devtmpfs|overlay|squashfs|fuse.*)$$
       - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+|rootfs/var/lib/docker/.+)($$|/)
       - --collector.netdev.device-exclude=^(lo|veth.*|br-.*|docker.*)$$
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      - ${BACKUP_METRICS_DIR:-/home/datamap/metrics}:/textfile:ro
 
   # Sees every container on the host, including the neighbours'. Prometheus
   # keeps only datamap_* series (prometheus.yml), and the long housekeeping

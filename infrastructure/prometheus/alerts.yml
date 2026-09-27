@@ -119,6 +119,31 @@ groups:
 
   - name: datamap-infrastructure
     rules:
+      - alert: DatabaseBackupStale
+        expr: >-
+          time() - datamap_backup_last_success_timestamp_seconds > 36 * 3600
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No database backup has succeeded in 36 hours"
+          description: >-
+            The daily timer runs at 03:20, so 36 hours means it missed one and
+            nobody noticed. There were no backups at all between October 2024
+            and September 2026, which is the condition this exists to prevent.
+
+      - alert: DatabaseBackupMetricMissing
+        expr: absent(datamap_backup_last_success_timestamp_seconds)
+        for: 2h
+        labels:
+          severity: critical
+        annotations:
+          summary: "The backup metric is not being reported at all"
+          description: >-
+            A stale timestamp says the backup failed; an absent one says the
+            backup, the textfile collector or node_exporter is gone. Both mean
+            the same thing about the backups: nobody is watching them.
+
       - alert: HostDiskFillingUp
         expr: >-
           (
