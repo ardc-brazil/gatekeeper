@@ -7,6 +7,7 @@ from app.exception.illegal_state import IllegalStateException
 from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
 from app.exception import conflict
+from app.logging_config import fields, request_id_var
 
 logger = logging.getLogger("uvicorn")
 
@@ -42,6 +43,19 @@ async def bad_request_exception_handler(request: Request, exc: BadRequestExcepti
     )
 
 
+def _request_id(request: Request) -> str:
+    # This handler runs outside the middleware, where request_id_var is unset.
+    state = getattr(request, "state", None)
+    return getattr(state, "request_id", None) or request_id_var.get()
+
+
 async def generic_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Generic exception: {exc}")
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+    request_id = _request_id(request)
+    logger.error(
+        "Unhandled exception", exc_info=exc, extra=fields(request_id=request_id)
+    )
+    # Never the exception text: it can carry SQL, paths and parameters.
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "request_id": request_id},
+    )

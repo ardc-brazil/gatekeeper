@@ -40,15 +40,13 @@ class TestDatasetFilterEndpoints:
         assert_status_code(response, 401)
         assert_response_matches_dict(response, {"detail": "Unauthorized"})
 
-    def test_get_filters_invalid_auth_500(self, http_client, invalid_headers):
-        """Test getting filters with invalid authentication returns 500 (SQL error)."""
-        # Act
+    def test_a_malformed_api_key_is_refused_like_a_wrong_one(
+        self, http_client, invalid_headers
+    ):
         response = http_client.get("/datasets/filters", headers=invalid_headers)
 
-        # Assert
-        assert_status_code(response, 500)
-        data = assert_json_response(response)
-        assert "invalid input syntax for type uuid" in data["detail"]
+        assert_status_code(response, 401)
+        assert "uuid" not in response.text.lower()
 
     def test_get_filters_response_structure(self, http_client, valid_headers):
         """Test that filters response has correct structure."""

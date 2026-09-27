@@ -116,7 +116,8 @@ class TestTusHooksEndpoint:
         assert_status_code(response, 500)
         data = assert_json_response(response)
         assert "detail" in data
-        assert "'X-User-Id'" in data["detail"]
+        assert data["detail"] == "Internal server error"
+        assert data["request_id"]
 
     def test_post_finish_hook_missing_user_token_500(
         self, http_client, valid_headers, dataset_fixture
@@ -155,7 +156,8 @@ class TestTusHooksEndpoint:
         assert_status_code(response, 500)
         data = assert_json_response(response)
         assert "detail" in data
-        assert "'X-User-Token'" in data["detail"]
+        assert data["detail"] == "Internal server error"
+        assert data["request_id"]
 
     def test_post_finish_hook_invalid_dataset_id_500(self, http_client, valid_headers):
         """Test post-finish hook with invalid dataset ID returns 500."""
@@ -484,7 +486,8 @@ class TestTusErrorScenarios:
         assert_status_code(response, 500)
         data = assert_json_response(response)
         assert "detail" in data
-        assert "'Event'" in data["detail"]
+        assert data["detail"] == "Internal server error"
+        assert data["request_id"]
 
     def test_post_finish_hook_empty_payload_500(self, http_client, valid_headers):
         """Test post-finish hook with empty payload returns 500."""
@@ -495,4 +498,5 @@ class TestTusErrorScenarios:
         assert_status_code(response, 500)
         data = assert_json_response(response)
         assert "detail" in data
-        assert "'Event'" in data["detail"]
+        assert data["detail"] == "Internal server error"
+        assert data["request_id"]
