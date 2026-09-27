@@ -167,3 +167,8 @@ staging.env
 
 # Local overrides of the tracked *.env files (worktree paths, ports, ...)
 *.local.env
+
+# Never a decrypted copy of a production env file.
+secrets/production/*.decrypted
+secrets/production/*.plain
+*.env.decrypted
