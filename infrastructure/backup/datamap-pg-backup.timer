@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily DataMap database backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+# Run a missed backup on the next boot: a machine that was off at 03:20 would
+# otherwise simply skip the day, which is how a gap goes unnoticed.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
