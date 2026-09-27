@@ -59,17 +59,34 @@ itself, which is the path being read.
 So do not expect `diff` against the plaintext to be empty. Compare keys and
 values, which is what `scripts/env_fingerprint.py` is for.
 
-## The plaintext on the host
+## What the deploy does
 
-`~/environment/*.env` is still the file the deploy reads. The encrypted copies
-are the record, not yet the source. Turning that around is a separate change,
-and it should not happen until several deploys have proven the decryption path —
-a deploy that cannot decrypt cannot deploy.
+It installs the pinned `sops`, decrypts `secrets/production/gatekeeper.env` into
+the runner's temporary directory under `umask 077`, and **compares it against the
+plaintext still on the host**. Any difference — a changed value, a variable on
+one side only — stops the deploy before anything is built. The decrypted file is
+removed afterwards, including when the job fails.
 
-Until then the two can drift, and that is the one real hazard of this
-arrangement. After changing a value on the host, encrypt it back in:
+Only then does the rest of the deploy use the decrypted copy.
+
+So the plaintext on the host is no longer what runs, but it is still the
+reference the encrypted copy is checked against. That is deliberate: it makes
+drift impossible to deploy rather than merely documented. After changing a value
+on the host, encrypt it back in, or the next deploy refuses:
 
 ```bash
 sops --encrypt --input-type dotenv --output-type dotenv \
   ~/environment/gatekeeper.prod.env > secrets/production/gatekeeper.env
 ```
+
+The failure names the variables and not their values, so the output of a refused
+deploy is safe to paste anywhere:
+
+```
+/home/datamap/environment/gatekeeper.prod.env and /tmp/gatekeeper.env differ:
+  LOG_LEVEL: value differs
+  SOME_NEW_VARIABLE: missing from the first file
+```
+
+Removing the plaintext entirely would remove that check with it, so it is not a
+tidying step: it needs something else to compare against first.
