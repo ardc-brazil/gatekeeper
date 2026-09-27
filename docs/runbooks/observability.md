@@ -61,7 +61,7 @@ The design and the metric contract are in
 | `cadvisor` | `datamap_cadvisor:8080` | every `datamap_*` container |
 | `postgres` | `datamap_postgres_exporter:9187` | the gatekeeper database |
 | `nginx` | `datamap_nginx_exporter:9113` | the host nginx's `stub_status` |
-| `minio`, `minio_bucket` | `datamap_min_io:9000` | capacity, S3 traffic, bucket sizes |
+| `minio`, `minio_bucket` | `minio:9000` (the alias: MinIO rejects the underscore in `datamap_min_io`) | capacity, S3 traffic, bucket sizes |
 | `tusd` | `datamap_tusd:1080` | uploads and hooks |
 | `prometheus`, `loki`, `alloy` | | the stack itself |
 
