@@ -10,9 +10,16 @@ it to be less.
 ## What runs
 
 A systemd timer at 03:20, `Persistent=true` so a machine that was off at that
-hour takes the backup on the next boot instead of skipping the day.
-`scripts/backup_database.py` dumps through the database container, verifies what
-it wrote, and prunes: 30 daily copies and 12 first-of-month ones.
+hour takes the backup on the next boot instead of skipping the day. It runs
+`/home/datamap/bin/backup_database.py`, which the deploy installs: the script
+dumps through the database container, verifies what it wrote, and prunes — 30
+daily copies and 12 first-of-month ones.
+
+The unit deliberately does not run the copy in the runner's workspace. That
+directory belongs to CI and can be cleaned, and a backup that stops running
+because of a checkout is worse than no backup, because it still looks installed.
+The deploy also runs the installed script with `--help`, so an import it cannot
+satisfy fails during the deploy rather than at 03:20 with nobody watching.
 
 Backups land on the NAS, at `/home/datamap/storage/backups/postgres`. The
 Postgres data directory is a bind mount on the host's **local** disk, so the NAS
