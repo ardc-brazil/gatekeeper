@@ -58,13 +58,15 @@ jobs:
         run: |
           docker compose -f docker-compose-observability.yaml up -d --force-recreate
 
-      # Not the gatekeeper: the application is deployed separately and may be
-      # restarting for reasons that have nothing to do with this change.
+      # Only what this stack runs itself. The applications are deployed
+      # separately, and node and nginx depend on host setup done by hand; those
+      # are TargetDown's to report, not a reason to fail this deploy.
       - name: The observability targets must come back
         run: |
+          # up{job=~"prometheus|loki|alloy|cadvisor|postgres"}==0
           for _ in $(seq 1 30); do
             result=$(docker exec datamap_prometheus wget -qO- \
-              'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%21%3D%22gatekeeper%22%7D%3D%3D0' \
+              'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D~%22prometheus%7Cloki%7Calloy%7Ccadvisor%7Cpostgres%22%7D%3D%3D0' \
               2>/dev/null || true)
             case "$result" in
               *'"result":[]'*)
@@ -84,12 +86,15 @@ jobs:
         run: |
           docker ps --filter "name=datamap_prometheus" --filter "name=datamap_grafana" \
             --filter "name=datamap_loki" --filter "name=datamap_alloy" \
+            --filter "name=datamap_node_exporter" --filter "name=datamap_cadvisor" \
+            --filter "name=datamap_postgres_exporter" --filter "name=datamap_nginx_exporter" \
             --format "table {{.Names}}\t{{.Status}}"
 
       - name: Logs on failure
         if: failure()
         run: |
-          for c in datamap_prometheus datamap_grafana datamap_loki datamap_alloy; do
+          for c in datamap_prometheus datamap_grafana datamap_loki datamap_alloy \
+            datamap_node_exporter datamap_cadvisor datamap_postgres_exporter datamap_nginx_exporter; do
             echo "--- $c ---"
             docker logs --tail 50 "$c" 2>&1 || true
           done

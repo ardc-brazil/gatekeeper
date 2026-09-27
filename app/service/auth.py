@@ -2,6 +2,7 @@ import logging
 from uuid import UUID
 import jwt
 from app.exception.unauthorized import UnauthorizedException
+from app.model.client import Client
 from app.service.client import ClientService
 from app.service.secret import hash_secret, is_legacy_hash, verify_secret
 from casbin import SyncedEnforcer
@@ -20,7 +21,7 @@ class AuthService:
         self._file_upload_token_secret = file_upload_token_secret
         self._client_secret_pepper = client_secret_pepper
 
-    def authorize_client(self, api_key: str, salted_api_secret: str) -> None:
+    def authorize_client(self, api_key: str, salted_api_secret: str) -> Client:
         if api_key is None or salted_api_secret is None:
             raise UnauthorizedException("missing_information")
 
@@ -40,6 +41,8 @@ class AuthService:
 
         if is_legacy_hash(client.secret):
             self._upgrade_secret_hash(client.key, salted_api_secret)
+
+        return client
 
     def _upgrade_secret_hash(self, key: str, secret: str) -> None:
         try:

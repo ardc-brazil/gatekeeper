@@ -31,9 +31,10 @@ def _client(secret: str):
 
 
 def test_accepts_a_secret_stored_in_the_new_format(auth_service, client_service):
-    client_service.fetch.return_value = _client(hash_secret(SECRET, PEPPER))
+    client = _client(hash_secret(SECRET, PEPPER))
+    client_service.fetch.return_value = client
 
-    assert auth_service.authorize_client("a-key", SECRET) is None
+    assert auth_service.authorize_client("a-key", SECRET) is client
 
 
 def test_rejects_a_wrong_secret(auth_service, client_service):
@@ -46,7 +47,10 @@ def test_rejects_a_wrong_secret(auth_service, client_service):
 def test_accepts_a_secret_still_stored_as_bcrypt(auth_service, client_service):
     client_service.fetch.return_value = _client(hash_password(SECRET))
 
-    assert auth_service.authorize_client("a-key", SECRET) is None
+    assert (
+        auth_service.authorize_client("a-key", SECRET)
+        is client_service.fetch.return_value
+    )
 
 
 def test_upgrades_a_bcrypt_hash_once_it_has_been_verified(auth_service, client_service):
@@ -82,7 +86,10 @@ def test_a_failed_upgrade_does_not_fail_the_request(auth_service, client_service
     client_service.fetch.return_value = _client(hash_password(SECRET))
     client_service.replace_secret_hash.side_effect = RuntimeError("database is down")
 
-    assert auth_service.authorize_client("a-key", SECRET) is None
+    assert (
+        auth_service.authorize_client("a-key", SECRET)
+        is client_service.fetch.return_value
+    )
 
 
 def test_never_logs_the_secret_that_was_sent(auth_service, client_service, caplog):

@@ -2,6 +2,8 @@ from datetime import timedelta
 from io import BytesIO
 from minio import Minio
 
+from app.metrics import metrics
+
 
 class ObjectStorageGateway:
     def __init__(self, minio_client: Minio):
@@ -14,17 +16,19 @@ class ObjectStorageGateway:
         original_file_name: str,
         expires_in: timedelta = timedelta(days=7),
     ) -> str:
-        return self._minio_client.presigned_get_object(
-            bucket_name=bucket_name,
-            object_name=object_name,
-            expires=expires_in,
-            extra_query_params={
-                "response-content-disposition": f"attachment; filename={original_file_name}"
-            },
-        )
+        with metrics.external_call("minio", "object.presign"):
+            return self._minio_client.presigned_get_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                expires=expires_in,
+                extra_query_params={
+                    "response-content-disposition": f"attachment; filename={original_file_name}"
+                },
+            )
 
     def bucket_exists(self, bucket_name: str) -> bool:
-        return self._minio_client.bucket_exists(bucket_name)
+        with metrics.external_call("minio", "bucket.exists"):
+            return self._minio_client.bucket_exists(bucket_name)
 
     def put_file(
         self,
@@ -43,13 +47,14 @@ class ObjectStorageGateway:
             content_type: The MIME type of the file (default: application/octet-stream)
         """
         data_stream = BytesIO(file_data)
-        self._minio_client.put_object(
-            bucket_name=bucket_name,
-            object_name=object_name,
-            data=data_stream,
-            length=len(file_data),
-            content_type=content_type,
-        )
+        with metrics.external_call("minio", "object.put"):
+            self._minio_client.put_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                data=data_stream,
+                length=len(file_data),
+                content_type=content_type,
+            )
 
     def get_file(
         self,
@@ -71,10 +76,11 @@ class ObjectStorageGateway:
         """
         response = None
         try:
-            response = self._minio_client.get_object(
-                bucket_name=bucket_name, object_name=object_name
-            )
-            return response.read()
+            with metrics.external_call("minio", "object.get"):
+                response = self._minio_client.get_object(
+                    bucket_name=bucket_name, object_name=object_name
+                )
+                return response.read()
         except Exception as e:
             # MinIO client raises various exceptions for missing objects
             # Convert to standard FileNotFoundError for consistent handling

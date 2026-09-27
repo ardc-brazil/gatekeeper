@@ -27,7 +27,43 @@ first login, which is fine for one operator and not fine for a shared host.
 Prometheus is not published at all. It is reachable only from Grafana, over the
 docker network.
 
+## Dashboards
+
+They are JSON files under `infrastructure/grafana/dashboards/`, one Grafana
+folder per directory, loaded at start and re-read every 30 seconds. Grafana
+refuses to save changes to them: the repository is the only place they change.
+
+To change one, edit it in Grafana, then *Share → Export → Save to file*
+(leave "Export for sharing externally" off, so the datasources stay `prometheus`
+and `loki`), replace the file, set `"id": null`, and commit. Then:
+
+```bash
+pytest app/grafana_dashboards_test.py
+```
+
+It fails when a panel queries a `datamap_*` metric nobody declares — a renamed
+metric draws an empty panel that looks exactly like a quiet system. Metrics
+declared by other services (webapp, archivist, zipper) are listed in
+`infrastructure/grafana/external-metrics.txt`.
+
+The design and the metric contract are in
+`docs/rfcs/005-platform-metrics-and-dashboards.md`.
+
 ## Where the metrics come from
+
+| Job | Target | What |
+|---|---|---|
+| `gatekeeper` | `datamap_gatekeeper:9095`, `datamap_gatekeeper_b:9095` | the application |
+| `webapp` | `datamap_frontend:9095` | the BFF, its calls to the gatekeeper, and the browser's telemetry |
+| `archivist` | `datamap_archivist:9096` | collocation runs, files and bytes moved |
+| `zipper` | `datamap_zipper:9095` | zips built, failed, duration and size |
+| `node` | `host.docker.internal:9100` | the host: CPU, memory, disk, network |
+| `cadvisor` | `datamap_cadvisor:8080` | every `datamap_*` container |
+| `postgres` | `datamap_postgres_exporter:9187` | the gatekeeper database |
+| `nginx` | `datamap_nginx_exporter:9113` | the host nginx's `stub_status` |
+| `minio`, `minio_bucket` | `datamap_min_io:9000` | capacity, S3 traffic, bucket sizes |
+| `tusd` | `datamap_tusd:1080` | uploads and hooks |
+| `prometheus`, `loki`, `alloy` | | the stack itself |
 
 The gatekeeper serves them on **port 9095**, which Compose does not publish.
 A Prometheus scrape config cannot send `X-Api-Key` and `X-Api-Secret`, so the
@@ -40,6 +76,147 @@ docker exec datamap_gatekeeper python3 -c \
   "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9095/metrics').read().decode()[:400])"
 ```
 
+### What the exporters are allowed to do
+
+- **cAdvisor** runs privileged and mounts `/var/lib/docker` and `/sys`: like
+  Alloy's socket, root-equivalent. It sees the neighbours' containers too;
+  Prometheus drops every series whose `name` is not `datamap_*` before storing.
+- **node-exporter** runs on the host network with the host's PID namespace, and
+  reads `/`, `/proc` and `/sys` read-only. It listens on the docker0 address
+  only (`172.17.0.1:9100`), which containers reach and the internet does not.
+- **postgres-exporter** logs in with the application's own `POSTGRES_USER`,
+  read from the same env file, so a credential rotation reaches it with nothing
+  else to change.
+
+## One-time host setup
+
+The compose file cannot do these: nginx runs on the host and its configuration
+is not in this repository, and MinIO is not recreated by the automated deploy.
+Until they are done, the Nginx dashboard is empty and the `minio` target
+answers 403. Nothing else depends on them.
+
+### 1. The addresses the exporters use
+
+```bash
+ip -4 addr show docker0 | grep inet          # expect 172.17.0.1
+sudo ss -ltnp | grep -E ':(8081|9100)\b'      # expect nothing
+```
+
+If docker0 is not `172.17.0.1`, set `HOST_METRICS_ADDRESS` to its address in
+the `env` of `.github/workflows/observability.yml`. If either port is taken,
+pick another and change it in `docker-compose-observability.yaml` and
+`infrastructure/prometheus/prometheus.yml`.
+
+### 2. nginx: a status page and a JSON access log
+
+Check that nginx reads `conf.d` inside its `http` block:
+
+```bash
+sudo nginx -T 2>/dev/null | grep -n "include /etc/nginx/conf.d"
+```
+
+Create `/etc/nginx/conf.d/datamap-observability.conf`:
+
+```nginx
+# JSON access log for Loki, next to the existing one, for DataMap's hosts only.
+# $uri and never $request_uri: presigned download URLs carry their signature
+# in the query string.
+map $host $datamap_json_log {
+    ~datamap\.pcs\.usp\.br$  1;
+    default                  0;
+}
+
+log_format datamap_json escape=json '{'
+    '"time":"$time_iso8601",'
+    '"remote_addr":"$remote_addr",'
+    '"request_method":"$request_method",'
+    '"uri":"$uri",'
+    '"status":"$status",'
+    '"bytes_sent":$bytes_sent,'
+    '"request_time":$request_time,'
+    '"upstream_addr":"$upstream_addr",'
+    '"upstream_status":"$upstream_status",'
+    '"upstream_response_time":"$upstream_response_time",'
+    '"request_id":"$http_x_request_id",'
+    '"referer":"$http_referer",'
+    '"user_agent":"$http_user_agent",'
+    '"vhost":"$host"'
+'}';
+
+access_log /var/log/nginx/datamap.access.json.log datamap_json if=$datamap_json_log;
+
+# Read by datamap_nginx_exporter from the docker network. Public requests get 403.
+server {
+    listen 8081;
+    access_log off;
+
+    location = /stub_status {
+        stub_status;
+        allow 127.0.0.1;
+        allow 172.16.0.0/12;
+        deny all;
+    }
+}
+```
+
+An `access_log` at the `http` level adds to the one `nginx.conf` already
+declares there; it does not replace it. One inside a `server` block would.
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+curl -s http://127.0.0.1:8081/stub_status          # "Active connections: …"
+curl -s -o /dev/null https://datamap.pcs.usp.br/
+sudo tail -1 /var/log/nginx/datamap.access.json.log # one JSON line
+```
+
+The existing logrotate rule for `/var/log/nginx/*.log` covers the new file.
+
+### 3. Containers must reach the host
+
+```bash
+docker run --rm --network gatekeeper_gatekeeper-network \
+  --add-host host.docker.internal:host-gateway curlimages/curl:8.10.1 \
+  -s -m 5 http://host.docker.internal:8081/stub_status
+```
+
+A timeout means the host firewall drops traffic from the docker bridges:
+
+```bash
+sudo ufw allow from 172.16.0.0/12 to any port 8081,9100 proto tcp
+```
+
+### 4. MinIO, once
+
+`MINIO_PROMETHEUS_AUTH_TYPE=public` takes effect when the container is
+recreated, and the automated deploy never recreates MinIO. Downloads pause for
+the few seconds it takes:
+
+```bash
+cd ~/gatekeeper
+COMPOSE_PROJECT_NAME=gatekeeper ENV_FILE_PATH=../environment/gatekeeper.prod.env \
+  docker compose -f docker-compose-infrastructure.yaml up -d minio
+```
+
+Port 9000 is published on the host. From **outside** the host, confirm the
+metrics are not reachable:
+
+```bash
+curl -s -m 5 -o /dev/null -w "%{http_code}\n" \
+  http://datamap.pcs.usp.br:9000/minio/v2/metrics/cluster   # expect 000 (no answer)
+```
+
+A `200` means port 9000 is open to the internet. Close it in the firewall;
+nginx reaches MinIO on `localhost` and does not need it open.
+
+### 5. Check
+
+After the next observability deploy, every target should be `up`:
+
+```bash
+docker exec datamap_prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/targets?state=active' \
+  | grep -o '"job":"[a-z_]*"\|"health":"[a-z]*"' | paste - -
+```
+
 ## The alerts
 
 | Alert | Fires when | Why it exists |
@@ -48,7 +225,15 @@ docker exec datamap_gatekeeper python3 -c \
 | `SnapshotPublicationFailing` | a snapshot fails to publish | a findable DOI with no page behind it |
 | `CollocationBacklogNotDraining` | datasets pending for two hours | the Archivist retries forever and never gives up |
 | `GatekeeperDown` | no successful scrape for five minutes | |
-| `ServerErrorsElevated` | over 5% of requests are 5xx for ten minutes | |
+| `ServerErrorsElevated` | over 5% of one service's requests are 5xx for ten minutes | |
+| `LatencyHigh` | a service's p95 is over 2s for fifteen minutes, with real traffic | |
+| `HostDiskFillingUp` | a filesystem is over 85% full, or on course to fill within a day | a full disk stops uploads first |
+| `HostMemoryLow` | under 10% of memory available for fifteen minutes | the host is shared: check Containers first |
+| `ContainerRestarting` | a `datamap_*` container restarted more than twice in an hour | |
+| `PostgresConnectionsHigh` | over 80% of `max_connections` for ten minutes | |
+| `DataCiteFailing` | a call to DataCite failed, timed out or found nobody, in fifteen minutes | DOIs cannot be created or published |
+| `ArchivistStalled` | no successful archivist run in an hour, an hour after it started | files stay in `staged/` |
+| `ZipsFailing` | a zip failed in the last half hour | |
 
 **Nothing delivers these anywhere yet.** They are visible in Prometheus under
 Alerts and in Grafana, but there is no Alertmanager, so nobody is paged or

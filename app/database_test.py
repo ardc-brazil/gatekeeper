@@ -9,7 +9,9 @@ class TestRunMigrations(unittest.TestCase):
         db_url = Mock()
         db_url.unicode_string.return_value = "postgresql+psycopg2://u:p@localhost/db"
 
-        with patch("app.database.create_engine"):
+        with patch("app.database.create_engine"), patch(
+            "app.database.instrument_engine"
+        ):
             self.database = Database(db_url=db_url, log_enabled=False)
 
     def test_alembic_does_not_touch_the_logging_configuration(self):

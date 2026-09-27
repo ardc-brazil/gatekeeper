@@ -39,6 +39,10 @@ from app.adapter import doi as DOIAdapter
 from app.metrics import metrics
 
 
+def _mode_of(doi: DOI) -> str:
+    return getattr(doi.mode, "value", doi.mode) or ""
+
+
 class DatasetService:
     def __init__(
         self,
@@ -278,6 +282,7 @@ class DatasetService:
                 self._doi_service.update_metadata(doi=doi)
 
         self._repository.upsert(dataset=dataset_db)
+        metrics.dataset_event("updated")
 
     def _should_create_new_version(
         self, dataset_db: DatasetDBModel, dataset_request: Dataset
@@ -338,6 +343,7 @@ class DatasetService:
         )
 
         created: DatasetDBModel = self._repository.upsert(dataset=dataset)
+        metrics.dataset_event("created")
 
         return self._adapt_dataset(dataset=created)
 
@@ -354,6 +360,7 @@ class DatasetService:
         dataset.is_enabled = False
 
         self._repository.upsert(dataset=dataset)
+        metrics.dataset_event("deleted")
 
     def enable_dataset(self, dataset_id: UUID, tenancies: list[str] = None) -> None:
         if tenancies is None:
@@ -368,6 +375,7 @@ class DatasetService:
         dataset.is_enabled = True
 
         self._repository.upsert(dataset=dataset)
+        metrics.dataset_event("enabled")
 
     def enable_dataset_version(
         self,
@@ -399,6 +407,7 @@ class DatasetService:
         version.is_enabled = True
 
         self._version_repository.upsert(dataset_version=version)
+        metrics.dataset_event("version_enabled")
 
     def disable_dataset_version(
         self,
@@ -432,6 +441,7 @@ class DatasetService:
         version.is_enabled = False
 
         self._version_repository.upsert(dataset_version=version)
+        metrics.dataset_event("version_deleted")
 
     def fetch_available_filters(self) -> dict:
         with open("app/resources/available_filters.json") as categories:
@@ -450,6 +460,19 @@ class DatasetService:
         result: PaginatedResult = self._repository.search(
             query_params=query,
             tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+        )
+        metrics.search(
+            has_text=bool(query.full_text),
+            has_filters=any(
+                (
+                    query.categories,
+                    query.level,
+                    query.data_types,
+                    query.date_from,
+                    query.date_to,
+                )
+            ),
+            found=result.total_count if result is not None else 0,
         )
 
         if result is None or result.items is None:
@@ -509,6 +532,7 @@ class DatasetService:
         )
 
         self._version_repository.upsert(version)
+        metrics.upload_completed(dataset_db.tenancy, file.extension, file.size_bytes)
 
     def publish_dataset_version(
         self,
@@ -538,6 +562,7 @@ class DatasetService:
 
         version.design_state = DesignState.PUBLISHED
         self._version_repository.upsert(dataset_version=version)
+        metrics.dataset_event("version_published")
 
         if dataset.design_state == DesignState.DRAFT:
             dataset.design_state = DesignState.PUBLISHED
@@ -610,7 +635,12 @@ class DatasetService:
             doi=doi, dataset=dataset, version=version, creator_id=user_id
         )
 
-        created_doi: DOI = self._doi_service.create(doi=doi)
+        try:
+            created_doi: DOI = self._doi_service.create(doi=doi)
+        except Exception:
+            metrics.doi_operation("create", success=False, mode=_mode_of(doi))
+            raise
+        metrics.doi_operation("create", success=True, mode=_mode_of(doi))
 
         if doi.mode == DOIMode.MANUAL:
             self._publish_dataset_snapshot(
@@ -663,10 +693,16 @@ class DatasetService:
                 doi_state=new_state.value,
             )
 
-        self._doi_service.change_state(
-            identifier=version.doi.identifier,
-            new_state=new_state,
-        )
+        operation = f"state.{new_state.value.lower()}"
+        try:
+            self._doi_service.change_state(
+                identifier=version.doi.identifier,
+                new_state=new_state,
+            )
+        except Exception:
+            metrics.doi_operation(operation, success=False)
+            raise
+        metrics.doi_operation(operation, success=True)
 
     def get_doi(
         self,
@@ -728,7 +764,12 @@ class DatasetService:
         if version.doi is None:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
 
-        self._doi_service.delete(identifier=version.doi.identifier)
+        try:
+            self._doi_service.delete(identifier=version.doi.identifier)
+        except Exception:
+            metrics.doi_operation("delete", success=False)
+            raise
+        metrics.doi_operation("delete", success=True)
 
     def get_file_download_url(
         self,
@@ -765,13 +806,15 @@ class DatasetService:
         if file is None:
             raise NotFoundException(f"not_found: {file_id}")
 
-        return self._minio_gateway.get_pre_signed_url(
+        url = self._minio_gateway.get_pre_signed_url(
             bucket_name=self._dataset_bucket,
             object_name=file.storage_path[len(self._dataset_bucket) + 1 :]
             if file.storage_path.startswith(self._dataset_bucket + "/")
             else file.storage_path,
             original_file_name=file.name,
         )
+        metrics.download_url_issued(dataset.tenancy, file.extension, file.size_bytes)
+        return url
 
     def create_new_version(
         self,
@@ -806,6 +849,7 @@ class DatasetService:
             )
 
         self._version_repository.upsert(dataset_version=new_version)
+        metrics.dataset_event("version_created")
 
         return self._adapt_version(version=new_version)
 

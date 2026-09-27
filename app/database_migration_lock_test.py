@@ -6,7 +6,11 @@ from app.database import MIGRATION_LOCK_KEY, Database
 
 class MigrationLockTestCase(unittest.TestCase):
     def setUp(self):
-        with patch("app.database.create_engine"), patch("app.database.orm"):
+        with (
+            patch("app.database.create_engine"),
+            patch("app.database.orm"),
+            patch("app.database.instrument_engine"),
+        ):
             self.database = Database(db_url=MagicMock(), log_enabled=False)
         self.connection = MagicMock()
         self.database._engine = MagicMock()

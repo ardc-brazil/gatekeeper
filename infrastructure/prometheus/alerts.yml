@@ -56,11 +56,117 @@ groups:
             no shell to run one with, so this is how their absence is noticed.
 
       - alert: ServerErrorsElevated
+        # Per service: the webapp's traffic would otherwise dilute the gatekeeper's.
         expr: >-
-          sum(rate(datamap_http_requests_total{status=~"5.."}[10m]))
-          / sum(rate(datamap_http_requests_total[10m])) > 0.05
+          sum by (job) (rate(datamap_http_requests_total{status=~"5.."}[10m]))
+          / sum by (job) (rate(datamap_http_requests_total[10m])) > 0.05
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "More than 5% of requests are failing"
+          summary: "More than 5% of {{ $labels.job }} requests are failing"
+
+      - alert: LatencyHigh
+        # Ignored below one request every twenty seconds, where a single slow
+        # request is the whole p95.
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (le, job) (rate(datamap_http_request_duration_seconds_bucket[10m])))
+          > 2
+          and sum by (job) (rate(datamap_http_requests_total[10m])) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} p95 latency has been over 2s for fifteen minutes"
+
+      - alert: DataCiteFailing
+        # A refusal (client_error) is DataCite judging the request; this is
+        # DataCite failing, timing out, or unreachable.
+        expr: >-
+          sum(increase(datamap_external_request_duration_seconds_count{service="datacite",outcome=~"server_error|timeout|error"}[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Calls to DataCite are failing"
+          description: >-
+            DOI creation and publication depend on it. Check the Integrations
+            dashboard for which operation.
+
+      - alert: ArchivistStalled
+        # The process must have been up an hour too: right after a restart the
+        # timestamp is zero, and every deploy would page.
+        expr: >-
+          time() - max(datamap_archivist_last_success_timestamp_seconds) > 3600
+          and time() - max(process_start_time_seconds{job="archivist"}) > 3600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "The archivist has not completed a run in an hour"
+          description: >-
+            Uploaded files stay in staged/ until it does. A run that fails
+            every time looks like this too; see the Pipelines dashboard.
+
+      - alert: ZipsFailing
+        expr: sum(increase(datamap_zip_jobs_total{outcome="failed"}[30m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A zip failed to build in the last half hour"
+
+  - name: datamap-infrastructure
+    rules:
+      - alert: HostDiskFillingUp
+        expr: >-
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.15
+          )
+          or
+          (
+            predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}[6h], 24 * 3600) < 0
+            and node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+              / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.4
+          )
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.mountpoint }} is over 85% full or will be full within a day"
+          description: >-
+            Loki, Prometheus, Postgres and MinIO's staging area all write to this
+            host. A full disk stops uploads first.
+
+      - alert: HostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Less than 10% of the host's memory is available"
+          description: >-
+            The host is shared. Check the Containers dashboard before assuming
+            it is a DataMap container.
+
+      - alert: ContainerRestarting
+        expr: changes(container_start_time_seconds{name=~"datamap_.*"}[1h]) > 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.name }} has restarted more than twice in an hour"
+
+      - alert: PostgresConnectionsHigh
+        expr: >-
+          sum(pg_stat_database_numbackends) / max(pg_settings_max_connections) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres is using over 80% of its connections"
+          description: >-
+            Each gatekeeper instance holds up to fifteen (pool of five plus ten
+            overflow), and the archivist has its own.

@@ -1,6 +1,10 @@
 import dataclasses
 import unittest
 from unittest.mock import patch, MagicMock
+
+import requests
+from prometheus_client import REGISTRY
+
 from app.gateway.doi.resource import DOIPayload, Attributes, Creator, Title, Types, Data
 from app.gateway.doi.doi import DOIGateway
 
@@ -137,6 +141,69 @@ class TestDOIGateway(unittest.TestCase):
             self.gateway.delete(repository=self.repository, identifier="invalid-doi")
 
         self.assertEqual("Error deleting DOI: Not Found", str(context.exception))
+
+
+def _calls(operation: str, outcome: str) -> float:
+    return (
+        REGISTRY.get_sample_value(
+            "datamap_external_request_duration_seconds_count",
+            {"service": "datacite", "operation": operation, "outcome": outcome},
+        )
+        or 0.0
+    )
+
+
+class TestDOIGatewayMetrics(unittest.TestCase):
+    def setUp(self):
+        self.gateway = DOIGateway(
+            base_url="https://api.datacite.org",
+            login="login",
+            password="password",
+            timeout_seconds=7,
+        )
+
+    @patch("app.gateway.doi.doi.requests.post")
+    def test_a_rejected_creation_is_recorded_with_the_status_class(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=422, text="invalid")
+        before = _calls("doi.create", "client_error")
+
+        with self.assertRaisesRegex(Exception, "Error creating DOI"):
+            self.gateway.post(
+                doi=DOIPayload(data=Data(attributes=Attributes(prefix="10.1234")))
+            )
+
+        self.assertEqual(_calls("doi.create", "client_error"), before + 1)
+
+    @patch("app.gateway.doi.doi.requests.get")
+    def test_a_datacite_that_does_not_answer_is_recorded_as_a_timeout(self, mock_get):
+        mock_get.side_effect = requests.exceptions.ReadTimeout()
+        before = _calls("doi.get", "timeout")
+
+        with self.assertRaises(requests.exceptions.ReadTimeout):
+            self.gateway.get(repository="repo", identifier="10.1234/x")
+
+        self.assertEqual(_calls("doi.get", "timeout"), before + 1)
+
+    @patch("app.gateway.doi.doi.requests.put")
+    def test_a_successful_update_is_recorded(self, mock_put):
+        mock_put.return_value = MagicMock(status_code=200)
+        before = _calls("doi.update", "success")
+
+        self.gateway.update(
+            doi=DOIPayload(data=Data(attributes=Attributes(prefix="10.1234"))),
+            identifier="10.1234/x",
+        )
+
+        self.assertEqual(_calls("doi.update", "success"), before + 1)
+
+    @patch("app.gateway.doi.doi.requests.delete")
+    def test_a_deletion_is_recorded(self, mock_delete):
+        mock_delete.return_value = MagicMock(status_code=204)
+        before = _calls("doi.delete", "success")
+
+        self.gateway.delete(repository="repo", identifier="10.1234/x")
+
+        self.assertEqual(_calls("doi.delete", "success"), before + 1)
 
 
 if __name__ == "__main__":

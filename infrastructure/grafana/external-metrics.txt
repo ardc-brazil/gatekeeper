@@ -1,0 +1,30 @@
+# datamap_* metrics declared by services other than the gatekeeper, which the
+# dashboards query. The gatekeeper's own are read from app/metrics.py and
+# app/platform_state.py. One name per line; suffixes such as _total and _bucket
+# are optional. The contract is docs/rfcs/005-platform-metrics-and-dashboards.md.
+
+# datamap-webapp, server side (lib/metrics.ts)
+datamap_webapp_logins_total
+
+# datamap-webapp, browser side (pages/api/telemetry.ts)
+datamap_web_vitals_seconds
+datamap_web_vitals_cls
+datamap_web_page_views_total
+datamap_web_errors_total
+datamap_web_ui_events_total
+
+# archivist (app/metrics.py)
+datamap_archivist_job_runs_total
+datamap_archivist_job_duration_seconds
+datamap_archivist_last_success_timestamp_seconds
+datamap_archivist_datasets_processed_total
+datamap_archivist_files_moved_total
+datamap_archivist_bytes_moved_total
+datamap_archivist_file_copy_duration_seconds
+
+# zipper (app/metrics.py)
+datamap_zip_jobs_total
+datamap_zip_jobs_in_progress
+datamap_zip_duration_seconds
+datamap_zip_input_bytes_total
+datamap_zip_output_bytes_total
