@@ -71,19 +71,21 @@ scrape_configs:
     static_configs:
       - targets: ["datamap_nginx_exporter:9113"]
 
+  # By its alias: MinIO refuses the container name, whose underscore is not
+  # valid in a hostname ("Invalid Request (invalid hostname)", HTTP 400).
   # MINIO_PROMETHEUS_AUTH_TYPE=public: the docker network is the boundary, as
   # for the gatekeeper, and there is no token to expire when credentials rotate.
   - job_name: minio
     scrape_interval: 30s
     metrics_path: /minio/v2/metrics/cluster
     static_configs:
-      - targets: ["datamap_min_io:9000"]
+      - targets: ["minio:9000"]
 
   - job_name: minio_bucket
     scrape_interval: 60s
     metrics_path: /minio/v2/metrics/bucket
     static_configs:
-      - targets: ["datamap_min_io:9000"]
+      - targets: ["minio:9000"]
 
   - job_name: tusd
     static_configs:
