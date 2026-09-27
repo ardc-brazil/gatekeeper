@@ -25,6 +25,12 @@ class AuthService:
         if api_key is None or salted_api_secret is None:
             raise UnauthorizedException("missing_information")
 
+        # The key column is a UUID: anything else would fail inside the query.
+        try:
+            UUID(str(api_key))
+        except ValueError:
+            raise UnauthorizedException("wrong_credentials")
+
         client = self._client_service.fetch(api_key)
 
         if client is None:
@@ -65,10 +71,10 @@ class AuthService:
                 audience="file_upload",
             )
         except jwt.ExpiredSignatureError:
-            logging.warning(f"expired jwt: {user_token}")
+            logging.warning("upload token rejected: expired")
             raise UnauthorizedException("expired")
         except jwt.InvalidTokenError:
-            logging.warning(f"invalid token: {user_token}")
+            logging.warning("upload token rejected: invalid")
             raise UnauthorizedException("invalid_token")
         except Exception as e:
             logging.error(f"failed to validate jwt. {e}")

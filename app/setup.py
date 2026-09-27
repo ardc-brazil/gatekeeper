@@ -93,6 +93,7 @@ def setup_middleware(fastAPIApp: FastAPI) -> None:
     @fastAPIApp.middleware("http")
     async def assign_request_id(request: Request, call_next):
         request_id = request.headers.get("X-Request-Id") or str(uuid4())
+        request.state.request_id = request_id
         token = request_id_var.set(request_id)
         started = perf_counter()
         body = await _body_for_log(request)

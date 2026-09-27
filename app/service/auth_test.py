@@ -21,7 +21,7 @@ class TestAuthService(unittest.TestCase):
         )
 
     def test_authorize_client_success(self):
-        api_key = "test_api_key"
+        api_key = "5060b1a2-9aaf-48db-871a-0839007fd478"
         salted_api_secret = "test_salted_secret"
         client_secret = "hashed_secret"
         client_mock = Mock(secret=client_secret)
@@ -45,7 +45,7 @@ class TestAuthService(unittest.TestCase):
             self.auth_service.authorize_client(None, None)
 
     def test_authorize_client_wrong_credentials(self):
-        api_key = "test_api_key"
+        api_key = "5060b1a2-9aaf-48db-871a-0839007fd478"
         salted_api_secret = "test_salted_secret"
         self.client_service.fetch.return_value = None
 
@@ -108,6 +108,20 @@ class TestAuthService(unittest.TestCase):
                 self.auth_service.validate_jwt_and_decode(user_token)
 
         self.assertEqual(str(context.exception), "invalid_token")
+
+    def test_a_rejected_upload_token_is_never_written_to_the_log(self):
+        for error in (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            with self.subTest(error=error.__name__):
+                with self.assertLogs(level="DEBUG") as logs:
+                    with patch("app.service.auth.jwt.decode", side_effect=error):
+                        with self.assertRaises(UnauthorizedException):
+                            self.auth_service.validate_jwt_and_decode(
+                                "eyJ.a-token-that-must-not-be-logged.sig"
+                            )
+
+                self.assertNotIn(
+                    "a-token-that-must-not-be-logged", "".join(logs.output)
+                )
 
     def test_validate_jwt_and_decode_failed_to_validate(self):
         user_token = "test_user_token"

@@ -30,18 +30,15 @@ class TestClientGetEndpoints:
         assert_status_code(response, 401)
         assert_response_matches_dict(response, {"detail": "Unauthorized"})
 
-    def test_get_clients_invalid_auth_500(self, http_client, invalid_headers):
-        """Test getting clients with invalid auth returns 500 due to UUID validation."""
-        # Note: The API returns 500 because invalid-key fails UUID validation in database layer
-        # This is expected behavior since authentication succeeds but UUID parsing fails
-        # Act
+    def test_a_malformed_api_key_is_refused_like_a_wrong_one(
+        self, http_client, invalid_headers
+    ):
         response = http_client.get("/clients", headers=invalid_headers)
 
-        # Assert
-        assert_status_code(response, 500)
-        data = assert_json_response(response)
-        assert "detail" in data
-        assert "invalid input syntax for type uuid" in data["detail"]
+        assert_status_code(response, 401)
+        assert_response_matches_dict(response, {"detail": "Unauthorized"})
+        assert "uuid" not in response.text.lower()
+        assert "select" not in response.text.lower()
 
     def test_get_client_by_key_not_found_404(self, http_client, valid_headers):
         """Test getting non-existent client returns 404."""
