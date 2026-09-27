@@ -8,8 +8,10 @@ Requires=docker.service
 Type=oneshot
 User=datamap
 Group=datamap
-WorkingDirectory=/home/datamap/actions-runner/_work/gatekeeper/gatekeeper
-ExecStart=/usr/bin/python3 scripts/backup_database.py \
+# Not the runner's workspace: that directory belongs to CI and may be cleaned,
+# and a backup that stops running because of a checkout is worse than none,
+# because it looks installed. The deploy installs the script here.
+ExecStart=/usr/bin/python3 /home/datamap/bin/backup_database.py \
     --output-dir /home/datamap/storage/backups/postgres \
     --keep-daily 30 \
     --keep-monthly 12
