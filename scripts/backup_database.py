@@ -13,6 +13,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from scripts.backup_metrics import write as write_metrics
+
 CONTAINER = "datamap_gatekeeper_db"
 DATABASE = "gatekeeper_db"
 ROLE = "gk_admin"
@@ -106,6 +108,7 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--keep-daily", type=int, default=30)
     parser.add_argument("--keep-monthly", type=int, default=12)
+    parser.add_argument("--metrics-file", type=Path)
     parser.add_argument("--dry-run", action="store_true")
     arguments = parser.parse_args()
 
@@ -119,11 +122,13 @@ def main() -> int:
         return 2
 
     now = datetime.now(timezone.utc)
+    size = 0
     if arguments.dry_run:
         print(f"would write {backup_name(now)}")
     else:
         written = take_backup(directory, now)
-        print(f"wrote {written.name} ({written.stat().st_size // 1024} KiB), verified")
+        size = written.stat().st_size
+        print(f"wrote {written.name} ({size // 1024} KiB), verified")
 
     names = [path.name for path in directory.iterdir() if path.is_file()]
     expired = to_prune(names, now, arguments.keep_daily, arguments.keep_monthly)
@@ -140,6 +145,16 @@ def main() -> int:
         if path.is_file() and parse_backup_date(path.name)
     ]
     print(f"{len(remaining)} backups kept")
+
+    if arguments.metrics_file and not arguments.dry_run:
+        if write_metrics(arguments.metrics_file, now, size, len(remaining)):
+            print(f"metrics written to {arguments.metrics_file}")
+        else:
+            # The backup succeeded; a metric that could not be written is
+            # not a reason to report failure.
+            print(
+                f"could not write metrics to {arguments.metrics_file}", file=sys.stderr
+            )
     return 0
 
 

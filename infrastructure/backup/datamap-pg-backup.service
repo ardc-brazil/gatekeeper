@@ -10,9 +10,11 @@ User=datamap
 Group=datamap
 # Not the runner's workspace: that directory belongs to CI and may be cleaned,
 # and a backup that stops running because of a checkout is worse than none,
-# because it looks installed. The deploy installs the script here.
-ExecStart=/usr/bin/python3 /home/datamap/bin/backup_database.py \
+# because it looks installed. The deploy installs the package here.
+Environment=PYTHONPATH=/home/datamap/bin
+ExecStart=/usr/bin/python3 -m scripts.backup_database \
     --output-dir /home/datamap/storage/backups/postgres \
     --keep-daily 30 \
-    --keep-monthly 12
+    --keep-monthly 12 \
+    --metrics-file /home/datamap/metrics/backup.prom
 TimeoutStartSec=1800

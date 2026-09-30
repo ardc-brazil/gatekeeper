@@ -272,11 +272,14 @@ jobs:
       # The backup timer runs outside Docker, at 03:20, with nobody watching.
       # Running it from this workspace would make it depend on a directory CI
       # owns; the --help is here so a broken import fails now and not then.
-      - name: Install the script the backup timer runs
+      - name: Install the scripts the backup timer runs
         run: |
-          install -D -m 755 scripts/backup_database.py /home/datamap/bin/backup_database.py
-          /usr/bin/python3 /home/datamap/bin/backup_database.py --help > /dev/null
-          echo "installed and runnable"
+          install -D -m 644 scripts/__init__.py /home/datamap/bin/scripts/__init__.py
+          install -D -m 644 scripts/backup_database.py /home/datamap/bin/scripts/backup_database.py
+          install -D -m 644 scripts/backup_metrics.py /home/datamap/bin/scripts/backup_metrics.py
+          rm -f /home/datamap/bin/backup_database.py
+          PYTHONPATH=/home/datamap/bin /usr/bin/python3 -m scripts.backup_database --help > /dev/null
+          echo "installed and importable"
 
       - name: Container status
         if: always()
