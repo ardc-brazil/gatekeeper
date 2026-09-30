@@ -20,6 +20,11 @@ argues **against** adopting Kubernetes to get there.
 The ordering principle: nothing here is worth doing before a merge to `main` is
 gated by tests, because that is the failure that let every other problem persist.
 
+**Status: all ten items are in production as of 2026-09-27.** The sequencing table
+below records when each landed, decision 6 records where the implementation
+departed from what was written here, and the note after the table records the two
+problems this RFC did not think to include.
+
 ## Motivation
 
 Evidence gathered on 2026-09-09, from production and from the test suites.
@@ -290,12 +295,40 @@ Environment files are tracked today and carry real values. The goal is secrets
 that live in git as code, without a paid service.
 
 **SOPS + age**: values are encrypted in the file, keys are not, so a diff still
-shows which variable changed without revealing it. The private key lives on the
-production host and in the runner's environment. `sops -d` at deploy time
+shows which variable changed without revealing it. `sops -d` at deploy time
 produces the `.env` the containers read.
 
 Migration path: rotate everything currently committed — treat it as leaked,
 because it is — then commit the encrypted files and delete the plaintext ones.
+
+#### What changed in implementation, 2026-09-27
+
+Two things this section got wrong, both worth keeping rather than quietly fixing.
+
+**The key does not live in two places.** "On the production host and in the
+runner's environment" describes two things that are one machine: the self-hosted
+runner *is* the production host. There is one copy on it, one on a maintainer's
+laptop, and one in a password manager — and that third copy is the only one that
+is a backup. `scripts/verify_key_backup.sh` decrypts with it inside a container
+that cannot see the other two, so the test fails if the backup is wrong instead
+of passing against a local key.
+
+**The plaintext was not deleted, on purpose.** Deleting it was the plan and it is
+the wrong move at this point, for a reason that only appeared once the thing
+existed:
+
+- The deploy compares the decrypted copy against the plaintext and refuses to
+  continue if they differ. That check is what makes the encrypted copy
+  trustworthy while two copies exist; deleting one side leaves the check with
+  nothing to compare against. Both should go at once, not one and then the other.
+- The plaintext is the last non-encrypted copy. Until the key backup has been
+  *tested*, it is the recovery path if that backup turns out not to work.
+
+And the honest accounting of what the encryption buys: **not secrecy from someone
+holding the host.** The age key sits beside the plaintext with the same
+permissions and the same owner, so anyone who can read one can decrypt the other.
+What it buys is version control, review, and a copy of production configuration
+that survives the disk — which is worth having, and is not the same claim.
 
 ### 7. Prometheus metrics, including custom ones from the code
 
@@ -369,13 +402,38 @@ Ordered by what unblocks what, not by size.
 | 4 | ~~Bounded and archived logs~~ | **Done, 2026-09-11.** Rotation on every service in all four repositories, and the deploy archives a container's log before replacing it |
 | 5 | ~~Structured JSON logs, redaction, request id~~ | **In production, 2026-09-13**, across all three services, correlated end to end |
 | 6 | ~~Health checks + dependency report~~ | **In production, 2026-09-13.** The status page itself stays in the backlog |
-| 7 | Two instances behind nginx | Needs health checks to roll safely |
-| 8 | SOPS secrets | Independent, but needs a rotation window |
-| 9 | Prometheus + custom metrics | **Recommended next.** Detection, which is the gap that actually cost this year |
-| 10 | Loki + Grafana | Last. Logs are structured now, so it is finally worth something — but see the host below |
+| 7 | ~~Two instances behind nginx~~ | **In production, 2026-09-24.** 319 requests through a full rolling replacement, 0 failures, 11s |
+| 8 | ~~SOPS secrets~~ | **In production, 2026-09-27.** Rotation first, then encryption; the deploy refuses a copy that drifted. The plaintext stays for now — see the note under decision 6 |
+| 9 | ~~Prometheus + custom metrics~~ | **In production, 2026-09-23**, widened 2026-09-26 with exporters for the host, containers, Postgres and nginx |
+| 10 | ~~Loki + Grafana~~ | **In production, 2026-09-25.** 90 days of logs, dashboards provisioned from files, reachable at `/grafana/` |
 
 Items 1 to 3 are the ones that change how the team works; the rest are
 improvements to a system that already defends itself.
+
+**All ten are in production as of 2026-09-27.** What this RFC did not cover, and
+what the work turned up anyway, is in the note below.
+
+### What was missing from this RFC, 2026-09-30
+
+Two things mattered more than anything on the list, and neither was on it.
+
+**There were no database backups.** None since a hand-run dump in October 2024,
+and no schedule, script or cron to make another. This document spent pages on
+detecting and surviving failure while the one failure with no recovery path went
+unmentioned. There is now a nightly dump to the NAS, verified on write, pruned,
+and restored into a scratch database to prove it works — 138 MB of database, 25 MB
+compressed, under two seconds.
+
+**Authentication cost 159ms of blocked event loop per request.** bcrypt at cost 12
+against a random 120-bit API secret, which defends nothing: the cost exists for
+low-entropy human passwords. An unauthenticated health check degraded from 2ms to
+315ms under ten concurrent authenticated requests, so this was never only an auth
+problem. Now HMAC-SHA256 with a server-side pepper, 4ms, and the loop stays free.
+
+Both were found while doing something else — the backups while checking what
+depended on `pg_hba`, the latency while reading the auth path during the rotation.
+That is an argument for the RFC being a living document rather than a plan
+executed, and for looking at what is there rather than at what was written down.
 
 ### Where this stands, 2026-09-11
 
@@ -610,13 +668,29 @@ second reason to do 9 before 10, independent of the first.
 
 ## Open questions
 
-- **Repository visibility.** Public repositories get unlimited Actions minutes;
-  a private organisation gets 2,000 a month. Enough either way at current volume,
-  but worth confirming before relying on it.
-- **Who holds the age private key**, and where the recovery copy lives. A secret
-  store with one holder is an availability risk of its own.
-- **Log retention window.** Disk on the production host is the constraint;
-  30 days of structured logs is a reasonable starting point to measure.
+### Answered
+
+- **Repository visibility.** Public, and that is settled — but it turned out to
+  be the wrong question. The one that mattered was what a public repository was
+  carrying: a database password since 2024-04-07 and an API client secret since
+  2025-09-02, both rotated in September 2026. The deploy now fails if a
+  production credential is ever committed again.
+- **Who holds the age private key.** One copy on the production host, one on a
+  maintainer's laptop, one in a password manager. Only the third is a backup, and
+  `scripts/verify_key_backup.sh` is how it gets proven rather than assumed.
+- **Log retention window.** 90 days, on the host. The estimate that suggested
+  measuring first was wrong by an order of magnitude in the safe direction: the
+  logs are far smaller than expected once probes and idle polling stopped being
+  logged.
+
+### Still open
+
 - **Whether the Archivist should move off the production host.** It is the one
   component that must not be duplicated, which makes it awkward under any
   rollout scheme.
+- **When to remove the plaintext environment files**, which requires testing the
+  key backup first, and which must happen together with the drift check that
+  depends on them. See decision 6.
+- **The second checkout at `~/gatekeeper`.** Running `docker compose` from it
+  reverts infrastructure to whatever commit it sits on, silently. It already cost
+  a day of Alloy reporting unhealthy after overwriting a correct deploy.

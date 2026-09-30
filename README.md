@@ -6,6 +6,10 @@ Backend for DataAmazon.
 
 - Docker
 - Docker Compose
+- [sops](https://github.com/getsops/sops) and [age](https://github.com/FiloSottile/age),
+  to read or change production configuration. `brew install sops age`, or
+  `scripts/install_sops.sh` on a Linux host. See
+  [docs/runbooks/secrets.md](docs/runbooks/secrets.md).
 
 
 
@@ -114,7 +118,14 @@ To create new migrations, follow the steps below.
 
 ### Deploying
 
-> **WARNING:** The current deployment process causes downtime for services.
+Merging to `main` deploys. The steps below are the manual fallback.
+
+The deploy replaces the two instances one at a time, so it no longer causes
+downtime; it also decrypts `secrets/production/gatekeeper.env` and refuses to
+continue if that copy has drifted from the configuration production is running.
+
+> **WARNING:** The manual process below replaces both instances at once and does
+> cause downtime.
 
 ```sh
 # Connect to USP infra
@@ -147,9 +158,40 @@ make ENV_FILE_PATH={env_file_path} docker-deployment
 
 * Frontend: `https://datamap.pcs.usp.br/`
 * Backend: `https://datamap.pcs.usp.br/api/docs`
-* pgAdmin: `http://datamap.pcs.usp.br/pgadmin`
-* MIN.io: `https://datamap.pcs.usp.br/minio/ui/`
+* pgAdmin: `https://datamap.pcs.usp.br/pgadmin` — requires a TOTP second factor
+* MIN.io: `https://datamap.pcs.usp.br/minio/ui/` — behind an extra HTTP auth prompt
 * TUSd: `https://datamap.pcs.usp.br/files/`
+* Grafana: `https://datamap.pcs.usp.br/grafana/` — dashboards, metrics and logs
+
+The database is not published to the network: reach it through pgAdmin, or over
+an SSH tunnel to `127.0.0.1:5432`. Use your own role rather than the
+application's, so a rotation does not lock you out and the log says who acted.
+
+## Operating it
+
+Runbooks, for when something needs doing rather than reading:
+
+| | |
+|---|---|
+| [secrets.md](docs/runbooks/secrets.md) | read or change production configuration |
+| [credential-rotation.md](docs/runbooks/credential-rotation.md) | replace a credential, in the order that does not lock anyone out |
+| [database-backup.md](docs/runbooks/database-backup.md) | the nightly backup, and how to restore it |
+| [two-instances.md](docs/runbooks/two-instances.md) | the nginx upstream and the rolling replacement |
+| [observability.md](docs/runbooks/observability.md) | metrics, dashboards and logs |
+| [snapshot-audit.md](docs/runbooks/snapshot-audit.md) | find datasets whose DOI is public but whose files are not |
+| [post-deploy-verification.md](docs/runbooks/post-deploy-verification.md) | what to check after a deploy |
+
+Scripts the deploy and the timers run, all with unit tests:
+
+| | |
+|---|---|
+| `scripts/check_tracked_secrets.py` | fails the deploy if a production credential is committed |
+| `scripts/set_env_value.py` | write a secret into an env file without it reaching the screen |
+| `scripts/env_fingerprint.py` | check that two files hold the same secret, without reading it |
+| `scripts/compare_env_files.py` | what the deploy uses to detect drift |
+| `scripts/backup_database.py` | the nightly dump, verified and pruned |
+| `scripts/verify_key_backup.sh` | prove the age key in the password manager actually works |
+| `scripts/install_sops.sh` | pinned, checksum-verified sops on a Linux host |
 
 # First Setup for Local Development
 
