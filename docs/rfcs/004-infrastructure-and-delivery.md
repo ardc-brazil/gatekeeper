@@ -313,16 +313,27 @@ is a backup. `scripts/verify_key_backup.sh` decrypts with it inside a container
 that cannot see the other two, so the test fails if the backup is wrong instead
 of passing against a local key.
 
-**The plaintext was not deleted, on purpose.** Deleting it was the plan and it is
-the wrong move at this point, for a reason that only appeared once the thing
-existed:
+**The plaintext was not deleted immediately, and the reason is worth keeping.**
+Deleting it was the plan. For three days it was the wrong move:
 
-- The deploy compares the decrypted copy against the plaintext and refuses to
-  continue if they differ. That check is what makes the encrypted copy
-  trustworthy while two copies exist; deleting one side leaves the check with
-  nothing to compare against. Both should go at once, not one and then the other.
-- The plaintext is the last non-encrypted copy. Until the key backup has been
-  *tested*, it is the recovery path if that backup turns out not to work.
+- The deploy compared the decrypted copy against the plaintext and refused to
+  continue if they differed. That check is what made the encrypted copy
+  trustworthy while two copies existed; deleting one side would have left the
+  check with nothing to compare against. Both had to go at once.
+- The plaintext was the last non-encrypted copy, so until the key backup had been
+  *tested* it was the recovery path if that backup turned out not to work.
+
+Both conditions were met on 2026-09-30: `scripts/verify_key_backup.sh` decrypted
+with the password manager's copy inside a container that could not see the local
+key, and refused a deliberately wrong one. The plaintext and the comparison were
+then retired together.
+
+What replaced the comparison is not a weaker check but a different one. The guard
+that keeps production credentials out of this public repository used to read the
+plaintext; it now reads the decrypted copies, all of them, which is why the deploy
+decrypts every file and not just the gatekeeper's. Same 24 credentials checked.
+And with one source of truth, drift stops being something to detect — there is
+nothing left to drift from.
 
 And the honest accounting of what the encryption buys: **not secrecy from someone
 holding the host.** The age key sits beside the plaintext with the same
@@ -682,15 +693,16 @@ second reason to do 9 before 10, independent of the first.
   measuring first was wrong by an order of magnitude in the safe direction: the
   logs are far smaller than expected once probes and idle polling stopped being
   logged.
+- **When to remove the plaintext environment files.** 2026-09-30, once the key
+  backup was tested rather than assumed. They went together with the drift check
+  that depended on them, and the guard moved to the decrypted copies. See
+  decision 6.
 
 ### Still open
 
 - **Whether the Archivist should move off the production host.** It is the one
   component that must not be duplicated, which makes it awkward under any
   rollout scheme.
-- **When to remove the plaintext environment files**, which requires testing the
-  key backup first, and which must happen together with the drift check that
-  depends on them. See decision 6.
 - **The second checkout at `~/gatekeeper`.** Running `docker compose` from it
   reverts infrastructure to whatever commit it sits on, silently. It already cost
   a day of Alloy reporting unhealthy after overwriting a correct deploy.

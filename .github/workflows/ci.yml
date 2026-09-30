@@ -176,12 +176,10 @@ jobs:
       cancel-in-progress: false
 
     env:
-      # Absolute: the runner checks out into its own workspace, so the
-      # `../environment/...` used by hand does not resolve here.
-      ENV_FILE_PATH: ${{ vars.ENVIRONMENT_DIR || '/home/datamap/environment' }}/gatekeeper.prod.env
-      # Named separately because ENV_FILE_PATH is repointed at the decrypted
-      # copy partway through, and these two steps must keep meaning the host's.
-      PLAINTEXT_ENV_DIR: ${{ vars.ENVIRONMENT_DIR || '/home/datamap/environment' }}
+      # The decrypted copy, written by the step below. Set here rather than
+      # exported mid-job so no step's behaviour depends on where it sits in the
+      # order.
+      ENV_FILE_PATH: ${{ runner.temp }}/env/gatekeeper.env
       # Must match the project the running containers belong to, or `down`
       # leaves them up and `up` collides on the container names.
       COMPOSE_PROJECT_NAME: gatekeeper
@@ -192,33 +190,31 @@ jobs:
       - name: Show what is being deployed
         run: git log --oneline -1
 
-      # This repository is public. The production environment files only exist
-      # on this host, so this is the only place the comparison can be made.
-      - name: No production credential may be tracked
-        run: python3 scripts/check_tracked_secrets.py "$PLAINTEXT_ENV_DIR"
-
       - name: Install the pinned sops
         run: bash scripts/install_sops.sh
 
-      # umask first: the file carries every production credential, and creating
-      # it readable and fixing it afterwards leaves a window.
+      # Every file, not only the gatekeeper's: the guard below compares against
+      # all of them, so decrypting one would quietly stop checking the other
+      # services' credentials.
+      #
+      # umask first, not chmod after: the files carry every production
+      # credential, and creating them readable leaves a window.
       - name: Decrypt the environment
         run: |
           umask 077
-          "$HOME/bin/sops" --decrypt secrets/production/gatekeeper.env \
-            > "$RUNNER_TEMP/gatekeeper.env"
-          ls -l "$RUNNER_TEMP/gatekeeper.env"
+          mkdir -p "$RUNNER_TEMP/env"
+          for file in secrets/production/*.env; do
+            "$HOME/bin/sops" --decrypt "$file" > "$RUNNER_TEMP/env/$(basename "$file")"
+          done
+          ls -l "$RUNNER_TEMP/env"
         env:
           SOPS_AGE_KEY_FILE: /home/datamap/.config/sops/age/keys.txt
 
-      # The plaintext on the host is still the source of truth, so a difference
-      # means the encrypted copy drifted. Deploying the drifted one would apply
-      # configuration nobody reviewed, so this stops instead.
-      - name: The encrypted copy must match what production runs
-        run: |
-          python3 scripts/compare_env_files.py \
-            "$PLAINTEXT_ENV_DIR/gatekeeper.prod.env" "$RUNNER_TEMP/gatekeeper.env"
-          echo "ENV_FILE_PATH=$RUNNER_TEMP/gatekeeper.env" >> "$GITHUB_ENV"
+      # This repository is public, and these values are what must never appear in
+      # it. Reading them from the decrypted copies rather than from a plaintext
+      # file on the host is what let that file be retired.
+      - name: No production credential may be tracked
+        run: python3 scripts/check_tracked_secrets.py "$RUNNER_TEMP/env"
 
       - name: Build the image
         run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-build
@@ -295,7 +291,7 @@ jobs:
       # a failed job long enough to matter, and this file is every credential.
       - name: Remove the decrypted environment
         if: always()
-        run: rm -f "$RUNNER_TEMP/gatekeeper.env"
+        run: rm -rf "$RUNNER_TEMP/env"
 
       - name: Reclaim disk
         if: success()
