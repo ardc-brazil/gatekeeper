@@ -1,0 +1,5 @@
+# The deploy runs on the production host, which carries this label. Without it
+# declared here, actionlint reports every `runs-on` using it as unknown.
+self-hosted-runner:
+  labels:
+    - production

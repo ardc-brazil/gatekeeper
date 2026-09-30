@@ -33,6 +33,15 @@ jobs:
 
       - run: ruff format --check .
 
+      # A workflow is only validated when GitHub parses it, which is after the
+      # merge - an invalid one takes the deploy down and no check notices.
+      # `runner.temp` in a job's env block got through review, CI and a merge
+      # that way, and actionlint reports it exactly.
+      - name: Lint the workflows
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            rhysd/actionlint:1.7.12 -color
+
       # The alert rules are code with no other test: a rule that never fires
       # looks exactly like a system that never fails.
       - name: Prometheus config and alert rules
@@ -176,10 +185,11 @@ jobs:
       cancel-in-progress: false
 
     env:
-      # The decrypted copy, written by the step below. Set here rather than
-      # exported mid-job so no step's behaviour depends on where it sits in the
-      # order.
-      ENV_FILE_PATH: ${{ runner.temp }}/env/gatekeeper.env
+      # ENV_FILE_PATH is deliberately not set here: it names the decrypted copy,
+      # and `runner.temp` does not exist in a job's env context - only inside a
+      # step. The decrypt step exports it, so a step that ran before it would
+      # fail on an empty path rather than quietly use some other file.
+      #
       # Must match the project the running containers belong to, or `down`
       # leaves them up and `up` collides on the container names.
       COMPOSE_PROJECT_NAME: gatekeeper
@@ -207,6 +217,7 @@ jobs:
             "$HOME/bin/sops" --decrypt "$file" > "$RUNNER_TEMP/env/$(basename "$file")"
           done
           ls -l "$RUNNER_TEMP/env"
+          echo "ENV_FILE_PATH=$RUNNER_TEMP/env/gatekeeper.env" >> "$GITHUB_ENV"
         env:
           SOPS_AGE_KEY_FILE: /home/datamap/.config/sops/age/keys.txt
 
@@ -217,7 +228,7 @@ jobs:
         run: python3 scripts/check_tracked_secrets.py "$RUNNER_TEMP/env"
 
       - name: Build the image
-        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-build
+        run: make ENV_FILE_PATH="$ENV_FILE_PATH" docker-build
 
       # `docker compose down` deletes each container along with its log file, so
       # without this every deploy erases the evidence of whatever it is fixing.
@@ -238,7 +249,7 @@ jobs:
       # serialises that; a failed migration means the instance never becomes
       # healthy, `--wait` never returns, and this step fails.
       - name: Roll the instances
-        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-deployment-rolling
+        run: make ENV_FILE_PATH="$ENV_FILE_PATH" docker-deployment-rolling
 
       - name: Both instances must answer
         run: |
