@@ -33,6 +33,25 @@ is no recovery path that does not go through
 
 So the key belongs in a password manager, not only on these two machines.
 
+### Proving that copy works
+
+A backup nobody has restored from is a hypothesis, and the ways a pasted key goes
+wrong are quiet: a truncated paste, a missing final newline, a field that ate the
+whitespace.
+
+```bash
+pbpaste | scripts/verify_key_backup.sh -
+```
+
+It decrypts inside a container with only that key mounted, so it cannot fall back
+to `~/.config/sops/age/keys.txt` and pass for the wrong reason, and it then
+checks that a deliberately wrong key **is** refused — because a test that only
+ever passes proves nothing. Reading from stdin means the paste never becomes a
+file to remember to delete.
+
+Until this passes, treat the plaintext on the host as the real recovery path and
+do not remove it.
+
 ## Reading and changing a value
 
 ```bash
