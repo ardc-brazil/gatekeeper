@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from prometheus_client import REGISTRY
 
+from app.exception.bad_request import BadRequestException
 from app.exception.not_found import NotFoundException
 from app.gateway.email.smtp import (
     DefiniteSendFailure,
@@ -168,6 +169,42 @@ class TestEnqueue(EmailServiceTestCase):
             )
 
         self.repository.add.assert_not_called()
+
+
+    def test_a_recipient_that_is_not_exactly_one_plain_address_is_refused(self):
+        for recipient in [
+            "a@example.com, b@example.com",
+            "Someone <someone@example.com>",
+            "",
+            "   ",
+        ]:
+            with self.subTest(recipient=recipient):
+                with self.assertRaises(BadRequestException) as context:
+                    self.service.enqueue(
+                        template="notification",
+                        recipient=recipient,
+                        context=TEST_CONTEXT,
+                    )
+
+                self.assertEqual(
+                    [error.code for error in context.exception.errors],
+                    ["invalid_recipient"],
+                )
+        self.repository.add.assert_not_called()
+
+    def test_a_plain_address_with_surrounding_space_is_enqueued(self):
+        self.repository.add.side_effect = lambda message, event, detail=None: _record(
+            id=message.id, status=EmailStatus.PENDING
+        )
+
+        self.service.enqueue(
+            template="notification",
+            recipient="  someone@example.com ",
+            context=TEST_CONTEXT,
+        )
+
+        message, _, _ = self.stored()
+        self.assertEqual(message.recipient, "someone@example.com")
 
 
 class TestDispatch(EmailServiceTestCase):

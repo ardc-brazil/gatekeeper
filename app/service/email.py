@@ -2,10 +2,11 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage as MimeMessage
-from email.utils import formataddr, make_msgid
+from email.utils import formataddr, getaddresses, make_msgid
 from typing import Callable
 from uuid import UUID, uuid4
 
+from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.not_found import NotFoundException
 from app.gateway.email.smtp import (
     DefiniteSendFailure,
@@ -41,6 +42,14 @@ STALE_SENDING_AFTER = timedelta(minutes=10)
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _single_address(recipient: str) -> str:
+    address = recipient.strip()
+    parsed = getaddresses([recipient])
+    if not address or len(parsed) != 1 or parsed[0] != ("", address):
+        raise BadRequestException(errors=[ErrorDetails(code="invalid_recipient")])
+    return address
 
 
 class EmailService:
@@ -79,8 +88,9 @@ class EmailService:
         triggered_by: UUID | None = None,
         dedup_key: str | None = None,
     ) -> UUID | None:
+        recipient = _single_address(recipient)
         rendered = self._renderer.render(EmailTemplate(template), context)
-        skipped = recipient.strip().lower().endswith(PLACEHOLDER_DOMAIN)
+        skipped = recipient.lower().endswith(PLACEHOLDER_DOMAIN)
 
         stored_context, body_text = dict(context), rendered.text
         if skipped:
@@ -90,7 +100,7 @@ class EmailService:
             id=uuid4(),
             template=template,
             template_version=self._template_version,
-            recipient=recipient.strip(),
+            recipient=recipient,
             subject=rendered.subject,
             body_text=body_text,
             context=stored_context,

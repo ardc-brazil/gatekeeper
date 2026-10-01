@@ -131,3 +131,14 @@ class TestEmailDelivery:
         )
 
         assert_status_code(response, 401)
+
+    def test_a_recipient_naming_two_addresses_is_refused(
+        self, http_client, valid_headers
+    ):
+        response = http_client.post(
+            "/admin/emails/test",
+            headers=valid_headers,
+            json={"recipient": f"{_recipient()}, {_recipient()}"},
+        )
+
+        assert_status_code(response, 400)
