@@ -16,9 +16,13 @@ class HttpClient:
         self.base_url = config.base_url
         self.timeout = config.timeout
         self.session = requests.Session()
-        # requests defaults to no retries at all, so a connection closed
-        # between being picked from the pool and being written to surfaces as a
-        # test failure. `read=0` on purpose: a slow endpoint must still fail.
+        # Do not reuse a connection. A server closing an idle keep-alive socket
+        # is correct, and the pool can pick one in the instant between that close
+        # and the next write, which surfaces as a test failure with no bearing on
+        # the application. Measured: `connect=3, read=0` below does not cover it,
+        # because urllib3 counts a connection closed after the request as a read.
+        self.session.headers["Connection"] = "close"
+        # Still worth having, for a server that is not accepting yet.
         self.session.mount(
             "http://",
             HTTPAdapter(

@@ -151,9 +151,12 @@ integration-test-clean: # Usage: make ENV_FILE_PATH=integration-test.env integra
 	docker compose -f docker-compose-integration-test.yaml down -v
 	@echo "${On_Green}Integration test containers and volumes cleaned${Color_Off}"
 
+# No --tail: 50 lines is under a second of a 250-test run, so the failure has
+# always scrolled past by the time this runs. Timestamps, so a log line can be
+# lined up with the test that was running.
 integration-test-logs: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-logs
 	@echo "${On_Green}Showing integration test container logs${Color_Off}"
-	docker compose -f docker-compose-integration-test.yaml logs --tail=50
+	docker compose -f docker-compose-integration-test.yaml logs --timestamps --no-color
 
 integration-test-restart: # Usage: make ENV_FILE_PATH=integration-test.env integration-test-restart
 	@$(MAKE) ENV_FILE_PATH=$(ENV_FILE_PATH) integration-test-down

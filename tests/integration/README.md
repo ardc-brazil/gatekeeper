@@ -165,6 +165,34 @@ The WireMock setup covers all DOI operations used by your application:
 
 > **Note**: Happy path tests are currently skipped because they require a complete DOI workflow with published datasets and snapshot files in MinIO. These can be enabled once the dataset publishing and snapshot generation workflow is fully implemented.
 
+## When a run fails and you cannot see why
+
+**Do not re-run a failed job before reading its log.** A re-run replaces it. The
+first attempt is still reachable with `gh run view <run> --attempt 1 --log`, but
+only if you remember before clicking.
+
+The container logs on failure used to be captured with `--tail=50`, which on a
+250-test suite is under a second: every line came from the last test file and the
+failure had already scrolled past. They are now captured whole, with timestamps,
+and uploaded as an artifact — which also survives a re-run.
+
+## A flake that is the client, not the application
+
+`ProtocolError('Connection aborted.', RemoteDisconnected(...))` on a request that
+passes in isolation is connection reuse, not a bug in the endpoint. A server
+closing an idle keep-alive socket is correct behaviour, and the connection pool
+can take one in the instant between that close and the next write.
+
+**`Retry(connect=N, read=0)` does not cover it.** urllib3 counts a connection
+closed *after* the request was written as a read error, so `read=0` makes it
+behave exactly like no retry at all — measured at one attempt either way. The
+client sends `Connection: close` instead, which removes the race rather than
+surviving it, at a cost of about one second across the whole suite.
+
+The trade: the suite no longer exercises connection reuse. That was accidental
+coverage — nothing asserted anything about keep-alive — and a test that wants it
+should control its own session.
+
 ## Debugging
 
 ### View WireMock Logs
