@@ -170,7 +170,6 @@ class TestEnqueue(EmailServiceTestCase):
 
         self.repository.add.assert_not_called()
 
-
     def test_a_recipient_that_is_not_exactly_one_plain_address_is_refused(self):
         for recipient in [
             "a@example.com, b@example.com",
@@ -274,7 +273,8 @@ class TestDispatch(EmailServiceTestCase):
         self.repository.mark_retry.assert_not_called()
 
     def test_a_message_left_in_sending_becomes_failed_not_sent_again(self):
-        self.repository.claim_stale_sending.return_value = [_record()]
+        stale = _record()
+        self.repository.claim_stale_sending.return_value = [stale]
         self.repository.claim_due.return_value = []
 
         result = self.service.dispatch_due()
@@ -283,12 +283,47 @@ class TestDispatch(EmailServiceTestCase):
             NOW - timedelta(minutes=10)
         )
         self.assertEqual(result.failed, 1)
-        self.assertTrue(
-            self.repository.mark_failed.call_args.kwargs["detail"].startswith(
-                "delivery uncertain"
-            )
-        )
+        kwargs = self.repository.mask.call_args.kwargs
+        self.assertEqual(kwargs["message_id"], stale.id)
+        self.assertEqual(kwargs["context"]["code"], MASK)
+        self.assertNotIn(CODE, kwargs["body_text"])
+        self.repository.mark_failed.assert_not_called()
         self.sender.send.assert_not_called()
+
+    def test_a_mark_that_finds_the_message_no_longer_sending_is_not_counted(self):
+        cases = [
+            ("mark_sent", None, "sent"),
+            ("mark_retry", DefiniteSendFailure("connect: refused"), "retried"),
+            ("mark_failed", UncertainSendFailure("during send: reset"), "failed"),
+        ]
+        for mark, failure, outcome in cases:
+            with self.subTest(mark=mark):
+                record = _record()
+                self.repository.claim_due.return_value = [record]
+                self.sender.send.side_effect = failure
+                getattr(self.repository, mark).return_value = False
+                before = _sample(
+                    "datamap_emails_total", template="notification", outcome=outcome
+                )
+
+                with self.assertLogs("service:EmailService", level="WARNING") as logs:
+                    result = self.service.dispatch_due()
+
+                self.assertEqual(
+                    (result.sent, result.retried, result.failed), (0, 0, 0)
+                )
+                self.assertEqual(
+                    _sample(
+                        "datamap_emails_total", template="notification", outcome=outcome
+                    ),
+                    before,
+                )
+                self.assertEqual(
+                    [(r.email_id, r.outcome) for r in logs.records],
+                    [(str(record.id), "lost_race")],
+                )
+                self.assertNotIn(record.recipient, logs.output[0])
+                getattr(self.repository, mark).return_value = True
 
     def test_with_sending_off_nothing_is_claimed(self):
         self.service = self.build(enabled=False)
@@ -345,7 +380,7 @@ class TestDispatch(EmailServiceTestCase):
     def test_a_record_that_raises_outside_the_gateways_does_not_abort_the_rest(self):
         first, second = _record(), _record()
         self.repository.claim_due.return_value = [first, second]
-        self.repository.mark_sent.side_effect = [RuntimeError("db gone"), None]
+        self.repository.mark_sent.side_effect = [RuntimeError("db gone"), True]
 
         with self.assertLogs("service:EmailService", level="ERROR") as logs:
             result = self.service.dispatch_due()

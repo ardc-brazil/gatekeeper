@@ -142,12 +142,7 @@ class EmailService:
                 now - STALE_SENDING_AFTER
             ):
                 try:
-                    self._fail(
-                        stale,
-                        stale.attempts,
-                        "delivery uncertain: left in sending",
-                        result,
-                    )
+                    self._mask_stale(stale, result)
                 except Exception:
                     self._dispatch_error(stale)
 
@@ -216,12 +211,14 @@ class EmailService:
             if attempts >= MAX_ATTEMPTS:
                 self._fail(record, attempts, str(e), result)
                 return
-            self._repository.mark_retry(
+            if not self._repository.mark_retry(
                 message_id=record.id,
                 attempts=attempts,
                 next_attempt_at=now + RETRY_DELAYS[attempts - 1],
                 detail=str(e),
-            )
+            ):
+                self._lost_race(record)
+                return
             result.retried += 1
             self._count(record, "retried")
             return
@@ -232,13 +229,15 @@ class EmailService:
         context, body_text = mask_secrets(
             record.context, record.body_text, record.secret_fields
         )
-        self._repository.mark_sent(
+        if not self._repository.mark_sent(
             message_id=record.id,
             smtp_message_id=message["Message-ID"],
             sent_at=now,
             context=context,
             body_text=body_text,
-        )
+        ):
+            self._lost_race(record)
+            return
         result.sent += 1
         self._count(record, "sent")
 
@@ -248,15 +247,35 @@ class EmailService:
         context, body_text = mask_secrets(
             record.context, record.body_text, record.secret_fields
         )
-        self._repository.mark_failed(
+        if not self._repository.mark_failed(
             message_id=record.id,
             attempts=attempts,
             detail=detail,
             context=context,
             body_text=body_text,
+        ):
+            self._lost_race(record)
+            return
+        result.failed += 1
+        self._count(record, "failed")
+
+    def _mask_stale(self, record: EmailRecord, result: DispatchResult) -> None:
+        context, body_text = mask_secrets(
+            record.context, record.body_text, record.secret_fields
+        )
+        self._repository.mask(
+            message_id=record.id, context=context, body_text=body_text
         )
         result.failed += 1
         self._count(record, "failed")
+
+    def _lost_race(self, record: EmailRecord) -> None:
+        self._logger.warning(
+            "email no longer sending",
+            extra=fields(
+                email_id=str(record.id), template=record.template, outcome="lost_race"
+            ),
+        )
 
     def _count(self, record: EmailRecord, outcome: str) -> None:
         metrics.email_outcome(record.template, outcome)

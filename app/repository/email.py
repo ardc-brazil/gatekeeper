@@ -18,6 +18,7 @@ from app.model.email import (
 )
 
 MAX_PAGE_SIZE = 100
+STALE_DETAIL = "delivery uncertain: left in sending"
 
 
 def _record(row: EmailMessage) -> EmailRecord:
@@ -102,6 +103,13 @@ class EmailRepository:
             )
             for row in rows:
                 row.status = EmailStatus.FAILED.value
+                session.add(
+                    EmailEvent(
+                        message_id=row.id,
+                        event=EmailEventType.FAILED.value,
+                        detail=STALE_DETAIL,
+                    )
+                )
             stale = [_record(row) for row in rows]
             session.commit()
             return stale
@@ -113,8 +121,8 @@ class EmailRepository:
         sent_at: datetime,
         context: dict,
         body_text: str,
-    ) -> None:
-        self._apply(
+    ) -> bool:
+        return self._apply(
             message_id,
             {
                 "status": EmailStatus.SENT.value,
@@ -129,8 +137,8 @@ class EmailRepository:
 
     def mark_retry(
         self, message_id: UUID, attempts: int, next_attempt_at: datetime, detail: str
-    ) -> None:
-        self._apply(
+    ) -> bool:
+        return self._apply(
             message_id,
             {
                 "status": EmailStatus.PENDING.value,
@@ -149,8 +157,8 @@ class EmailRepository:
         detail: str,
         context: dict,
         body_text: str,
-    ) -> None:
-        self._apply(
+    ) -> bool:
+        return self._apply(
             message_id,
             {
                 "status": EmailStatus.FAILED.value,
@@ -161,6 +169,14 @@ class EmailRepository:
             EmailEventType.FAILED,
             detail,
         )
+
+    def mask(self, message_id: UUID, context: dict, body_text: str) -> None:
+        with self._session_factory() as session:
+            session.query(EmailMessage).filter(EmailMessage.id == message_id).update(
+                {"context": context, "body_text": body_text},
+                synchronize_session=False,
+            )
+            session.commit()
 
     def count_pending(self) -> int:
         with self._session_factory() as session:
@@ -226,15 +242,22 @@ class EmailRepository:
         values: dict,
         event: EmailEventType,
         detail: str | None,
-    ) -> None:
+    ) -> bool:
         with self._session_factory() as session:
-            session.query(EmailMessage).filter(EmailMessage.id == message_id).update(
-                values, synchronize_session=False
+            updated = (
+                session.query(EmailMessage)
+                .filter(
+                    EmailMessage.id == message_id,
+                    EmailMessage.status == EmailStatus.SENDING.value,
+                )
+                .update(values, synchronize_session=False)
             )
-            session.add(
-                EmailEvent(message_id=message_id, event=event.value, detail=detail)
-            )
+            if updated == 1:
+                session.add(
+                    EmailEvent(message_id=message_id, event=event.value, detail=detail)
+                )
             session.commit()
+            return updated == 1
 
     @staticmethod
     def _dedup_exists(session: Session, dedup_key: str) -> bool:
