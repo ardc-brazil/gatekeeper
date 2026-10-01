@@ -127,17 +127,38 @@ class EmailService:
         result = DispatchResult()
         now = self._clock()
 
-        for stale in self._repository.claim_stale_sending(now - STALE_SENDING_AFTER):
-            self._fail(
-                stale, stale.attempts, "delivery uncertain: left in sending", result
-            )
+        try:
+            for stale in self._repository.claim_stale_sending(
+                now - STALE_SENDING_AFTER
+            ):
+                try:
+                    self._fail(
+                        stale,
+                        stale.attempts,
+                        "delivery uncertain: left in sending",
+                        result,
+                    )
+                except Exception:
+                    self._dispatch_error(stale)
 
-        if self._enabled:
-            for record in self._repository.claim_due(now, limit):
-                self._deliver(record, now, result)
+            if self._enabled:
+                for record in self._repository.claim_due(now, limit):
+                    try:
+                        self._deliver(record, now, result)
+                    except Exception:
+                        self._dispatch_error(record)
+        finally:
+            metrics.email_pending(self._repository.count_pending())
 
-        metrics.email_pending(self._repository.count_pending())
         return result
+
+    def _dispatch_error(self, record: EmailRecord) -> None:
+        self._logger.exception(
+            "email dispatch error",
+            extra=fields(
+                email_id=str(record.id), template=record.template, outcome="error"
+            ),
+        )
 
     def search(self, query: EmailQuery) -> PaginatedResult:
         return self._repository.search(query)

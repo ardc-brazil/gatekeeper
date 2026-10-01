@@ -305,6 +305,36 @@ class TestDispatch(EmailServiceTestCase):
             self.sender.send.call_args.args[0]["Reply-To"], "caio.maia@usp.br"
         )
 
+    def test_a_record_that_raises_outside_the_gateways_does_not_abort_the_rest(self):
+        first, second = _record(), _record()
+        self.repository.claim_due.return_value = [first, second]
+        self.repository.mark_sent.side_effect = [RuntimeError("db gone"), None]
+
+        with self.assertLogs("service:EmailService", level="ERROR") as logs:
+            result = self.service.dispatch_due()
+
+        self.assertEqual(result.sent, 1)
+        self.assertEqual(self.sender.send.call_count, 2)
+        self.repository.mark_retry.assert_not_called()
+        self.repository.mark_failed.assert_not_called()
+        self.assertEqual(len(logs.records), 1)
+        record = logs.records[0]
+        self.assertEqual(record.email_id, str(first.id))
+        self.assertNotIn("recipient", vars(record))
+        self.assertNotIn("subject", vars(record))
+        self.assertNotIn(first.recipient, logs.output[0])
+        self.assertNotIn(first.subject, logs.output[0])
+
+    def test_the_pending_gauge_is_set_even_when_a_record_raises(self):
+        self.repository.claim_due.return_value = [_record()]
+        self.repository.mark_sent.side_effect = RuntimeError("db gone")
+        self.repository.count_pending.return_value = 7
+
+        with self.assertLogs("service:EmailService", level="ERROR"):
+            self.service.dispatch_due()
+
+        self.assertEqual(_sample("datamap_email_pending"), 7.0)
+
 
 class TestReading(EmailServiceTestCase):
     def test_an_unknown_message_is_not_found(self):
