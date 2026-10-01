@@ -156,8 +156,7 @@ jobs:
       - name: Run integration tests
         run: pytest tests/integration -q --durations=15
 
-      # Also as a file: re-running a failed job replaces the log, and the
-      # evidence of why it failed goes with it. An artifact survives that.
+      # Also as a file: re-running a failed job replaces its log.
       - name: Service logs
         if: failure()
         run: |
