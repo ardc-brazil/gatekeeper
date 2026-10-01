@@ -33,6 +33,15 @@ jobs:
 
       - run: ruff format --check .
 
+      # A workflow is only validated when GitHub parses it, which is after the
+      # merge - an invalid one takes the deploy down and no check notices.
+      # `runner.temp` in a job's env block got through review, CI and a merge
+      # that way, and actionlint reports it exactly.
+      - name: Lint the workflows
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            rhysd/actionlint:1.7.12 -color
+
       # The alert rules are code with no other test: a rule that never fires
       # looks exactly like a system that never fails.
       - name: Prometheus config and alert rules
@@ -147,10 +156,20 @@ jobs:
       - name: Run integration tests
         run: pytest tests/integration -q --durations=15
 
+      # Also as a file: re-running a failed job replaces its log.
       - name: Service logs
         if: failure()
         run: |
-          make ENV_FILE_PATH=integration-test.env integration-test-logs
+          make ENV_FILE_PATH=integration-test.env integration-test-logs \
+            | tee "${{ runner.temp }}/integration-logs.txt"
+
+      - name: Keep the logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/integration-logs.txt
+          retention-days: 14
 
       - name: Stop services
         if: always()
@@ -176,12 +195,11 @@ jobs:
       cancel-in-progress: false
 
     env:
-      # Absolute: the runner checks out into its own workspace, so the
-      # `../environment/...` used by hand does not resolve here.
-      ENV_FILE_PATH: ${{ vars.ENVIRONMENT_DIR || '/home/datamap/environment' }}/gatekeeper.prod.env
-      # Named separately because ENV_FILE_PATH is repointed at the decrypted
-      # copy partway through, and these two steps must keep meaning the host's.
-      PLAINTEXT_ENV_DIR: ${{ vars.ENVIRONMENT_DIR || '/home/datamap/environment' }}
+      # ENV_FILE_PATH is deliberately not set here: it names the decrypted copy,
+      # and `runner.temp` does not exist in a job's env context - only inside a
+      # step. The decrypt step exports it, so a step that ran before it would
+      # fail on an empty path rather than quietly use some other file.
+      #
       # Must match the project the running containers belong to, or `down`
       # leaves them up and `up` collides on the container names.
       COMPOSE_PROJECT_NAME: gatekeeper
@@ -192,36 +210,35 @@ jobs:
       - name: Show what is being deployed
         run: git log --oneline -1
 
-      # This repository is public. The production environment files only exist
-      # on this host, so this is the only place the comparison can be made.
-      - name: No production credential may be tracked
-        run: python3 scripts/check_tracked_secrets.py "$PLAINTEXT_ENV_DIR"
-
       - name: Install the pinned sops
         run: bash scripts/install_sops.sh
 
-      # umask first: the file carries every production credential, and creating
-      # it readable and fixing it afterwards leaves a window.
+      # Every file, not only the gatekeeper's: the guard below compares against
+      # all of them, so decrypting one would quietly stop checking the other
+      # services' credentials.
+      #
+      # umask first, not chmod after: the files carry every production
+      # credential, and creating them readable leaves a window.
       - name: Decrypt the environment
         run: |
           umask 077
-          "$HOME/bin/sops" --decrypt secrets/production/gatekeeper.env \
-            > "$RUNNER_TEMP/gatekeeper.env"
-          ls -l "$RUNNER_TEMP/gatekeeper.env"
+          mkdir -p "$RUNNER_TEMP/env"
+          for file in secrets/production/*.env; do
+            "$HOME/bin/sops" --decrypt "$file" > "$RUNNER_TEMP/env/$(basename "$file")"
+          done
+          ls -l "$RUNNER_TEMP/env"
+          echo "ENV_FILE_PATH=$RUNNER_TEMP/env/gatekeeper.env" >> "$GITHUB_ENV"
         env:
           SOPS_AGE_KEY_FILE: /home/datamap/.config/sops/age/keys.txt
 
-      # The plaintext on the host is still the source of truth, so a difference
-      # means the encrypted copy drifted. Deploying the drifted one would apply
-      # configuration nobody reviewed, so this stops instead.
-      - name: The encrypted copy must match what production runs
-        run: |
-          python3 scripts/compare_env_files.py \
-            "$PLAINTEXT_ENV_DIR/gatekeeper.prod.env" "$RUNNER_TEMP/gatekeeper.env"
-          echo "ENV_FILE_PATH=$RUNNER_TEMP/gatekeeper.env" >> "$GITHUB_ENV"
+      # This repository is public, and these values are what must never appear in
+      # it. Reading them from the decrypted copies rather than from a plaintext
+      # file on the host is what let that file be retired.
+      - name: No production credential may be tracked
+        run: python3 scripts/check_tracked_secrets.py "$RUNNER_TEMP/env"
 
       - name: Build the image
-        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-build
+        run: make ENV_FILE_PATH="$ENV_FILE_PATH" docker-build
 
       # `docker compose down` deletes each container along with its log file, so
       # without this every deploy erases the evidence of whatever it is fixing.
@@ -242,7 +259,7 @@ jobs:
       # serialises that; a failed migration means the instance never becomes
       # healthy, `--wait` never returns, and this step fails.
       - name: Roll the instances
-        run: make ENV_FILE_PATH=$ENV_FILE_PATH docker-deployment-rolling
+        run: make ENV_FILE_PATH="$ENV_FILE_PATH" docker-deployment-rolling
 
       - name: Both instances must answer
         run: |
@@ -295,7 +312,7 @@ jobs:
       # a failed job long enough to matter, and this file is every credential.
       - name: Remove the decrypted environment
         if: always()
-        run: rm -f "$RUNNER_TEMP/gatekeeper.env"
+        run: rm -rf "$RUNNER_TEMP/env"
 
       - name: Reclaim disk
         if: success()

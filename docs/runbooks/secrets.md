@@ -33,6 +33,25 @@ is no recovery path that does not go through
 
 So the key belongs in a password manager, not only on these two machines.
 
+### Proving that copy works
+
+A backup nobody has restored from is a hypothesis, and the ways a pasted key goes
+wrong are quiet: a truncated paste, a missing final newline, a field that ate the
+whitespace.
+
+```bash
+pbpaste | scripts/verify_key_backup.sh -
+```
+
+It decrypts inside a container with only that key mounted, so it cannot fall back
+to `~/.config/sops/age/keys.txt` and pass for the wrong reason, and it then
+checks that a deliberately wrong key **is** refused — because a test that only
+ever passes proves nothing. Reading from stdin means the paste never becomes a
+file to remember to delete.
+
+Until this passes, treat the plaintext on the host as the real recovery path and
+do not remove it.
+
 ## Reading and changing a value
 
 ```bash
@@ -48,45 +67,39 @@ ciphertext, so the diff stays legible.
 Do not decrypt into a file inside the repository. `.gitignore` covers the
 obvious names, but the habit is what protects the repository, not the list.
 
-## Round-tripping is not byte-exact, and that is fine
+## `sops` drops blank lines
 
-`sops` in dotenv mode drops blank lines. Measured on
-`gatekeeper.prod.env`: 38 keys, same order, every value identical, comments
-preserved, six blank lines gone. `make` reads the same 37 variables with the
-same values from either file — the only difference it sees is `ENV_FILE_PATH`
-itself, which is the path being read.
+Worth knowing before comparing a decrypted file against anything: dotenv mode
+loses blank lines. Measured when the encrypted copies were first made against the
+plaintext they came from — 38 keys, same order, every value identical, comments
+preserved, six blank lines gone, and `make` reading the same 37 variables with the
+same values from either file.
 
-So do not expect `diff` against the plaintext to be empty. Compare keys and
-values, which is what `scripts/env_fingerprint.py` is for.
+So compare keys and values, not bytes. `scripts/env_fingerprint.py` and
+`scripts/compare_env_files.py` both do that, the first for one variable and the
+second for a whole file.
 
 ## What the deploy does
 
-It installs the pinned `sops`, decrypts `secrets/production/gatekeeper.env` into
-the runner's temporary directory under `umask 077`, and **compares it against the
-plaintext still on the host**. Any difference — a changed value, a variable on
-one side only — stops the deploy before anything is built. The decrypted file is
-removed afterwards, including when the job fails.
+It installs the pinned `sops`, decrypts every file in `secrets/production` into
+the runner's temporary directory under `umask 077`, and uses `gatekeeper.env` as
+the environment the containers read. The decrypted copies are removed afterwards,
+including when the job fails.
 
-Only then does the rest of the deploy use the decrypted copy.
+`scripts/check_tracked_secrets.py` runs against those decrypted copies and fails
+the deploy if any of their values appears in a tracked file. That is why every
+file is decrypted and not only the gatekeeper's: reading one would quietly stop
+checking the other services' credentials.
 
-So the plaintext on the host is no longer what runs, but it is still the
-reference the encrypted copy is checked against. That is deliberate: it makes
-drift impossible to deploy rather than merely documented. After changing a value
-on the host, encrypt it back in, or the next deploy refuses:
+**The encrypted copies are the source of truth.** There is no plaintext to drift
+from any more, which is why the deploy no longer compares against one — with a
+single source, drift is not something to detect, it is something that cannot
+happen. The files that used to hold it are at `~/environment/retired-<date>/` on
+the host, and can be deleted once nobody misses them.
+
+To change a value, edit the encrypted file and merge it. There is no second copy
+to keep in step:
 
 ```bash
-sops --encrypt --input-type dotenv --output-type dotenv \
-  ~/environment/gatekeeper.prod.env > secrets/production/gatekeeper.env
+sops secrets/production/gatekeeper.env
 ```
-
-The failure names the variables and not their values, so the output of a refused
-deploy is safe to paste anywhere:
-
-```
-/home/datamap/environment/gatekeeper.prod.env and /tmp/gatekeeper.env differ:
-  LOG_LEVEL: value differs
-  SOME_NEW_VARIABLE: missing from the first file
-```
-
-Removing the plaintext entirely would remove that check with it, so it is not a
-tidying step: it needs something else to compare against first.
