@@ -442,7 +442,7 @@ class TestDispatchBudget(EmailServiceTestCase):
         self.now += timedelta(seconds=seconds)
 
     def test_a_slow_server_stops_the_pass_claiming_once_the_budget_is_spent(self):
-        self.sender.send.side_effect = lambda message: self.advance(2)
+        self.sender.send.side_effect = lambda message: self.advance(20 / CLAIM_CHUNK)
 
         result = self.service.dispatch_due(limit=50)
 
@@ -451,13 +451,20 @@ class TestDispatchBudget(EmailServiceTestCase):
         self.assertGreaterEqual(self.now - NOW, DISPATCH_BUDGET)
 
     def test_a_fast_pass_drains_up_to_the_limit_in_chunks(self):
-        result = self.service.dispatch_due(limit=25)
+        result = self.service.dispatch_due(limit=2 * CLAIM_CHUNK + 2)
 
         self.assertEqual(
             [call.args[1] for call in self.repository.claim_due.call_args_list],
-            [CLAIM_CHUNK, CLAIM_CHUNK, 5],
+            [CLAIM_CHUNK, CLAIM_CHUNK, 2],
         )
-        self.assertEqual(result.sent, 25)
+        self.assertEqual(result.sent, 2 * CLAIM_CHUNK + 2)
+
+    def test_a_black_holed_server_keeps_the_pass_under_the_archivists_timeout(self):
+        self.sender.send.side_effect = lambda message: self.advance(10)
+
+        self.service.dispatch_due(limit=50)
+
+        self.assertLess(self.now - NOW, timedelta(seconds=60))
 
     def test_a_short_chunk_means_nothing_else_is_due(self):
         self.repository.claim_due.side_effect = None

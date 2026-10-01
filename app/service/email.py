@@ -39,7 +39,7 @@ RETRY_DELAYS = (
 )
 STALE_SENDING_AFTER = timedelta(minutes=10)
 DISPATCH_BUDGET = timedelta(seconds=30)
-CLAIM_CHUNK = 10
+CLAIM_CHUNK = 5
 
 
 def _utcnow() -> datetime:
