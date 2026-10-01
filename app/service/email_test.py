@@ -15,7 +15,13 @@ from app.gateway.email.smtp import (
 from app.model.db.email import EmailMessage
 from app.model.email import EmailEventType, EmailRecord, EmailStatus
 from app.repository.email import EmailRepository
-from app.service.email import MAX_ATTEMPTS, RETRY_DELAYS, EmailService
+from app.service.email import (
+    CLAIM_CHUNK,
+    DISPATCH_BUDGET,
+    MAX_ATTEMPTS,
+    RETRY_DELAYS,
+    EmailService,
+)
 from app.service.email_masking import MASK
 from app.service.email_template import EmailTemplateRenderer
 
@@ -406,6 +412,58 @@ class TestDispatch(EmailServiceTestCase):
             self.service.dispatch_due()
 
         self.assertEqual(_sample("datamap_email_pending"), 7.0)
+
+
+class TestDispatchBudget(EmailServiceTestCase):
+    def setUp(self):
+        super().setUp()
+        self.repository.claim_stale_sending.return_value = []
+        self.repository.count_pending.return_value = 0
+        self.repository.claim_due.side_effect = lambda now, limit: [
+            _record() for _ in range(limit)
+        ]
+        self.now = NOW
+        self.service = EmailService(
+            repository=self.repository,
+            renderer=self.renderer,
+            sender=self.sender,
+            enabled=True,
+            from_name="DataMap",
+            from_address="datamap.pcs@gmail.com",
+            reply_to=None,
+            template_version="abc1234",
+            clock=lambda: self.now,
+        )
+
+    def advance(self, seconds: float) -> None:
+        self.now += timedelta(seconds=seconds)
+
+    def test_a_slow_server_stops_the_pass_claiming_once_the_budget_is_spent(self):
+        self.sender.send.side_effect = lambda message: self.advance(2)
+
+        result = self.service.dispatch_due(limit=50)
+
+        self.assertEqual(self.repository.claim_due.call_count, 2)
+        self.assertEqual(result.sent, 2 * CLAIM_CHUNK)
+        self.assertGreaterEqual(self.now - NOW, DISPATCH_BUDGET)
+
+    def test_a_fast_pass_drains_up_to_the_limit_in_chunks(self):
+        result = self.service.dispatch_due(limit=25)
+
+        self.assertEqual(
+            [call.args[1] for call in self.repository.claim_due.call_args_list],
+            [CLAIM_CHUNK, CLAIM_CHUNK, 5],
+        )
+        self.assertEqual(result.sent, 25)
+
+    def test_a_short_chunk_means_nothing_else_is_due(self):
+        self.repository.claim_due.side_effect = None
+        self.repository.claim_due.return_value = [_record(), _record()]
+
+        result = self.service.dispatch_due(limit=50)
+
+        self.assertEqual(self.repository.claim_due.call_count, 1)
+        self.assertEqual(result.sent, 2)
 
 
 class TestReading(EmailServiceTestCase):

@@ -39,7 +39,7 @@ class SmtpSender:
         username: str | None,
         password: str | None,
         starttls: bool,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 10.0,
         smtp_factory=smtplib.SMTP,
     ) -> None:
         self._host = host

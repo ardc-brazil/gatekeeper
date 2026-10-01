@@ -82,7 +82,7 @@ class Config(BaseSettings):
     SMTP_STARTTLS: bool = Field(
         True, description="Upgrade the connection with STARTTLS"
     )
-    SMTP_TIMEOUT_SECONDS: float = Field(30, description="SMTP socket timeout")
+    SMTP_TIMEOUT_SECONDS: float = Field(10, description="SMTP socket timeout")
     PUBLIC_BASE_URL: str = Field(
         "https://datamap.pcs.usp.br", description="Origin of links in messages"
     )

@@ -41,6 +41,7 @@ class TestEmailSettings(unittest.TestCase):
         self.assertFalse(config.EMAIL_ENABLED)
         self.assertEqual(config.EMAIL_FROM_NAME, "DataMap")
         self.assertEqual(config.SMTP_PORT, 587)
+        self.assertEqual(config.SMTP_TIMEOUT_SECONDS, 10)
         self.assertTrue(config.SMTP_STARTTLS)
         self.assertIsNone(config.SMTP_USERNAME)
         self.assertEqual(config.PUBLIC_BASE_URL, "https://datamap.pcs.usp.br")

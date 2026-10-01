@@ -38,6 +38,8 @@ RETRY_DELAYS = (
     timedelta(hours=1),
 )
 STALE_SENDING_AFTER = timedelta(minutes=10)
+DISPATCH_BUDGET = timedelta(seconds=30)
+CLAIM_CHUNK = 10
 
 
 def _utcnow() -> datetime:
@@ -147,15 +149,30 @@ class EmailService:
                     self._dispatch_error(stale)
 
             if self._enabled:
-                for record in self._repository.claim_due(now, limit):
-                    try:
-                        self._deliver(record, now, result)
-                    except Exception:
-                        self._dispatch_error(record)
+                self._deliver_due(now, limit, result)
         finally:
             metrics.email_pending(self._repository.count_pending())
 
         return result
+
+    def _deliver_due(
+        self, started: datetime, limit: int, result: DispatchResult
+    ) -> None:
+        claimed = 0
+        while claimed < limit:
+            now = self._clock()
+            if now - started >= DISPATCH_BUDGET:
+                return
+            chunk = min(CLAIM_CHUNK, limit - claimed)
+            records = self._repository.claim_due(now, chunk)
+            for record in records:
+                try:
+                    self._deliver(record, now, result)
+                except Exception:
+                    self._dispatch_error(record)
+            claimed += len(records)
+            if len(records) < chunk:
+                return
 
     def _dispatch_error(self, record: EmailRecord) -> None:
         self._logger.exception(
