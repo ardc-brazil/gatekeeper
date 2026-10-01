@@ -177,7 +177,7 @@ Runbooks, for when something needs doing rather than reading:
 | [credential-rotation.md](docs/runbooks/credential-rotation.md) | replace a credential, in the order that does not lock anyone out |
 | [database-backup.md](docs/runbooks/database-backup.md) | the nightly backup, and how to restore it |
 | [two-instances.md](docs/runbooks/two-instances.md) | the nginx upstream and the rolling replacement |
-| [host-applied-changes.md](docs/runbooks/host-applied-changes.md) | nginx and the compose files, which the deploy does not apply |
+| [host-applied-changes.md](docs/runbooks/host-applied-changes.md) | nginx and the compose files, which the deploy does not apply (`Makefile.infra`) |
 | [observability.md](docs/runbooks/observability.md) | metrics, dashboards and logs |
 | [snapshot-audit.md](docs/runbooks/snapshot-audit.md) | find datasets whose DOI is public but whose files are not |
 | [post-deploy-verification.md](docs/runbooks/post-deploy-verification.md) | what to check after a deploy |

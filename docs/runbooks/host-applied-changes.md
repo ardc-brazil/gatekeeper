@@ -14,6 +14,26 @@ runner deploys from only catches up when a later push to `main` runs the deploy,
 so **merge first, wait for the deploy, then apply** — otherwise the compose file
 on disk is still the old one and the command silently does nothing useful.
 
+## The short way
+
+Everything below is wrapped in `Makefile.infra`, which takes no `ENV_FILE_PATH` —
+each target decrypts what it needs and removes it on the way out:
+
+```bash
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+make -f Makefile.infra                 # the list
+make -f Makefile.infra workspace-status # is the merge you want even here yet?
+make -f Makefile.infra nginx-diff
+make -f Makefile.infra nginx-apply     # asks for sudo
+make -f Makefile.infra pgadmin
+```
+
+`nginx-apply` and `pgadmin` both finish by running `pgadmin-check`, so a target
+that reports success has been verified rather than merely executed.
+
+The rest of this page is what those targets do, and why each step is there. Read
+it when a target fails, or before adding one.
+
 ## The one checkout
 
 ```bash
@@ -41,7 +61,8 @@ ${ENV_FILE_PATH}` plus `export`, which is why `make` works and a bare `docker
 compose` does not. Those two variables are the host paths of the database and
 object storage, so a blank one is not a warning to skim past.
 
-Either go through `make`, or source the file:
+Either go through `make`, or source the file — `Makefile.infra` does the second,
+which is why its targets need no `ENV_FILE_PATH`:
 
 ```bash
 export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
@@ -55,6 +76,10 @@ set -a; . "$ENV_FILE_PATH"; set +a
 No warnings left is the check that this worked. See
 [secrets.md](secrets.md) for the decryption itself.
 
+The main `Makefile` now refuses to run without `ENV_FILE_PATH` rather than
+proceeding with everything blank, which is the same failure wearing a different
+hat: an empty `include` is a silent no-op in make.
+
 ## nginx
 
 ```bash
@@ -67,8 +92,10 @@ sudo nginx -t && sudo systemctl reload nginx
 `nginx -t` before the reload, always: a reload with a bad file leaves the old
 configuration running, but `systemctl restart` would not.
 
-`diff` the two first. If they differ by more than your change, something was
-applied to the host and never committed, and copying over it loses that.
+`nginx-diff` first. If they differ by more than your change, something was
+applied to the host and never committed, and copying over it loses that — the
+first run of that target found the host carrying an earlier revision of a comment,
+which is harmless, and is exactly the shape a harmful difference would take.
 
 ## One service, not the stack
 

@@ -1,5 +1,15 @@
 #!make
 
+# An empty `include` is a silent no-op, so without this every target still runs,
+# with every variable blank -- including the host paths of the database and the
+# object storage.
+ifeq ($(strip $(ENV_FILE_PATH)),)
+$(error ENV_FILE_PATH is not set. Pass one, e.g. make ENV_FILE_PATH=local.env <target>. On the production host see Makefile.infra)
+endif
+ifeq ($(wildcard $(ENV_FILE_PATH)),)
+$(error ENV_FILE_PATH=$(ENV_FILE_PATH) does not exist)
+endif
+
 include ${ENV_FILE_PATH}
 export $(shell sed 's/=.*//' ${ENV_FILE_PATH})
 
