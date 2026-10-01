@@ -20,3 +20,16 @@ class TestRunMigrations(unittest.TestCase):
 
         config = upgrade.call_args.args[0]
         self.assertIs(config.attributes.get("configure_logger"), False)
+
+
+class TestEngine(unittest.TestCase):
+    def test_a_failed_statement_does_not_carry_its_bound_values(self):
+        db_url = Mock()
+        db_url.unicode_string.return_value = "postgresql+psycopg2://u:p@localhost/db"
+
+        with patch("app.database.create_engine") as create_engine, patch(
+            "app.database.instrument_engine"
+        ):
+            Database(db_url=db_url, log_enabled=False)
+
+        self.assertIs(create_engine.call_args.kwargs.get("hide_parameters"), True)
