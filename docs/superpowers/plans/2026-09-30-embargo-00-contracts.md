@@ -85,6 +85,14 @@ Every dataset object returned by `GET /datasets/{id}`, `GET /datasets/` (items, 
 
 `GET /datasets/` accepts `shared=true`: only datasets the caller holds a permission on, in any tenancy. Items have the same shape.
 
+The detail payloads (`GET /datasets/{id}`, `GET /datasets/{id}/versions/{v}`; not list items) also carry the owner, whose name the dataset page shows to members and collaborators (design §1e) — plan 03, Task 13:
+
+```json
+"owner": {"id": "…", "name": "Luciana Rizzo"}
+```
+
+`owner` is `null` when the dataset has no owner or the owner's account cannot be read.
+
 ## Embargo (plan 02)
 
 All user routes. All answer 404 to callers who may not see the dataset.
@@ -92,9 +100,21 @@ All user routes. All answer 404 to callers who may not see the dataset.
 | Verb | Path | Body | Who | Success | Error codes (400) |
 |---|---|---|---|---|---|
 | PUT | `/datasets/{id}/embargo` | `{"until": ts, "metadata_visible": bool, "note": str\|null}` | owner | `200` embargo object | `embargo_too_long`, `embargo_until_in_past`, `embargo_dataset_published`, `embargo_already_active`, `embargo_manual_doi` |
-| POST | `/datasets/{id}/embargo/extend` | `{"until": ts}` | owner; permission holder if owner disabled | `200` embargo object | `embargo_too_long`, `embargo_not_active`, `embargo_until_not_later` |
+| POST | `/datasets/{id}/embargo/extend` | `{"until": ts, "reason": str\|null}` (`reason` ≤ 500 chars, recorded as the event's note; plan 03 Task 13) | owner; permission holder if owner disabled | `200` embargo object | `embargo_too_long`, `embargo_not_active`, `embargo_until_not_later` |
 | POST | `/datasets/{id}/embargo/end` | — | owner | `200` embargo object (`active: false`) | `embargo_not_active` |
 | PUT | `/datasets/{id}/embargo/mode` | `{"metadata_visible": bool}` | owner | `200` embargo object | `embargo_not_active` |
+| PUT | `/datasets/{id}/embargo/note` | `{"note": str\|null}` (≤ 2000 chars; plan 03 Task 13) | owner | `200` embargo object; records `note_changed` when it changes | `embargo_not_active` |
+| GET | `/datasets/{id}/access-events` | — (plan 03 Task 13) | owner, `write` | `200 {"items": [AccessHistoryEntry]}`, newest first, at most 100 | — |
+
+```json
+// AccessHistoryEntry — the Settings tab's History (design §1g)
+{"event_type": "extended", "occurred_at": ts,
+ "actor": {"id": "…", "name": "Luciana Rizzo"}|null,      // null for the system ("expired")
+ "subject": "Caio Maia"|"JGR Atmospheres, round 1"|"ORCID 0000-…"|null,  // whom or what the event was about
+ "old_value": {…}|null, "new_value": {…}|null, "note": "Second review round requested"|null}
+```
+
+`event_type` is one of the `AccessEventType` values, now including `note_changed`. The webapp words each entry from these fields.
 
 A caller who can see the dataset but lacks the role for the action gets `403 {"detail": "forbidden"}` — they already know it exists.
 
@@ -102,7 +122,7 @@ Client-only, no user:
 
 | Verb | Path | Success |
 |---|---|---|
-| GET | `/datasets/{id}/embargo-status` | `200 {"embargoed": bool, "until": ts\|null}` — unknown id answers `{"embargoed": false, "until": null}` |
+| GET | `/datasets/{id}/embargo-status?version={name}` | `200 {"embargoed": bool, "until": ts\|null, "doi": str\|null}` — `doi` is that version's identifier, only while embargoed (plan 03 Task 13; the embargo page shows it, design §1i); unknown id answers `{"embargoed": false, "until": null, "doi": null}` |
 
 Snapshot-writing paths: DOI to `findable` under embargo answers `400 embargo_active`.
 
@@ -139,12 +159,17 @@ Error codes (400): `share_target_required`, `share_target_ambiguous`, `invalid_e
 // ShareState
 {
   "owner": {"id": "…", "name": "…", "email": "…"},
-  "permissions": [{"user": {"id","name","email"}, "level": "read", "granted_at": ts, "granted_by": "…"}],
+  "permissions": [{"user": {"id","name","email"}, "level": "read", "granted_at": ts, "granted_by": "…",
+                   "invited_as": "fernanda@inpe.br"|"ORCID 0000-…"|null}],   // the invitation it came from
   "invitations": [{"id": "…", "email": "…"|null, "orcid": "…"|null, "level": "read",
                    "created_at": ts, "accepted_at": ts|null,
                    "accepted_by": {"id","name","email"}|null, "revoked_at": ts|null}],
-  "anonymous_links": [AnonymousLink]
+  "anonymous_links": [AnonymousLink],
+  "tenancy": {"name": "Data Amazon", "path": "datamap/production/data-amazon", "members": 14}|null
 }
+// tenancy: the "Members of Data Amazon · 14 people · workspace default" row of the share
+// dialog (design §1c); null while an embargo is active, when the tenancy has no default access.
+// invited_as, tenancy: plan 03 Task 12.
 // GrantResult
 {"kind": "permission", "permission": Permission}
 {"kind": "invitation", "invitation": Invitation, "link": "https://datamap.pcs.usp.br/invitations/<token>"}
@@ -154,8 +179,16 @@ Client-only, with `X-User-Id`:
 
 | Verb | Path | Body | Success | Errors |
 |---|---|---|---|---|
+| GET | `/invitations/{token}` | — (no `X-User-Id` needed; plan 03 Task 12) | `200 InvitationPreview` | `404` unknown or revoked |
 | POST | `/invitations/accept` | `{"token": str}` | `200 {"dataset_id", "level"}` | `404` unknown or revoked; `409 {"detail": "invitation_already_accepted"}` |
 | POST | `/users/{user_id}/invitations/claim` | — | `200 {"accepted": [{"dataset_id","level"}]}` | — |
+
+```json
+// InvitationPreview — the invitation page before and after it is used (design §1i)
+{"state": "pending"|"accepted", "dataset_name": "…", "inviter_name": "Luciana Rizzo",
+ "owner_name": "Luciana Rizzo", "level": "read", "invited_as": "fernanda@inpe.br"|"ORCID 0000-…",
+ "embargo_until": ts|null, "accepted_at": ts|null}
+```
 
 The webapp calls `claim` right after sign-in (NextAuth `jwt` callback, `trigger == "signIn"`), and `accept` from the invitation page. Granting a permission or accepting an invitation adds the Casbin grouping `g, <user_id>, datasets_shared` when the user lacks it.
 
@@ -177,8 +210,11 @@ User routes:
 
 ```json
 // AnonymousLink
-{"id": "…", "label": "JGR Atmospheres, round 1", "created_at": ts, "revoked_at": ts|null,
+{"id": "…", "label": "JGR Atmospheres, round 1", "token_hint": "9f2c…a71e"|null,
+ "created_at": ts, "revoked_at": ts|null,
  "views": {"count": 12, "first_at": ts|null, "last_at": ts|null}}
+// token_hint: the first and last four characters of the token, kept at creation so the
+// share dialog can tell links apart (design §1c); plan 03 Task 11.
 ```
 
 Client-only, no user:
@@ -192,7 +228,10 @@ Client-only, no user:
 {"state": "active", "embargo_until": ts,
  "dataset": {"name": "…", "data": { …redacted… },
              "versions": [{"name": "1", "created_at": ts,
-                           "files_summary": {"count": 42, "total_size_bytes": 1234}}]}}
+                           "files_summary": {"count": 42, "total_size_bytes": 1234,
+                                             "extensions": [{"extension": ".nc"|null, "count": 9,
+                                                             "total_size_bytes": 1000}]}}]}}
+// extensions: largest first; never file names (design §1i "Anonymous view"); plan 03 Task 11.
 // AnonymousPage, embargo over, dataset not published yet
 {"state": "ended", "embargo_ended_at": ts,
  "dataset": {"name": "…", "data": { …redacted… }, "versions": [ …as above… ]}}
@@ -238,15 +277,17 @@ Plan 01 details the other plans rely on:
 - Every message is rendered by the existing `EmailTemplateRenderer` (`app/service/email_template.py`, #121) from `app/resources/email_templates/`, with `site_url = PUBLIC_BASE_URL`. Its images load from `{PUBLIC_BASE_URL}/img/email/` (`datamap-tile-36.png`, `datamap-tile-22.png`), which the webapp already serves from `public/img/email/`; no other logo is needed. Plan 01 adds the plain-text part (`RenderedEmail.text`, `<name>.txt` siblings, `base.txt`) and builds on the `fix/email-footer-links` PR, after which the renderer no longer supplies `preferences_url` or `unsubscribe_url`. No template mentions preferences, unsubscribing, snoozing or any feature DataMap does not have.
 - Gatekeeper code runs on Python 3.10 in production (`python:3.10.14-alpine`): no syntax newer than 3.10.
 
-Templates (names are `EmailTemplate` values, stored in the `template` column and used as the metric label):
+Templates (names are `EmailTemplate` values, stored in the `template` column and used as the metric label). The new ones reproduce the Claude Design emails vendored in `docs/design/rfc-003-embargo/emails/`; the owner and collaborator variants of each design are branches of one template, so the label keeps these values:
 
 | Message | `EmailTemplate` | Plan |
 |---|---|---|
 | Admin test message | `notification` (existing) | 01 |
 | Access granted | `notification` (existing) | 03 |
-| Invitation | `dataset_invitation` (new) | 03 |
-| Embargo ending in 15/10/5/1 days | `embargo_reminder` (new) | 03 |
-| Embargo ended | `embargo_ended` (new) | 03 |
+| Invitation | `dataset_invitation` (new; design `embargo-invitation.html`) | 03 |
+| Embargo ending in 15/10/5/1 days | `embargo_reminder` (new; designs `embargo-reminder-owner.html`, `embargo-reminder-collaborator.html`) | 03 |
+| Embargo ended | `embargo_ended` (new; designs `embargo-ended-owner.html`, `embargo-ended-collaborator.html`) | 03 |
+
+The three new templates use a transactional footer (`_transactional.html`: no About/Support/Data Policy/Datasets row, a sentence saying the message goes to everyone the dataset depends on), as the designs do.
 
 The existing `invitation` (a workspace invitation with a role and an expiry) is not used.
 
@@ -380,14 +421,16 @@ Production: the same three rows are inserted by hand, as the README describes fo
 
 ## Webapp routes (plan 05)
 
+Every screen follows the Claude Design canvas vendored at `docs/design/rfc-003-embargo/Embargo Feature.dc.html` (sections §1a–§1i); plan 05 cites the section for each task.
+
 | Page | Auth | Calls |
 |---|---|---|
-| `/app/datasets/shared` | logged in, tenancy not required | `GET /api/datasets?shared=true` |
-| `/app/datasets/[datasetId]` (existing) | logged in, tenancy not required | adds embargo section, share dialog, badges from `embargo`/`access` |
-| `/app/datasets/new` (existing) | logged in | embargo choice in the form; sent with `PUT /datasets/{id}/embargo` after the dataset update |
+| `/app/datasets/shared` | logged in, tenancy not required | `GET /api/datasets?shared=true`; rendered as the "Shared with me" **tab** of the datasets list (design §1f), not a sidebar entry; for an account with no tenancy it is the only tab and "New dataset" is absent |
+| `/app/datasets/[datasetId]` (existing) | logged in, tenancy not required | adds the embargo badge and card, the Share button and dialog, the Settings rows and the History (§1b, §1c, §1d, §1e, §1g, §1h); reads `embargo`, `access`, `owner`, `GET /share` and `GET /access-events` |
+| `/app/datasets/new` (existing) | logged in | the "Who can see it" choice (§1a); the embargo is sent with `PUT /datasets/{id}/embargo` before the files are uploaded, so they never sit in an unembargoed dataset |
 | DOI form (existing, `DatasetCitation.tsx`) | logged in | manual mode on an embargoed dataset → confirmation dialog, then `end_embargo: true`; manual mode on a dataset without embargo → notice that it can no longer be embargoed, confirmed before sending |
 | `/anonymous/[token]` | public | `GET /anonymous/{token}` server-side |
-| `/doi/datasets/[datasetId]/versions/[versionName]` | public | `GET /datasets/{id}/embargo-status` server-side; redirects to `/app/datasets/{id}/versions/{v}` when not embargoed |
-| `/invitations/[token]` | logged in (redirect to login with callback) | `POST /invitations/accept`, then redirect to the dataset |
+| `/doi/datasets/[datasetId]/versions/[versionName]` | public | `GET /datasets/{id}/embargo-status?version={v}` server-side; shows the notice and the DOI (§1i); redirects to `/app/datasets/{id}/versions/{v}` when not embargoed |
+| `/invitations/[token]` | logged in (redirect to login with callback) | `GET /invitations/{token}` to show the invitation, or that it was used (§1i); `POST /invitations/accept` on "Accept", then redirect to the dataset |
 
 nginx (`infrastructure/nginx/datamap.conf` in the gatekeeper repo): the `location ~ ^/doi/datasets/...` block stops rewriting and proxies to the webapp, after the webapp page is deployed.
