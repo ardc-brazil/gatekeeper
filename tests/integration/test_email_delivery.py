@@ -109,6 +109,7 @@ class TestEmailDelivery:
         assert [item["id"] for item in response.json()["items"]] == [email_id]
 
     def test_sending_is_counted(self, http_client, valid_headers, client_headers):
+        _dispatch(http_client, client_headers)
         before = _sample(
             _scrape(), "datamap_emails_total", template="notification", outcome="sent"
         )
