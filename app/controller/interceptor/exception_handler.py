@@ -3,6 +3,7 @@ import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from app.exception.bad_request import BadRequestException
+from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
@@ -25,6 +26,11 @@ async def not_found_exception_handler(request: Request, exc: NotFoundException):
 async def unauthorized_exception_handler(request: Request, exc: UnauthorizedException):
     logger.info(f"Unauthorized exception: {exc}")
     return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+
+async def forbidden_exception_handler(request: Request, exc: ForbiddenException):
+    logger.info(f"Forbidden exception: {exc}")
+    return JSONResponse(status_code=403, content={"detail": "forbidden"})
 
 
 async def illegal_state_exception_handler(request: Request, exc: IllegalStateException):

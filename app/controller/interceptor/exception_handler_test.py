@@ -2,11 +2,16 @@ import json
 import unittest
 from types import SimpleNamespace
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app import setup
 from app.controller.interceptor.exception_handler import (
     bad_request_exception_handler,
     generic_exception_handler,
 )
 from app.exception.bad_request import BadRequestException, ErrorDetails
+from app.exception.forbidden import ForbiddenException
 
 
 class TestExceptionHandler(unittest.IsolatedAsyncioTestCase):
@@ -75,6 +80,21 @@ class TestUnexpectedErrors(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("boom", "".join(logs.output))
         self.assertIn("Traceback", "".join(logs.output))
+
+
+class TestForbiddenHandler(unittest.TestCase):
+    def test_a_forbidden_action_answers_403_without_the_exception_text(self):
+        app = FastAPI()
+        setup.setup_error_handlers(app)
+
+        @app.get("/boom")
+        def boom():
+            raise ForbiddenException("user x may not delete dataset y")
+
+        response = TestClient(app, raise_server_exceptions=False).get("/boom")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": "forbidden"})
 
 
 if __name__ == "__main__":

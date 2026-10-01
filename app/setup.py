@@ -26,6 +26,7 @@ from app.controller.v1.internal.notification import (
 )
 from app.controller.v1.tus.tus import router as tus_router
 from app.exception.bad_request import BadRequestException
+from app.exception.forbidden import ForbiddenException
 from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
 from app.exception.conflict import ConflictException
@@ -33,6 +34,7 @@ from app.exception.illegal_state import IllegalStateException
 from app.controller.interceptor.exception_handler import (
     bad_request_exception_handler,
     conflict_exception_handler,
+    forbidden_exception_handler,
     generic_exception_handler,
     illegal_state_exception_handler,
     not_found_exception_handler,
@@ -200,6 +202,7 @@ def setup_error_handlers(fastAPIApp: FastAPI) -> None:
     fastAPIApp.add_exception_handler(
         UnauthorizedException, unauthorized_exception_handler
     )
+    fastAPIApp.add_exception_handler(ForbiddenException, forbidden_exception_handler)
     fastAPIApp.add_exception_handler(
         IllegalStateException, illegal_state_exception_handler
     )
