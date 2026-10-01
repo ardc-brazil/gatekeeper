@@ -1,15 +1,20 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 from prometheus_client import REGISTRY
 
-from app.gateway.email.smtp import SmtpSender
+from app.exception.not_found import NotFoundException
+from app.gateway.email.smtp import (
+    DefiniteSendFailure,
+    SmtpSender,
+    UncertainSendFailure,
+)
 from app.model.db.email import EmailMessage
 from app.model.email import EmailEventType, EmailRecord, EmailStatus
 from app.repository.email import EmailRepository
-from app.service.email import EmailService
+from app.service.email import MAX_ATTEMPTS, RETRY_DELAYS, EmailService
 from app.service.email_masking import MASK
 from app.service.email_template import EmailTemplateRenderer
 
@@ -163,3 +168,163 @@ class TestEnqueue(EmailServiceTestCase):
             )
 
         self.repository.add.assert_not_called()
+
+
+class TestDispatch(EmailServiceTestCase):
+    def setUp(self):
+        super().setUp()
+        self.repository.claim_stale_sending.return_value = []
+        self.repository.count_pending.return_value = 0
+
+    def test_a_due_message_is_sent_once_and_its_secret_masked_afterwards(self):
+        record = _record()
+        self.repository.claim_due.return_value = [record]
+
+        result = self.service.dispatch_due()
+
+        self.assertEqual(result.sent, 1)
+        sent = self.sender.send.call_args.args[0]
+        self.assertEqual(sent["To"], "someone@example.com")
+        self.assertEqual(sent["From"], "DataMap <datamap.pcs@gmail.com>")
+        self.assertEqual(sent["Subject"], "DataMap test message")
+        self.assertTrue(sent["Message-ID"].endswith("@gmail.com>"))
+        self.assertIn("c0ffee12", sent.get_body(("plain",)).get_content())
+        self.assertIn("c0ffee12", sent.get_body(("html",)).get_content())
+
+        kwargs = self.repository.mark_sent.call_args.kwargs
+        self.assertEqual(kwargs["message_id"], record.id)
+        self.assertEqual(kwargs["smtp_message_id"], sent["Message-ID"])
+        self.assertEqual(kwargs["sent_at"], NOW)
+        self.assertEqual(kwargs["context"]["code"], MASK)
+        self.assertNotIn(CODE, str(kwargs["context"]))
+        self.assertNotIn(CODE, kwargs["body_text"])
+
+    def test_a_definite_refusal_is_retried_later(self):
+        self.repository.claim_due.return_value = [_record(attempts=0)]
+        self.sender.send.side_effect = DefiniteSendFailure("connect: refused")
+
+        result = self.service.dispatch_due()
+
+        self.assertEqual(result.retried, 1)
+        kwargs = self.repository.mark_retry.call_args.kwargs
+        self.assertEqual(kwargs["attempts"], 1)
+        self.assertEqual(kwargs["next_attempt_at"], NOW + RETRY_DELAYS[0])
+        self.assertIn("connect: refused", kwargs["detail"])
+        self.repository.mark_failed.assert_not_called()
+
+    def test_the_fifth_definite_refusal_is_final(self):
+        self.repository.claim_due.return_value = [_record(attempts=MAX_ATTEMPTS - 1)]
+        self.sender.send.side_effect = DefiniteSendFailure("refused: 550")
+
+        result = self.service.dispatch_due()
+
+        self.assertEqual(result.failed, 1)
+        kwargs = self.repository.mark_failed.call_args.kwargs
+        self.assertEqual(kwargs["attempts"], MAX_ATTEMPTS)
+        self.assertEqual(kwargs["context"]["code"], MASK)
+        self.repository.mark_retry.assert_not_called()
+
+    def test_an_uncertain_outcome_is_never_retried(self):
+        self.repository.claim_due.return_value = [_record(attempts=0)]
+        self.sender.send.side_effect = UncertainSendFailure("during send: timed out")
+
+        result = self.service.dispatch_due()
+
+        self.assertEqual(result.failed, 1)
+        kwargs = self.repository.mark_failed.call_args.kwargs
+        self.assertTrue(kwargs["detail"].startswith("delivery uncertain"))
+        self.assertEqual(kwargs["attempts"], 1)
+        self.repository.mark_retry.assert_not_called()
+
+    def test_a_message_left_in_sending_becomes_failed_not_sent_again(self):
+        self.repository.claim_stale_sending.return_value = [_record()]
+        self.repository.claim_due.return_value = []
+
+        result = self.service.dispatch_due()
+
+        self.repository.claim_stale_sending.assert_called_once_with(
+            NOW - timedelta(minutes=10)
+        )
+        self.assertEqual(result.failed, 1)
+        self.assertTrue(
+            self.repository.mark_failed.call_args.kwargs["detail"].startswith(
+                "delivery uncertain"
+            )
+        )
+        self.sender.send.assert_not_called()
+
+    def test_with_sending_off_nothing_is_claimed(self):
+        self.service = self.build(enabled=False)
+        self.repository.count_pending.return_value = 4
+
+        result = self.service.dispatch_due()
+
+        self.repository.claim_due.assert_not_called()
+        self.sender.send.assert_not_called()
+        self.assertEqual(result.sent, 0)
+        self.assertEqual(_sample("datamap_email_pending"), 4.0)
+
+    def test_outcomes_are_counted(self):
+        before = _sample(
+            "datamap_emails_total", template="notification", outcome="sent"
+        )
+        self.repository.claim_due.return_value = [_record(), _record()]
+
+        self.service.dispatch_due()
+
+        self.assertEqual(
+            _sample("datamap_emails_total", template="notification", outcome="sent"),
+            before + 2,
+        )
+
+    def test_a_template_that_no_longer_renders_fails_without_sending(self):
+        self.repository.claim_due.return_value = [_record(context={})]
+
+        result = self.service.dispatch_due()
+
+        self.assertEqual(result.failed, 1)
+        self.sender.send.assert_not_called()
+
+    def test_reply_to_is_set_when_configured(self):
+        service = EmailService(
+            repository=self.repository,
+            renderer=self.renderer,
+            sender=self.sender,
+            enabled=True,
+            from_name="DataMap",
+            from_address="datamap.pcs@gmail.com",
+            reply_to="caio.maia@usp.br",
+            template_version="abc1234",
+            clock=lambda: NOW,
+        )
+        self.repository.claim_due.return_value = [_record()]
+
+        service.dispatch_due()
+
+        self.assertEqual(
+            self.sender.send.call_args.args[0]["Reply-To"], "caio.maia@usp.br"
+        )
+
+
+class TestReading(EmailServiceTestCase):
+    def test_an_unknown_message_is_not_found(self):
+        self.repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException):
+            self.service.fetch(uuid4())
+
+    def test_the_test_message_carries_a_masked_code(self):
+        self.repository.add.side_effect = lambda message, event, detail=None: _record(
+            id=message.id, status=EmailStatus.PENDING
+        )
+        admin = uuid4()
+
+        self.service.send_test_message("ops@example.com", triggered_by=admin)
+
+        message, _, _ = self.stored()
+        self.assertEqual(message.template, "notification")
+        self.assertEqual(message.secret_fields, ["code"])
+        self.assertEqual(len(message.context["code"]), 8)
+        self.assertIn(message.context["code"], message.context["message"])
+        self.assertEqual(message.subject, "DataMap test message")
+        self.assertEqual(message.triggered_by, admin)
