@@ -41,7 +41,9 @@ jobs:
     environment: production
 
     env:
-      ENV_FILE_PATH: ${{ vars.ENVIRONMENT_DIR || '/home/datamap/environment' }}/gatekeeper.prod.env
+      # ENV_FILE_PATH is exported by the decrypt step below, from runner.temp,
+      # which does not exist in a job's env context.
+      #
       # The runner checks out into its own directory, and Compose would name the
       # volumes after it. Without this the stack comes back up with empty ones.
       COMPOSE_PROJECT_NAME: gatekeeper
@@ -51,6 +53,23 @@ jobs:
 
       - name: Show what is being applied
         run: git log --oneline -1
+
+      - name: Install the pinned sops
+        run: bash scripts/install_sops.sh
+
+      # Grafana reads its admin password from this file, so this stack needs the
+      # same decryption the application deploy does. umask first, not chmod
+      # after: creating it readable leaves a window.
+      - name: Decrypt the environment
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/env"
+          "$HOME/bin/sops" --decrypt secrets/production/gatekeeper.env \
+            > "$RUNNER_TEMP/env/gatekeeper.env"
+          ls -l "$RUNNER_TEMP/env/gatekeeper.env"
+          echo "ENV_FILE_PATH=$RUNNER_TEMP/env/gatekeeper.env" >> "$GITHUB_ENV"
+        env:
+          SOPS_AGE_KEY_FILE: /home/datamap/.config/sops/age/keys.txt
 
       # The configuration is bind-mounted, so Compose sees no change to the
       # container and would leave it running with the old file.
@@ -89,6 +108,12 @@ jobs:
             --filter "name=datamap_node_exporter" --filter "name=datamap_cadvisor" \
             --filter "name=datamap_postgres_exporter" --filter "name=datamap_nginx_exporter" \
             --format "table {{.Names}}\t{{.Status}}"
+
+      # Always, including after a failure: the runner's temp directory outlives
+      # a failed job long enough to matter.
+      - name: Remove the decrypted environment
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/env"
 
       - name: Logs on failure
         if: failure()
