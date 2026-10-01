@@ -18,6 +18,7 @@ from app.controller.v1.admin.resource import (
 )
 from app.model.email import EmailQuery, EmailRecord, EmailStatus
 from app.service.email import EmailService
+from app.service.email_masking import mask_secrets
 
 router = APIRouter(
     prefix="/admin/emails",
@@ -79,11 +80,14 @@ def fetch(
     service: EmailService = Depends(Provide[Container.email_service]),
 ) -> EmailDetailResponse:
     record, events = service.fetch(email_id)
+    context, body_text = mask_secrets(
+        record.context, record.body_text, record.secret_fields
+    )
     return EmailDetailResponse(
         **_summary(record),
         template_version=record.template_version,
-        body_text=record.body_text,
-        context=record.context,
+        body_text=body_text,
+        context=context,
         smtp_message_id=record.smtp_message_id,
         next_attempt_at=record.next_attempt_at,
         events=[
