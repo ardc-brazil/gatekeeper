@@ -55,6 +55,7 @@ m = g(r.sub, p.sub) && regexMatch(r.obj, p.obj) && regexMatch(r.act, p.act)
 - File access for reviewers.
 - Automatic promotion of the DOI when the embargo ends.
 - Redacting authorship from free text (see *Reviewer link*).
+- An embargo at the storage level. The embargo is a feature of the application: the gatekeeper enforces it on every route, and whoever operates the infrastructure with storage credentials is outside it.
 
 ## Technical design
 
@@ -90,6 +91,7 @@ CREATE TABLE dataset_invitations (
   token_hash  varchar(64)  NOT NULL UNIQUE,      -- sha256 of the token in the link
   invited_by  uuid         NULL REFERENCES users(id),
   accepted_at timestamptz  NULL,
+  accepted_by uuid         NULL REFERENCES users(id),
   revoked_at  timestamptz  NULL,
   created_at  timestamptz  NOT NULL DEFAULT now(),
   CHECK (email IS NOT NULL OR orcid IS NOT NULL)
@@ -163,7 +165,17 @@ def _can_access_data(self, user_id, dataset) -> bool:
 
 Reviewer access does not pass through this function. A reviewer has no `user_id`, never reaches the files, and is served by routes of their own (see *Reviewer link*).
 
-Applied in three places:
+**An embargoed dataset is embargoed on every route**, not only where files are read. Each route of `/datasets/{id}/...` loads the dataset and checks the caller before doing anything else, so an editor in the tenancy cannot change, version or delete a dataset they cannot see:
+
+| Action | Who may, during the embargo |
+|---|---|
+| Read the dataset, its versions, its files; download | owner, `read`, `write` |
+| Update metadata, create or enable versions, upload files, reserve or change a DOI, manage sharing and reviewer links | owner, `write` |
+| Delete the dataset or a version; set, extend or end the embargo; switch its mode | owner |
+
+Anyone else gets **404**, on every route alike, in either mode: a 403 on a write would confirm the dataset exists. The TUS upload hooks count as routes: an upload token is issued only to someone who may upload.
+
+How the reads behave:
 
 | Where | Behaviour |
 |-------|-----------|
@@ -204,19 +216,22 @@ When the embargo ends nothing is published on its own. The author publishes the 
 
 ### Lifecycle
 
+- **Start.** An embargo can be set only on a dataset that has never been published, that is, one with no snapshot. Once a public page with the authors has existed, an embargo cannot take it back. The same rule allows an embargo that ended without the dataset being published to be set again.
 - **End date.** File access opens on its own once `embargo_until` passes; the check is at read time. The owner may end an embargo early; an administrator may not, since ending it early is the same as reaching past it.
-- **Extension.** Unlimited in number, capped at 90 days per extension. There is no total ceiling, but no embargo drifts for years without someone deciding so again each quarter. The cap is a hard limit, not a warning.
+- **Duration.** An embargo is set for at most 90 days, and each extension reaches at most 90 days from the day it is made. Extensions are unlimited in number. There is no total ceiling, but no embargo drifts for years without someone deciding so again each quarter. The cap is a hard limit, not a warning.
 - **DOI.** Reserved while embargoed and promoted to `findable` **manually by the author** once it ends. The end-of-embargo email says so explicitly (see *Notifications*).
 
-The 90-day cap is validated in the service rather than by a `CHECK` constraint, because the comparison is against `now()`, which is not immutable:
+The 90-day cap is validated in the service, on creation and on every extension alike, rather than by a `CHECK` constraint, because the comparison is against `now()`, which is not immutable:
 
 ```python
-MAX_EMBARGO_EXTENSION = timedelta(days=90)
+MAX_EMBARGO_PERIOD = timedelta(days=90)
 
-def extend_embargo(self, dataset_id, new_until, user_id):
-    if new_until > datetime.now(timezone.utc) + MAX_EMBARGO_EXTENSION:
-        raise BadRequestException(errors=[ErrorDetails(code="embargo_extension_too_long")])
-    # ... persist, then append a dataset_embargo_events row with event_type='extended'
+def _validate_embargo_until(self, new_until):
+    if new_until > datetime.now(timezone.utc) + MAX_EMBARGO_PERIOD:
+        raise BadRequestException(errors=[ErrorDetails(code="embargo_too_long")])
+
+# set_embargo and extend_embargo both call it, then persist and append a
+# dataset_embargo_events row ('created' or 'extended')
 ```
 
 ### Audit
@@ -243,9 +258,13 @@ When the author submits an email or ORCID, the backend resolves it:
 | Email | `users.email`, case-insensitive | permission granted now, *Access granted* email | pending invitation, *Invitation* email |
 | ORCID | `providers` where `name = 'orcid'`, bare form in `reference` | permission granted now, *Access granted* email | pending invitation, link to copy |
 
-An invitation by ORCID alone has no address to send to, so the dialog shows its link for the author to send through their own channels. Every pending invitation's link can be copied from the dialog, including the emailed ones. When the invitee signs up or logs in, their email and ORCID are checked against pending invitations, and each match becomes a permission and marks the invitation accepted.
+An invitation by ORCID alone has no address to send to, so the dialog shows its link for the author to send through their own channels. Like every token here, the link is shown once; an author who needs it again generates a new one, which invalidates the old.
 
-**Who has access** lists the owner, each person with a permission and their level, and each pending invitation marked as such. The author can change a level, revoke a permission, or revoke an invitation from the same list.
+**Accepting.** The link is the invitation. Whoever opens it, logged in with any account, accepts it: the permission goes to that account, whatever its email or ORCID. The token works once; after that it answers that the invitation was already accepted. Requiring the account to match the email or ORCID invited would refuse the common case of a researcher who signs up with another address or provider, and buys little, since the author already trusted the channel the link went through. What protects the author instead is visibility: the dialog shows which account accepted each invitation, and a permission that went to the wrong person is revoked like any other.
+
+Matching still helps where it can: when someone logs in with an email or ORCID that a pending invitation names, that invitation is accepted for them without the link.
+
+**Who has access** lists the owner, each person with a permission and their level, each pending invitation marked as such, and for each accepted invitation the account that accepted it. The author can change a level, revoke a permission, or revoke an invitation from the same list.
 
 **Reviewer links** are listed in their own section of the dialog (see below).
 
@@ -293,7 +312,7 @@ Redaction happens in the gatekeeper, in one function, driven by an **allowlist**
 
 Free text such as `description` and `additional_information` cannot be redacted automatically. The dialog says so when a link is created.
 
-**Usage.** Each page view appends a row to `dataset_review_link_views`. The share dialog shows, per link, the number of views, the first and the last. Nothing that identifies the reviewer is recorded — no IP address, no user agent, no cookie — so the author learns *whether* the venue opened the dataset, never *who* did. Page views are the only event, since the page offers nothing else to do.
+**Usage.** Each page view appends a row to `dataset_review_link_views`. The share dialog shows, per link, the number of views, the first and the last. The table records nothing that identifies the reviewer — no IP address, no user agent, no cookie — so the author learns *whether* the venue opened the dataset, never *who* did. The web server's access logs are outside this promise; they are not visible to DataMap users. Page views are the only event, since the page offers nothing else to do.
 
 The same event feeds a Prometheus counter, following RFC 005:
 
@@ -322,12 +341,12 @@ Email is sent in this phase. The mechanism is deliberately small: the gatekeeper
 |---|---|---|
 | Invitation | invitee (by email) | pending invitation created |
 | Access granted | the added user | permission granted to an existing account |
-| Embargo ending in 15, 10, 5 and 1 days | owner | `embargo_until` minus each offset |
-| Embargo ended | owner | `embargo_until` passed, or ended early by the owner |
+| Embargo ending in 15, 10, 5 and 1 days | owner and everyone with a permission | `embargo_until` minus each offset |
+| Embargo ended | owner and everyone with a permission | `embargo_until` passed, or ended early by the owner |
 
-Each reminder says how many days remain, that the files will become available when the embargo ends, and that the author may extend it by up to 90 days at a time, with a button to the dataset page.
+Everyone with access is told, not only the owner, so that if the owner is gone the others know the embargo is ending and the dataset still has to be published. Each reminder says how many days remain and that the files will become available to the tenancy when the embargo ends. The owner's copy adds that the embargo can be extended by up to 90 days at a time, with a button to the dataset page; the others' copy names the owner as the person who can. Pending invitations are not people with access yet, and get nothing.
 
-The *Embargo ended* message must say, in terms a researcher who has never heard of DataCite will understand:
+The owner's *Embargo ended* message must say, in terms a researcher who has never heard of DataCite will understand:
 
 - the files are now available on DataMap to the members of the dataset's tenancy;
 - nothing has been made public: to publish the dataset page, the author publishes the version on the dataset page;
@@ -355,7 +374,7 @@ CREATE TABLE email_messages (
   related_id       uuid         NULL,
   triggered_by     uuid         NULL REFERENCES users(id),  -- null when the system sent it
   dedup_key        varchar(256) NULL UNIQUE,      -- e.g. embargo_reminder:<dataset>:<until>:15
-  status           varchar(16)  NOT NULL DEFAULT 'pending',  -- pending | sent | failed
+  status           varchar(16)  NOT NULL DEFAULT 'pending',  -- pending | sending | sent | failed
   attempts         int          NOT NULL DEFAULT 0,
   next_attempt_at  timestamptz  NOT NULL DEFAULT now(),
   smtp_message_id  varchar(256) NULL,             -- Message-ID header, to find it in the mailbox
@@ -394,9 +413,11 @@ A message about an embargoed dataset contains the dataset's name and dates, neve
 
 **How a message moves.**
 
-1. **Enqueue.** The service that causes a message — granting a permission, creating an invitation — inserts the `email_messages` row and its `queued` event in the same transaction. If the SMTP server is down, the grant still succeeds and the email goes out later; if the transaction rolls back, no email announces an access that does not exist.
-2. **Reminders.** A due-reminder query finds datasets whose `embargo_until` minus an offset has passed and inserts the reminder with `dedup_key = embargo_reminder:<dataset_id>:<embargo_until>:<offset>`. The unique key makes the insert idempotent, and because `embargo_until` is part of it, an extension starts a fresh sequence instead of repeating the old one. A reminder whose moment has already passed when the embargo is created or extended — an embargo set for 3 days has no 15-day reminder — is not sent.
-3. **Dispatch.** Due rows are sent. Success records `sent`, the Message-ID and the time. A failure records `attempt_failed` with the server's reply and retries with backoff; after 5 attempts the row is `failed`.
+1. **Enqueue.** The service that causes a message — granting a permission, creating an invitation — inserts the `email_messages` row and its `queued` event after its own write has committed. The two are not one transaction, since each repository commits its own session: the rare failure between them leaves an access without its email, which is logged, and never an email announcing an access that does not exist. If the SMTP server is down, the grant still succeeds and the email goes out later.
+2. **Reminders.** A due-reminder query finds datasets whose `embargo_until` minus an offset has passed and inserts the reminder with `dedup_key = embargo_reminder:<dataset_id>:<embargo_until>:<offset>`. The unique key makes the insert idempotent, and because `embargo_until` is part of it, an extension starts a fresh sequence instead of repeating the old one. A reminder whose moment has already passed when the embargo is created or extended — an embargo set for 3 days has no 15-day reminder — is not sent. The same pass, finding an embargo whose date has passed, appends its `expired` row to `dataset_embargo_events` and queues the *Embargo ended* messages; `dedup_key` makes both happen once.
+3. **Dispatch.** Due rows are claimed with `SELECT ... FOR UPDATE SKIP LOCKED` and moved to `sending` in their own committed transaction before anything is sent, so two gatekeeper instances never pick the same row. Success records `sent`, the Message-ID and the time.
+
+**No message is ever sent twice.** That is a requirement, and it has a price: when it is not known whether a message left, it is not retried. A retry happens only when the server certainly did not accept the message — the connection failed, or it answered an error before accepting the content. A row left in `sending` by a crash, or a send whose outcome is unknown (a timeout after the content was written), becomes `failed` with that reason, visible in the record, for someone to look at. Losing an email in that rare case is preferred to delivering it twice. Definite failures retry with backoff; after 5 attempts the row is `failed`.
 
 Steps 2 and 3 run from `POST /internal/notifications/dispatch`, which the Archivist calls every 5 minutes from its existing APScheduler, through the gatekeeper client it already has. The Archivist triggers; the gatekeeper owns the data, the templates and the SMTP connection. A reminder can therefore be up to 5 minutes late, which does not matter at a granularity of days.
 
@@ -504,6 +525,12 @@ Resolved on 2026-09-30:
 - The first SMTP sender: `datamap.pcs@gmail.com`, since a USP account cannot have an app password.
 - Where the DOI points during the embargo: it is `registered`, which DataCite resolves but does not index, so it lands on a minimal embargo page.
 - How long email records are kept: no limit for now.
+- How long an embargo may be set for: 90 days at most, on creation as on each extension.
+- Which routes the embargo covers: all of them, reads and writes.
+- When an embargo can be set: only on a dataset that has never been published.
+- What an invitation link proves: nothing about identity. It is single-use and accepted by whoever opens it; the author sees who did.
+- Who is told the embargo is ending: everyone with access, so the dataset is still published if the owner is gone.
+- Whether email may be duplicated: never. A message whose delivery is uncertain is marked failed rather than retried.
 - Who reaches the files during an embargo: the owner and the people the owner authorised. Not the tenancy, not administrators, and not the Data Team unless the owner grants it.
 
 Still open:
