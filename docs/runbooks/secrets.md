@@ -118,6 +118,17 @@ The `trap` is the point: without it the file outlives the shell. The archivist's
 own configuration works the same way, with `--input-type dotenv --output-type
 dotenv`, because sops cannot infer the format of its `.env.sops` names.
 
+`make` is doing more than passing a path: `include ${ENV_FILE_PATH}` plus
+`export` puts every variable in its own environment, which is what `${VAR}` in a
+compose file is expanded from. A bare `docker compose` with only `ENV_FILE_PATH`
+set leaves those blank — including the host paths of the database and object
+storage. Source the file as well, and see
+[host-applied-changes.md](host-applied-changes.md):
+
+```bash
+set -a; . "$ENV_FILE_PATH"; set +a
+```
+
 The retired plaintext is in `~/environment/retired-<date>/` if something needs it
 in a hurry, and can be deleted once nobody has.
 

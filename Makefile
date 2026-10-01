@@ -50,7 +50,7 @@ docker-prune:
 	@echo "${On_Green}Images prune${Color_Off}"
 	time docker image prune -a -f
 
-observability-run: # Usage: make ENV_FILE_PATH=../environment/gatekeeper.prod.env observability-run
+observability-run: # Usage: make ENV_FILE_PATH=<decrypted-env> observability-run
 	@echo "${On_Green}Starting Prometheus and Grafana${Color_Off}"
 	docker compose -f docker-compose-observability.yaml up -d
 

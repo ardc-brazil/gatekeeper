@@ -53,8 +53,12 @@ sudo cp /etc/nginx/sites-enabled/datamap \
 **3. Put the new one in place.**
 
 ```bash
-sudo cp ~/gatekeeper/infrastructure/nginx/datamap.conf /etc/nginx/sites-enabled/datamap
+sudo cp /home/datamap/actions-runner/_work/gatekeeper/gatekeeper/infrastructure/nginx/datamap.conf \
+        /etc/nginx/sites-enabled/datamap
 ```
+
+That path is the runner's checkout, and it only carries a merged change after a
+later deploy has run. See [host-applied-changes.md](host-applied-changes.md).
 
 **4. Check it before it takes effect.**
 
@@ -155,8 +159,8 @@ against software, not against hardware. If the host goes, everything goes.
 
 TUSd calls the hook by name, and both instances answer to the alias
 `gatekeeper` on the docker network, so `TUS_HOOK_API` reaches whichever is up.
-For that to hold, the value in `gatekeeper.prod.env` has to be the alias rather
-than one container:
+For that to hold, the value in `secrets/production/gatekeeper.env` has to be the
+alias rather than one container:
 
 ```
 TUS_HOOK_API=http://gatekeeper:9092/api/v1/tus/hooks
