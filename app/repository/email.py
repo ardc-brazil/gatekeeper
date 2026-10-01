@@ -200,7 +200,7 @@ class EmailRepository:
                 rows = rows.filter(EmailMessage.template == query.template)
             if query.status:
                 rows = rows.filter(EmailMessage.status == query.status.value)
-            rows = rows.order_by(EmailMessage.created_at.desc())
+            rows = rows.order_by(EmailMessage.created_at.desc(), EmailMessage.id.desc())
 
             total_count = rows.count()
             page = max(1, query.page)

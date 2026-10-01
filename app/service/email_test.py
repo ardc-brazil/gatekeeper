@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
+import jinja2
 from prometheus_client import REGISTRY
 
 from app.exception.bad_request import BadRequestException
@@ -169,7 +170,7 @@ class TestEnqueue(EmailServiceTestCase):
         self.sender.send.assert_not_called()
 
     def test_a_template_that_cannot_render_fails_where_it_was_asked_for(self):
-        with self.assertRaises(Exception):  # noqa: B017 - render() can raise any jinja2 error
+        with self.assertRaises(jinja2.exceptions.UndefinedError):
             self.service.enqueue(
                 template="notification", recipient="a@example.com", context={}
             )
@@ -230,7 +231,9 @@ class TestDispatch(EmailServiceTestCase):
         self.assertEqual(sent["From"], "DataMap <datamap.pcs@gmail.com>")
         self.assertEqual(sent["Subject"], "DataMap test message")
         self.assertTrue(sent["Message-ID"].endswith("@gmail.com>"))
-        self.assertIn("c0ffee12", sent.get_body(("plain",)).get_content())
+        self.assertEqual(
+            sent.get_body(("plain",)).get_content().strip(), record.body_text
+        )
         self.assertIn("c0ffee12", sent.get_body(("html",)).get_content())
 
         kwargs = self.repository.mark_sent.call_args.kwargs

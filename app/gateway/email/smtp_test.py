@@ -101,6 +101,15 @@ class TestSmtpSender(unittest.TestCase):
         with self.assertRaises(UncertainSendFailure):
             self.sender().send(_message())
 
+    def test_an_uncertain_send_closes_the_socket_without_waiting_on_quit(self):
+        self.connection.send_message.side_effect = socket.timeout("timed out")
+
+        with self.assertRaises(UncertainSendFailure):
+            self.sender().send(_message())
+
+        self.connection.quit.assert_not_called()
+        self.connection.close.assert_called_once()
+
     def test_a_failing_quit_after_a_send_is_not_a_failure(self):
         self.connection.quit.side_effect = smtplib.SMTPServerDisconnected("gone")
 

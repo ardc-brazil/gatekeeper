@@ -305,7 +305,9 @@ class EmailService:
         )
 
     def _mime(self, record: EmailRecord) -> MimeMessage:
-        rendered = self._renderer.render(EmailTemplate(record.template), record.context)
+        html = self._renderer.render(
+            EmailTemplate(record.template), record.context
+        ).html
         message = MimeMessage()
         message["From"] = formataddr((self._from_name, self._from_address))
         message["To"] = record.recipient
@@ -313,6 +315,6 @@ class EmailService:
         if self._reply_to:
             message["Reply-To"] = self._reply_to
         message["Message-ID"] = make_msgid(domain=self._from_address.rsplit("@", 1)[-1])
-        message.set_content(rendered.text)
-        message.add_alternative(rendered.html, subtype="html")
+        message.set_content(record.body_text)
+        message.add_alternative(html, subtype="html")
         return message

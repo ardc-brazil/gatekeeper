@@ -62,6 +62,7 @@ class SmtpSender:
         except (OSError, smtplib.SMTPException) as e:
             raise DefiniteSendFailure(f"connect: {e}") from e
 
+        uncertain = False
         try:
             try:
                 if self._starttls:
@@ -76,9 +77,13 @@ class SmtpSender:
             except _REFUSED_BY_SERVER as e:
                 raise DefiniteSendFailure(f"refused: {_refusal_summary(e)}") from e
             except (OSError, smtplib.SMTPException) as e:
+                uncertain = True
                 raise UncertainSendFailure(f"during send: {e}") from e
         finally:
             try:
-                connection.quit()
+                if uncertain:
+                    connection.close()
+                else:
+                    connection.quit()
             except (OSError, smtplib.SMTPException):
                 pass
