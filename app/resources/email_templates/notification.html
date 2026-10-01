@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ title }}{% endblock %}
+{% block preheader %}{{ preheader }}{% endblock %}
+{% block label %}Notification{% endblock %}
+{% block content %}
+{{ m.heading(title) }}
+{% call m.paragraph() %}{% if actor_name %}{{ m.strong(actor_name) }} {% endif %}{{ message }}{% endcall %}
+{% if details %}{{ m.details(details) }}{% endif %}
+{{ m.button(cta_label, cta_url) }}
+{{ m.spacer(16) }}
+{% call m.note() %}Please cite the dataset when using it in publications, following the {{ m.inline_link("Data Policy", site_url ~ "/project/data-policy") }}.{% endcall %}
+{% endblock %}
+{% block reason %}{{ reason }}{% endblock %}
