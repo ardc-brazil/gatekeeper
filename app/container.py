@@ -9,18 +9,22 @@ from app.gateway.email.smtp import SmtpSender
 from app.gateway.object_storage.http_client import build_http_client
 from app.service.health import DependencyHealthService
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
+from app.repository.access_event import AccessEventRepository
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
 from app.repository.email import EmailRepository
+from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
 from app.service.dataset_collocation import DatasetCollocationService
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.doi import DOIService
 from app.service.email import EmailService
 from app.service.email_template import EmailTemplateRenderer
+from app.service.permission import PermissionService
 from app.service.tus import TusService
 from app.service.user import UserService
 
@@ -227,6 +231,28 @@ class Container(containers.DeclarativeContainer):
     tus_service = providers.Factory(
         TusService,
         dataset_service=dataset_service,
+    )
+
+    permission_repository = providers.Factory(
+        PermissionRepository,
+        session_factory=db.provided.session,
+    )
+
+    access_event_repository = providers.Factory(
+        AccessEventRepository,
+        session_factory=db.provided.session,
+    )
+
+    dataset_access_audit = providers.Factory(
+        DatasetAccessAudit,
+        event_repository=access_event_repository,
+    )
+
+    permission_service = providers.Factory(
+        PermissionService,
+        permission_repository=permission_repository,
+        user_service=user_service,
+        audit=dataset_access_audit,
     )
 
     email_repository = providers.Factory(
