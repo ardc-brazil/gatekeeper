@@ -1,0 +1,61 @@
+{% macro heading(text) -%}
+<tr><td class="dm-ink" style="padding:0 40px 12px 40px;font-family:Helvetica, Arial, sans-serif;font-size:26px;line-height:34px;mso-line-height-rule:exactly;font-weight:bold;color:#0b0b0c;">{{ text }}</td></tr>
+{%- endmacro %}
+
+{% macro paragraph(bottom=16) -%}
+<tr><td class="dm-text" style="padding:0 40px {{ bottom }}px 40px;font-family:Helvetica, Arial, sans-serif;font-size:16px;line-height:25px;mso-line-height-rule:exactly;color:#374151;">{{ caller() }}</td></tr>
+{%- endmacro %}
+
+{% macro strong(text) -%}
+<strong class="dm-ink" style="color:#0b0b0c;">{{ text }}</strong>
+{%- endmacro %}
+
+{% macro inline_link(text, url) -%}
+<a class="dm-ink" href="{{ url }}" style="color:#0b0b0c;font-weight:bold;text-decoration:underline;">{{ text }}</a>
+{%- endmacro %}
+
+{% macro details(rows) -%}
+<tr><td style="padding:8px 40px 24px 40px;">
+<table class="dm-panel dm-onbtn" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e5e7eb;border-radius:6px;background-color:#fafaf9;" bgcolor="#fafaf9">
+{% for row in rows -%}
+{% if loop.first %}<tr><td style="padding:18px 20px {{ 18 if loop.last else 12 }}px 20px;">
+{% else %}<tr><td class="dm-border" style="padding:12px 20px {{ 18 if loop.last else 12 }}px 20px;border-top:1px solid #e5e7eb;">
+{% endif -%}
+<div class="dm-muted" style="font-family:Helvetica, Arial, sans-serif;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#6b7280;">{{ row.label }}</div>
+<div class="dm-ink" style="font-family:Helvetica, Arial, sans-serif;font-size:15px;line-height:22px;color:#0b0b0c;padding-top:2px;">{{ row.value }}</div></td></tr>
+{% endfor -%}
+</table></td></tr>
+{%- endmacro %}
+
+{% macro bullets(items, marker="&#9632;", marker_class="dm-faint", marker_color="#9ca3af") -%}
+<tr><td style="padding:0 40px 16px 40px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+{% for item in items -%}
+<tr><td class="{{ marker_class }}" width="22" valign="top" style="width:22px;padding:4px 0;font-family:Helvetica, Arial, sans-serif;font-size:10px;line-height:25px;color:{{ marker_color }};">{{ marker | safe }}</td><td class="dm-text" style="padding:4px 0;font-family:Helvetica, Arial, sans-serif;font-size:16px;line-height:25px;mso-line-height-rule:exactly;color:#374151;">{{ item }}</td></tr>
+{% endfor -%}
+</table></td></tr>
+{%- endmacro %}
+
+{% macro button(label, url) -%}
+<tr><td style="padding:8px 40px 8px 40px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+<td class="dm-btn" bgcolor="#0b0b0c" style="background-color:#0b0b0c;border-radius:4px;">
+<a href="{{ url }}" target="_blank" style="display:block;padding:14px 28px;font-family:Helvetica, Arial, sans-serif;font-size:14px;line-height:16px;font-weight:bold;letter-spacing:0.6px;text-transform:uppercase;color:#f9fafb;text-decoration:none;border-radius:4px;">{{ label }}</a>
+</td></tr></table></td></tr>
+{%- endmacro %}
+
+{% macro spacer(height) -%}
+<tr><td height="{{ height }}" style="height:{{ height }}px;line-height:{{ height }}px;font-size:1px;mso-line-height-rule:exactly;">&nbsp;</td></tr>
+{%- endmacro %}
+
+{% macro rule() -%}
+<tr><td style="padding:24px 40px 24px 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="dm-rule" height="1" style="height:1px;line-height:1px;font-size:1px;background-color:#e5e7eb;" bgcolor="#e5e7eb">&nbsp;</td></tr></table></td></tr>
+{%- endmacro %}
+
+{% macro note(size=14, bottom=0) -%}
+<tr><td class="dm-muted" style="padding:0 40px {{ bottom }}px 40px;font-family:Helvetica, Arial, sans-serif;font-size:{{ size }}px;line-height:{{ 22 if size == 14 else 20 }}px;mso-line-height-rule:exactly;color:#6b7280;">{{ caller() }}</td></tr>
+{%- endmacro %}
+
+{% macro link_fallback(url) -%}
+{% call note(size=13) %}Button not working? Paste this link into your browser:<br><a class="dm-muted2" href="{{ url }}" style="color:#4b5563;text-decoration:underline;word-break:break-all;">{{ url }}</a>{% endcall %}
+{%- endmacro %}

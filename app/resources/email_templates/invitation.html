@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}You're invited to DataMap{% endblock %}
+{% block preheader %}{{ inviter_name }} invited you to collaborate on the {{ workspace_name }} workspace in DataMap.{% endblock %}
+{% block label %}Invitation{% endblock %}
+{% block content %}
+{{ m.heading("You've been invited to join " ~ workspace_name) }}
+{% call m.paragraph() %}{{ m.strong(inviter_name) }} ({{ inviter_email }}) invited you to collaborate on the {{ m.strong(workspace_name) }} workspace in DataMap.{% endcall %}
+{{ m.details([
+  {"label": "Workspace", "value": workspace_name},
+  {"label": "Role", "value": role},
+  {"label": "Invitation expires", "value": expires_on},
+]) }}
+{{ m.button("Accept invitation", accept_url) }}
+{{ m.spacer(16) }}
+{% call m.note(bottom=16) %}If you weren't expecting this invitation, you can ignore this email. It will expire automatically.{% endcall %}
+{{ m.link_fallback(accept_url) }}
+{% endblock %}
+{% block reason %}You received this email because someone invited you to a DataMap workspace.{% endblock %}
