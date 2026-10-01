@@ -152,16 +152,21 @@ The migration needs no manual cleanup. `migrations/env.py` excludes `casbin_rule
 
 ### Access rule
 
-One decision point in `DatasetService`, so there is a single place to read when someone asks why a given person cannot download:
+One decision point, so there is a single place to read when someone asks why a given person cannot see or download a dataset:
 
 ```python
-def _can_access_data(self, user_id, dataset) -> bool:
-    if not self._is_under_embargo(dataset):   # embargo_until null or past
-        return True
+def can_access(self, user_id, dataset, level: Level) -> bool:
     if dataset.owner_id == user_id:
         return True
-    return self._permission_repo.exists(dataset.id, user_id)
+    permission = self._permission_repo.fetch(dataset.id, user_id)
+    if permission is not None and permission.level >= level:
+        return True
+    if self._is_under_embargo(dataset):   # embargo_until not null and in the future
+        return False
+    return dataset.tenancy in self._tenancies_of(user_id)
 ```
+
+A permission is explicit sharing, and it holds whether or not the dataset is under embargo: a collaborator from another institution does not lose access on the day the data open to the tenancy. What the embargo removes is the tenancy's default access, nothing else. Sharing therefore works on any dataset; it matters most under embargo.
 
 Reviewer access does not pass through this function. A reviewer has no `user_id`, never reaches the files, and is served by routes of their own (see *Reviewer link*).
 
@@ -174,33 +179,42 @@ Reviewer access does not pass through this function. A reviewer has no `user_id`
 | Extend the embargo | owner; or, when the owner's account is disabled, anyone with a permission |
 | Delete the dataset or a version; set or end the embargo; switch its mode | owner |
 
-Anyone else gets **404**, on every route alike, in either mode: a 403 on a write would confirm the dataset exists. The TUS upload hooks count as routes: an upload token is issued only to someone who may upload.
+Anyone else gets **404**, on every route alike, in either mode: a 403 on a write would confirm the dataset exists. The TUS `post-finish` hook counts as a route: upload tokens are signed by the webapp, so the gatekeeper refuses, at the hook, a file from someone who may not upload.
+
+**Updating a dataset no longer changes its owner.** `update_dataset` used to set `owner_id` to whoever made the change. Under embargo that would hand the dataset to the first collaborator who fixed a typo in its description, and take it from the owner. The owner is set once, at creation.
 
 How the reads behave:
 
 | Where | Behaviour |
 |-------|-----------|
-| Search (`repository/dataset.py`) | The clause goes into the SQL, not into Python, or the total count and pagination start lying. With `embargo_metadata_visible = false` the row is excluded for anyone outside the allowlist, **including other members of the tenancy**. |
-| Dataset read | Open mode answers normally with the badge; only the file name list is withheld, since a file name leaks content. File count and total size stay. Hidden mode answers **404, not 403** — a 403 confirms the dataset exists. |
+| Search (`repository/dataset.py`) | The clause goes into the SQL, not into Python, or the total count and pagination start lying. A row is listed when the caller owns it, has a permission on it, or belongs to its tenancy and it is either not embargoed or embargoed in open mode. With `embargo_metadata_visible = false` the row is excluded for anyone outside the allowlist, **including other members of the tenancy**. |
+| Dataset read | Open mode answers tenancy members with the badge; only the file name list is withheld, since a file name leaks content. File count and total size stay. Hidden mode answers **404, not 403** — a 403 confirms the dataset exists. |
 | Download (`service/dataset.py`) | Checked before the link is generated. The pre-signed URL TTL drops from 7 days to 1 hour while under embargo: a 7-day link outlives a revocation. |
 
 File access is identical in both modes. The mode governs only who knows the dataset exists.
 
+### People from outside the tenancy
+
+The people an author authorises are often at another institution, with no tenancy on DataMap and no role. Today such a user cannot reach any dataset route: Casbin refuses them for lack of a role, the gatekeeper filters every query by tenancy, and the webapp sends a user without a tenancy to the "access pending" screen. Three changes make an explicit permission sufficient on its own:
+
+- **A Casbin role, `datasets_shared`,** granted to an account when it receives its first permission. Its policies allow the dataset list and the routes under `/api/v1/datasets/<uuid>/...` (`GET`, `POST`, `PUT`) and the TUS hook, and nothing else: not creating a dataset, not the filters, not any other resource. The role opens the routes; the access rule decides, per dataset, what the account may do on them. Revoking a permission leaves the role in place, since it grants nothing by itself.
+- **The gatekeeper stops filtering by tenancy where a permission exists.** A dataset is fetched by id and the access rule applies, instead of a query that only ever looks inside the caller's tenancies. Search adds the datasets the caller has a permission on to those of their tenancies.
+- **The webapp lets an account with no tenancy in.** It gets a *Shared with me* list, the dataset pages work for it, and the BFF stops requiring a selected tenancy on the dataset routes. An account that belongs to a tenancy sees the shared datasets in that list as well, whichever tenancy is selected.
+
 ### Public snapshots during the embargo
 
-A snapshot is the JSON published to object storage that backs the public pages `/datasets/{id}` and `/doi/datasets/{id}/versions/{version}`. It carries the full metadata, authors included, and is written by `publish_dataset_version`, by creating a DOI in manual mode, and by moving a DOI to `findable`.
+A snapshot is the JSON published to object storage that backs the public page `/datasets/{id}`. It carries the full metadata, authors included, and is written by `_publish_dataset_snapshot`, which two paths reach: creating a DOI in manual mode, and moving a DOI to `findable`. Writing one also sets the dataset's `visibility` to `PUBLIC`, and that is what *published* means in this RFC. Publishing a *version* (`publish_dataset_version`) only changes its design state and writes no snapshot; it stays allowed.
 
-**No snapshot is generated while a dataset is under embargo, in either mode.** The check sits in `_publish_dataset_snapshot`, the one function all three paths go through, so no caller can forget it:
+**No snapshot is generated while a dataset is under embargo, in either mode.** The check sits in `_publish_dataset_snapshot`, the one function both paths go through, so no caller can forget it:
 
-- `publish_dataset_version` answers `400 embargo_active`.
-- Creating a DOI in manual mode still reserves the DOI, as a draft, and skips the snapshot. Reserving the identifier is the point of the embargo; failing it would defeat the feature.
+- Creating a DOI in manual mode still reserves the DOI and skips the snapshot. Reserving the identifier is the point of the embargo; failing it would defeat the feature.
 - Moving a DOI to `registered` is allowed; moving it to `findable` answers `400 embargo_active`. Promotion is the step taken after the embargo, never during it.
 
-**The DOI during the embargo.** The author reserves the DOI and moves it to `registered` while the embargo lasts. DataCite treats that state as resolvable but not indexed: `doi.org` redirects to the DOI's URL, and the metadata do not appear in DataCite Commons or its public API. The identifier the author writes into the submitted article therefore works — and, with no snapshot, the page it lands on must not depend on one.
+**The DOI during the embargo.** The author reserves the DOI and moves it to `registered` while the embargo lasts. DataCite treats that state as resolvable but not indexed: `doi.org` redirects to the DOI's URL, and the metadata do not appear in DataCite Commons or its public API. The identifier the author writes into the submitted article therefore works — and the page it lands on must not depend on a snapshot.
 
-That page, `/doi/datasets/{id}/versions/{version}`, is answered live while the embargo lasts, in either mode, and shows only this: the dataset is under embargo until a date. No name, no metadata, no authors. It says less than the DOI itself, whose number is already public, and it is served by a gatekeeper route that reads `embargo_until` and nothing else. Once the embargo ends and a snapshot exists, the same URL shows the snapshot as it does today.
+The DOI's URL is `/doi/datasets/{id}/versions/{version}`. Today nginx rewrites it to the logged-in page `/app/datasets/{id}/versions/{version}`, which sends a visitor to the login screen. It becomes a public webapp page instead. That page asks the gatekeeper whether the dataset is under embargo, through a route that reads `embargo_until` and nothing else. While it is, the page shows only that the dataset is under embargo until a date: no name, no metadata, no authors. That says less than the DOI itself, whose number is already public. Otherwise the page redirects to where the DOI leads today, so nothing changes for datasets without an embargo. An unknown dataset gets the same answer as one without an embargo, so the route reveals nothing to someone guessing ids.
 
-When the embargo ends nothing is published on its own. The author publishes the version, which writes the first snapshot, and then promotes the DOI; the end-of-embargo email walks them through both.
+When the embargo ends nothing is published on its own. The author promotes the DOI to `findable`, which writes the snapshot and makes the public page exist; the end-of-embargo email walks them through it.
 
 ### Who sees what
 
@@ -351,9 +365,9 @@ Everyone with access is told, not only the owner, so that if the owner is gone t
 The owner's *Embargo ended* message must say, in terms a researcher who has never heard of DataCite will understand:
 
 - the files are now available on DataMap to the members of the dataset's tenancy;
-- nothing has been made public: to publish the dataset page, the author publishes the version on the dataset page;
+- nothing has been made public: the public page appears when the author promotes the DOI to findable;
 - its DOI is **registered but not findable**: it resolves, but it is not indexed by DataCite, so the dataset will not appear in DataCite search or in the services that harvest from it;
-- making it findable is a manual step the author takes after publishing, and nothing will do it for them.
+- promoting it is a manual step on the dataset page, and nothing will do it for them.
 
 The same message appears as a persistent banner on the dataset page for the owner, from the day the embargo ends until the DOI is promoted. Email is a nudge; the banner is what cannot be missed.
 
@@ -376,7 +390,7 @@ CREATE TABLE email_messages (
   related_id       uuid         NULL,
   triggered_by     uuid         NULL REFERENCES users(id),  -- null when the system sent it
   dedup_key        varchar(256) NULL UNIQUE,      -- e.g. embargo_reminder:<dataset>:<until>:15
-  status           varchar(16)  NOT NULL DEFAULT 'pending',  -- pending | sending | sent | failed
+  status           varchar(16)  NOT NULL DEFAULT 'pending',  -- pending | sending | sent | failed | skipped
   attempts         int          NOT NULL DEFAULT 0,
   next_attempt_at  timestamptz  NOT NULL DEFAULT now(),
   smtp_message_id  varchar(256) NULL,             -- Message-ID header, to find it in the mailbox
@@ -417,11 +431,13 @@ A message about an embargoed dataset contains the dataset's name and dates, neve
 
 1. **Enqueue.** The service that causes a message — granting a permission, creating an invitation — inserts the `email_messages` row and its `queued` event after its own write has committed. The two are not one transaction, since each repository commits its own session: the rare failure between them leaves an access without its email, which is logged, and never an email announcing an access that does not exist. If the SMTP server is down, the grant still succeeds and the email goes out later.
 2. **Reminders.** A due-reminder query finds datasets whose `embargo_until` minus an offset has passed and inserts the reminder with `dedup_key = embargo_reminder:<dataset_id>:<embargo_until>:<offset>`. The unique key makes the insert idempotent, and because `embargo_until` is part of it, an extension starts a fresh sequence instead of repeating the old one. A reminder whose moment has already passed when the embargo is created or extended — an embargo set for 3 days has no 15-day reminder — is not sent. The same pass, finding an embargo whose date has passed, appends its `expired` row to `dataset_embargo_events` and queues the *Embargo ended* messages; `dedup_key` makes both happen once.
+Accounts created through ORCID without an email have a placeholder address ending in `@fake.mail.com`. A message to one is recorded as `skipped`, with that reason, and never sent; the status column gains that value.
+
 3. **Dispatch.** Due rows are claimed with `SELECT ... FOR UPDATE SKIP LOCKED` and moved to `sending` in their own committed transaction before anything is sent, so two gatekeeper instances never pick the same row. Success records `sent`, the Message-ID and the time.
 
 **No message is ever sent twice.** That is a requirement, and it has a price: when it is not known whether a message left, it is not retried. A retry happens only when the server certainly did not accept the message — the connection failed, or it answered an error before accepting the content. A row left in `sending` by a crash, or a send whose outcome is unknown (a timeout after the content was written), becomes `failed` with that reason, visible in the record, for someone to look at. Losing an email in that rare case is preferred to delivering it twice. Definite failures retry with backoff; after 5 attempts the row is `failed`.
 
-Steps 2 and 3 run from `POST /internal/notifications/dispatch`, which the Archivist calls every 5 minutes from its existing APScheduler, through the gatekeeper client it already has. The Archivist triggers; the gatekeeper owns the data, the templates and the SMTP connection. A reminder can therefore be up to 5 minutes late, which does not matter at a granularity of days.
+Steps 2 and 3 run from `POST /api/v1/internal/notifications/dispatch`, authenticated like the other internal routes by the Archivist's client credentials, with its own executor so a long collocation run does not delay it, which the Archivist calls every 5 minutes from its existing APScheduler, through the gatekeeper client it already has. The Archivist triggers; the gatekeeper owns the data, the templates and the SMTP connection. A reminder can therefore be up to 5 minutes late, which does not matter at a granularity of days.
 
 Logs carry `email_id`, `template` and `outcome` as fields, never the recipient or the body; the table is where those live.
 
@@ -465,7 +481,7 @@ Local development and the integration suite run [Mailpit](https://mailpit.axllen
 
 #### Templates
 
-HTML and plain-text versions of every message, rendered with Jinja2 from `app/templates/email/`. One base layout carries the DataMap identity — logo, border, footer — and each notification fills in its content block. The layout follows a design made in Claude Design, adapted to what email clients render:
+HTML and plain-text versions of every message, rendered with Jinja2 (pinned in `requirements.txt`; today it arrives only as a transitive dependency) from `app/templates/email/`. One base layout carries the DataMap identity — logo, border, footer — and each notification fills in its content block. The layout follows a design made in Claude Design, adapted to what email clients render:
 
 - table-based layout, 600 px wide, all CSS inline;
 - the logo as a PNG served from `PUBLIC_BASE_URL`, not SVG, which Gmail does not display;
