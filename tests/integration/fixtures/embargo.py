@@ -98,7 +98,11 @@ def create_dataset(http_client: HttpClient, headers: dict) -> dict:
         "/datasets",
         json={
             "name": f"Embargo Test {uuid.uuid4().hex[:8]}",
-            "data": {"description": "embargo", "authors": [{"name": "A"}]},
+            "data": {
+                "description": "embargo",
+                "authors": [{"name": "A"}],
+                "institution": "Test Institution",
+            },
             "tenancy": TENANCY,
         },
         headers=headers,
