@@ -89,10 +89,11 @@ class EmailService:
     def dispatch_due(self, limit: int = 50) -> DispatchResult   # DispatchResult(sent, failed, skipped, retried)
 #   enqueue renders at once; a recipient ending in @fake.mail.com is stored with status `skipped` and never sent,
 #   so callers pass placeholder addresses through rather than filtering them. DispatchResult(queued, sent, failed, skipped, retried).
-# plan 01 — app/service/email_renderer.py: EmailRenderer(templates_dir=TEMPLATES_DIR, base_context={"public_base_url": ...})
-#           .render(template, context) -> RenderedEmail(subject, text, html), StrictUndefined.
-#           A template NAME is a directory app/templates/email/NAME/ with subject.txt, body.txt (extends "base.txt")
-#           and body.html (extends "base.html"), both bases with `{% block content %}`.
+# main (#121) + plan 01 — app/service/email_template.py: EmailTemplate (str enum), EmailTemplateRenderer(site_url)
+#           .render(EmailTemplate, context) -> RenderedEmail(subject, html, text), StrictUndefined, site_url property.
+#           Templates live in app/resources/email_templates/: NAME.html extends "base.html" and imports "_macros.html";
+#           an optional NAME.txt extends plan 01's "base.txt" (blocks content, reason). EmailService.enqueue takes the
+#           enum value as `template`.
 # plan 01 — app/config.py: PUBLIC_BASE_URL, BUILD_COMMIT; container providers: email_service, email_renderer
 # plan 01 — app/controller/v1/internal/notification.py: POST /internal/notifications/dispatch,
 #           response model NotificationDispatchResponse in app/controller/v1/internal/resource.py
@@ -121,7 +122,7 @@ class EmailService:
 | `app/service/review_link.py` | `ReviewLinkService` |
 | `app/service/notification.py` | `EmbargoNotificationService` |
 | `app/metrics.py` | two reviewer-link counters |
-| `app/templates/email/{invitation,access_granted,embargo_reminder,embargo_ended}/{subject.txt,body.txt,body.html}` | message content |
+| `app/resources/email_templates/{dataset_invitation,embargo_reminder,embargo_ended}.{html,txt}`, `app/service/email_template.py` | message content in the existing identity; access granted uses the existing `notification` |
 | `app/controller/v1/dataset/share_resource.py` | Pydantic request/response models for share and review links |
 | `app/controller/v1/dataset/share.py` | share routes |
 | `app/controller/v1/dataset/review_link.py` | reviewer-link management routes |
@@ -1302,7 +1303,10 @@ class TestGrantToAnExistingAccount(ShareServiceTestCase):
         self.permission_service.grant.assert_called_once_with(
             self.dataset.id, target.id, PermissionLevel.READ, CALLER
         )
-        self.assertEqual(self.email.enqueue.call_args.kwargs["template"], "access_granted")
+        self.assertEqual(self.email.enqueue.call_args.kwargs["template"], "notification")
+        self.assertEqual(
+            self.email.enqueue.call_args.kwargs["context"]["cta_url"].rsplit("/", 2)[-2], "datasets"
+        )
         self.assertEqual(self.email.enqueue.call_args.kwargs["recipient"], "bruno@inpa.gov.br")
 
     def test_an_orcid_is_matched_through_the_orcid_provider(self):
@@ -1380,7 +1384,7 @@ class TestInvitation(ShareServiceTestCase):
         stored = self.invitations.create.call_args.args[0]
         self.assertEqual(stored.token_hash, hash_token(token))
         enqueue = self.email.enqueue.call_args.kwargs
-        self.assertEqual(enqueue["template"], "invitation")
+        self.assertEqual(enqueue["template"], "dataset_invitation")
         self.assertEqual(enqueue["recipient"], "dora@ufam.edu.br")
         self.assertEqual(enqueue["secret_fields"], frozenset({"link"}))
         self.assertEqual(enqueue["context"]["link"], result.link)
@@ -1487,6 +1491,7 @@ from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 from app.service.dataset import DatasetService
 from app.service.email import EmailService
+from app.service.email_template import EmailTemplate
 from app.service.embargo_audit import EmbargoAudit
 from app.service.permission import PermissionService
 from app.service.share_identity import normalise_email, normalise_orcid
@@ -1676,19 +1681,33 @@ class ShareService:
         if target.email:
             granter = self._share_user(user_id)
             self._queue(
-                template="access_granted",
+                template=EmailTemplate.NOTIFICATION.value,
                 recipient=target.email,
-                context={
-                    "dataset_name": dataset.name,
-                    "granter_name": granter.name if granter else "",
-                    "level": level.value,
-                    "dataset_url": f"{self._base_url}/app/datasets/{dataset.id}",
-                },
+                context=self._access_granted_context(
+                    dataset, granter.name if granter else None, level
+                ),
                 related_type="dataset",
                 related_id=dataset.id,
                 triggered_by=user_id,
             )
         return GrantResult(kind="permission", permission=self._permission_view(permission))
+
+    def _access_granted_context(self, dataset, granter_name: str | None, level: PermissionLevel) -> dict:
+        access = "edit" if level is PermissionLevel.WRITE else "read"
+        what = f"{access} access to the dataset “{dataset.name}” on DataMap"
+        return {
+            "title": f"You now have access to “{dataset.name}”",
+            "preheader": f"You now have {what}.",
+            "actor_name": granter_name or None,
+            "message": f"gave you {what}." if granter_name else f"You were given {what}.",
+            "details": [
+                {"label": "Dataset", "value": dataset.name},
+                {"label": "Access", "value": access.capitalize()},
+            ],
+            "cta_label": "Open dataset",
+            "cta_url": f"{self._base_url}/app/datasets/{dataset.id}",
+            "reason": "You received this email because someone gave you access to a dataset on DataMap.",
+        }
 
     def _invite(self, dataset, user_id: UUID, email: str | None, orcid: str | None, level: PermissionLevel) -> GrantResult:
         if self._invitations.find_pending(dataset.id, email, orcid) is not None:
@@ -1715,11 +1734,11 @@ class ShareService:
         if email is not None:
             inviter = self._share_user(user_id)
             self._queue(
-                template="invitation",
+                template=EmailTemplate.DATASET_INVITATION.value,
                 recipient=email,
                 context={
                     "dataset_name": dataset.name,
-                    "inviter_name": inviter.name if inviter else "",
+                    "inviter_name": inviter.name if inviter and inviter.name else "A DataMap user",
                     "level": level.value,
                     "link": link,
                 },
@@ -3043,253 +3062,353 @@ git commit -m "feat: routes to share datasets, accept invitations and read revie
 
 ### Task 8: Email templates
 
+Every message goes through the existing `EmailTemplateRenderer` and the templates in `app/resources/email_templates/` (#121), in the same identity: each new template extends `base.html`, imports `_macros.html`, and fills the blocks `title` (the subject), `preheader`, `label`, `content` and `reason` using only the macros. Each also has a `.txt` sibling extending plan 01's `base.txt`, so the plain-text part is written, not derived.
+
+What each notification uses:
+
+| Notification | Template | Why |
+|---|---|---|
+| Invitation | `dataset_invitation` (new) | The existing `invitation` is about joining a workspace, with a role and an expiry; ours is a dataset, a level, and no expiry. |
+| Access granted | `notification` (existing) | Its fields — title, actor, message, details, button, reason — say everything this message needs. |
+| Embargo ending | `embargo_reminder` (new) | Days remaining and the end date in the details panel; the extend button only for who can extend. |
+| Embargo ended | `embargo_ended` (new) | The registered-but-not-findable explanation as a list, and the manual-DOI variant. |
+
+No template mentions notification preferences, unsubscribing, snoozing or anything else DataMap does not have (see plan 01, Task 3, on the `fix/email-footer-links` PR).
+
 **Files:**
-- Create: `app/templates/email/invitation/subject.txt`, `body.txt`, `body.html`
-- Create: `app/templates/email/access_granted/subject.txt`, `body.txt`, `body.html`
-- Create: `app/templates/email/embargo_reminder/subject.txt`, `body.txt`, `body.html`
-- Create: `app/templates/email/embargo_ended/subject.txt`, `body.txt`, `body.html`
-- Test: `app/service/sharing_templates_test.py`
+- Modify: `app/service/email_template.py` (enum members, optional defaults)
+- Create: `app/resources/email_templates/dataset_invitation.html`, `dataset_invitation.txt`
+- Create: `app/resources/email_templates/embargo_reminder.html`, `embargo_reminder.txt`
+- Create: `app/resources/email_templates/embargo_ended.html`, `embargo_ended.txt`
+- Modify: `app/service/email_template_test.py` (import line, then append)
 
 **Interfaces:**
-- Consumes: plan 01's `EmailRenderer(templates_dir=TEMPLATES_DIR, base_context={"public_base_url": ...}).render(template, context) -> RenderedEmail(subject, text, html)` and its `base.html` / `base.txt` (`{% block content %}`, `StrictUndefined`).
-- Produces: four template names and their context keys:
-  - `invitation`: `dataset_name`, `inviter_name`, `level`, `link`
-  - `access_granted`: `dataset_name`, `granter_name`, `level`, `dataset_url`
+- Consumes: plan 01's `EmailTemplateRenderer(site_url).render(EmailTemplate, context) -> RenderedEmail(subject, html, text)`, its `.txt` lookup and `base.txt` (blocks `content`, `reason`).
+- Produces: `EmailTemplate.DATASET_INVITATION = "dataset_invitation"`, `EmailTemplate.EMBARGO_REMINDER = "embargo_reminder"`, `EmailTemplate.EMBARGO_ENDED = "embargo_ended"`, and their context keys:
+  - `dataset_invitation`: `dataset_name`, `inviter_name`, `level` (`read` | `write`), `link` (secret)
   - `embargo_reminder`: `dataset_name`, `days_remaining`, `embargo_until_date`, `can_extend`, `owner_name`, `dataset_url`
-  - `embargo_ended`: `dataset_name`, `is_owner`, `ended_early`, `ended_by_manual_doi`, `owner_name`, `dataset_url`
+  - `embargo_ended`: `dataset_name`, `is_owner`, `owner_name`, `dataset_url`; optional `ended_early`, `ended_by_manual_doi` (default `False`)
+  - access granted uses `notification`: `title`, `preheader`, `message`, `cta_label`, `cta_url`, `reason`, optional `actor_name`, `details` (built in Task 4)
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
+
+In `app/service/email_template_test.py`, change the import at the top to:
 
 ```python
-# app/service/sharing_templates_test.py
-import unittest
+from app.service.email_template import TEMPLATES_DIR, EmailTemplate, EmailTemplateRenderer
+```
 
-from app.service.email_renderer import TEMPLATES_DIR, EmailRenderer
+and append at the end of the file. The new `CONTEXTS` entries keep the existing `test_every_template_renders_with_its_context`, which loops over every `EmailTemplate`, green:
 
-REMINDER = dict(
-    dataset_name="Ozone at ATTO",
-    days_remaining=5,
-    embargo_until_date="2026-12-29",
-    owner_name="Ana Lima",
-    dataset_url="https://datamap.example/app/datasets/1",
+```python
+CONTEXTS[EmailTemplate.DATASET_INVITATION] = {
+    "dataset_name": "Ozone at ATTO",
+    "inviter_name": "Ana Lima",
+    "level": "read",
+    "link": "https://datamap.example.org/invitations/tok",
+}
+CONTEXTS[EmailTemplate.EMBARGO_REMINDER] = {
+    "dataset_name": "Ozone at ATTO",
+    "days_remaining": 5,
+    "embargo_until_date": "2026-12-29",
+    "can_extend": True,
+    "owner_name": "Ana Lima",
+    "dataset_url": "https://datamap.example.org/app/datasets/1",
+}
+CONTEXTS[EmailTemplate.EMBARGO_ENDED] = {
+    "dataset_name": "Ozone",
+    "is_owner": True,
+    "owner_name": "Ana",
+    "dataset_url": "https://datamap.example.org/app/datasets/1",
+}
+
+REMINDER = {
+    key: value
+    for key, value in CONTEXTS[EmailTemplate.EMBARGO_REMINDER].items()
+    if key != "can_extend"
+}
+ENDED = {
+    key: value
+    for key, value in CONTEXTS[EmailTemplate.EMBARGO_ENDED].items()
+    if key != "is_owner"
+}
+NEW_TEMPLATES = (
+    EmailTemplate.DATASET_INVITATION,
+    EmailTemplate.EMBARGO_REMINDER,
+    EmailTemplate.EMBARGO_ENDED,
 )
-ENDED = dict(dataset_name="Ozone", owner_name="Ana", dataset_url="https://x")
 
 
-class TestSharingTemplates(unittest.TestCase):
+class TestEmbargoTemplates(unittest.TestCase):
     def setUp(self):
-        self.renderer = EmailRenderer(base_context={"public_base_url": "https://datamap.example"})
+        self.renderer = EmailTemplateRenderer(site_url=SITE_URL)
 
-    def test_every_template_has_its_three_parts(self):
-        for name in ("invitation", "access_granted", "embargo_reminder", "embargo_ended"):
-            for part in ("subject.txt", "body.txt", "body.html"):
-                self.assertTrue((TEMPLATES_DIR / name / part).is_file(), f"{name}/{part}")
+    def test_every_new_template_has_a_written_text_part(self):
+        for template in NEW_TEMPLATES:
+            with self.subTest(template=template):
+                self.assertTrue((TEMPLATES_DIR / f"{template.value}.txt").is_file())
+
+    def test_no_new_template_offers_what_datamap_does_not_have(self):
+        for template in NEW_TEMPLATES:
+            for suffix in (".html", ".txt"):
+                body = (TEMPLATES_DIR / f"{template.value}{suffix}").read_text().lower()
+                for word in ("unsubscribe", "preferences", "snooze"):
+                    with self.subTest(template=template, suffix=suffix, word=word):
+                        self.assertNotIn(word, body)
 
     def test_the_invitation_carries_its_link_in_both_parts(self):
-        rendered = self.renderer.render(
-            "invitation",
-            dict(dataset_name="Ozone", inviter_name="Ana", level="read", link="https://x/invitations/tok"),
+        email = self.renderer.render(
+            EmailTemplate.DATASET_INVITATION, CONTEXTS[EmailTemplate.DATASET_INVITATION]
         )
-        self.assertIn("https://x/invitations/tok", rendered.html)
-        self.assertIn("https://x/invitations/tok", rendered.text)
+
+        self.assertIn("https://datamap.example.org/invitations/tok", email.html)
+        self.assertIn("https://datamap.example.org/invitations/tok", email.text)
+        self.assertEqual(email.subject, "Ana Lima shared “Ozone at ATTO” with you on DataMap")
 
     def test_a_reminder_offers_the_extend_button_only_to_who_can_extend(self):
-        owner = self.renderer.render("embargo_reminder", dict(can_extend=True, **REMINDER))
-        others = self.renderer.render("embargo_reminder", dict(can_extend=False, **REMINDER))
+        owner = self.renderer.render(EmailTemplate.EMBARGO_REMINDER, {**REMINDER, "can_extend": True})
+        others = self.renderer.render(EmailTemplate.EMBARGO_REMINDER, {**REMINDER, "can_extend": False})
+
         self.assertIn("Extend the embargo", owner.html)
         self.assertNotIn("Extend the embargo", others.html)
         self.assertIn("Ana Lima", others.html)
+        self.assertIn("Ana Lima can extend it", others.text)
 
     def test_the_reminder_subject_counts_the_days(self):
-        rendered = self.renderer.render("embargo_reminder", dict(can_extend=True, **REMINDER))
-        self.assertEqual(rendered.subject, "Embargo on “Ozone at ATTO” ends in 5 days")
+        five = self.renderer.render(EmailTemplate.EMBARGO_REMINDER, {**REMINDER, "can_extend": True})
+        one = self.renderer.render(
+            EmailTemplate.EMBARGO_REMINDER, {**REMINDER, "can_extend": True, "days_remaining": 1}
+        )
+
+        self.assertEqual(five.subject, "Embargo on “Ozone at ATTO” ends in 5 days")
+        self.assertEqual(one.subject, "Embargo on “Ozone at ATTO” ends in 1 day")
 
     def test_the_end_notice_explains_registered_but_not_findable_to_the_owner(self):
-        rendered = self.renderer.render(
-            "embargo_ended", dict(is_owner=True, ended_early=False, ended_by_manual_doi=False, **ENDED)
-        )
-        self.assertIn("registered but not findable", rendered.text)
-        self.assertIn("will not appear in DataCite search", rendered.text)
-        self.assertIn("nothing will do it for you", rendered.text)
+        email = self.renderer.render(EmailTemplate.EMBARGO_ENDED, {**ENDED, "is_owner": True})
+
+        self.assertIn("registered but not findable", email.text)
+        self.assertIn("will not appear in DataCite search", email.text)
+        self.assertIn("nothing will do it for you", email.text)
+        self.assertIn("registered but not findable", email.html)
 
     def test_an_end_by_manual_doi_says_why_and_that_the_page_is_public(self):
-        rendered = self.renderer.render(
-            "embargo_ended", dict(is_owner=False, ended_early=True, ended_by_manual_doi=True, **ENDED)
+        email = self.renderer.render(
+            EmailTemplate.EMBARGO_ENDED,
+            {**ENDED, "is_owner": False, "ended_early": True, "ended_by_manual_doi": True},
         )
-        self.assertIn("registered in manual mode", rendered.text)
-        self.assertIn("public page is now published", rendered.text)
-        self.assertNotIn("registered but not findable", rendered.text)
+
+        self.assertIn("registered a DOI for it in manual mode", email.text)
+        self.assertIn("public page is now published", email.text)
+        self.assertNotIn("registered but not findable", email.text)
 
     def test_an_early_end_by_the_owner_says_it_ended_early(self):
-        rendered = self.renderer.render(
-            "embargo_ended", dict(is_owner=False, ended_early=True, ended_by_manual_doi=False, **ENDED)
+        email = self.renderer.render(
+            EmailTemplate.EMBARGO_ENDED, {**ENDED, "is_owner": False, "ended_early": True}
         )
-        self.assertIn("ended it early", rendered.text)
 
-    def test_html_escapes_dataset_names(self):
-        rendered = self.renderer.render(
-            "access_granted",
-            dict(dataset_name="<b>x</b>", granter_name="Ana", level="read", dataset_url="https://x"),
+        self.assertIn("ended it early", email.text)
+        self.assertIn("Publishing it is a manual step that Ana takes", email.text)
+
+    def test_dataset_names_are_escaped_in_html_and_plain_in_the_subject(self):
+        email = self.renderer.render(
+            EmailTemplate.EMBARGO_REMINDER,
+            {**REMINDER, "can_extend": False, "dataset_name": "<b>O3 & CO</b>"},
         )
-        self.assertIn("&lt;b&gt;x&lt;/b&gt;", rendered.html)
+
+        self.assertIn("&lt;b&gt;O3 &amp; CO&lt;/b&gt;", email.html)
+        self.assertEqual(email.subject, "Embargo on “<b>O3 & CO</b>” ends in 5 days")
+
+    def test_a_missing_owner_name_fails_here_not_in_an_inbox(self):
+        context = {key: value for key, value in REMINDER.items() if key != "owner_name"}
+
+        with self.assertRaises(UndefinedError):
+            self.renderer.render(EmailTemplate.EMBARGO_REMINDER, {**context, "can_extend": False})
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [ ] **Step 2: Run them to verify they fail**
 
-Run: `python -m pytest app/service/sharing_templates_test.py -v`
-Expected: FAIL on `test_every_template_has_its_three_parts` (and `TemplateNotFound` for the others)
+Run: `python -m pytest app/service/email_template_test.py -v`
+Expected: collection error, `AttributeError: DATASET_INVITATION` — the module-level `CONTEXTS` additions name members that do not exist yet.
 
-- [ ] **Step 3: Write the templates**
+- [ ] **Step 3: Add the enum members and optional defaults**
 
-`app/templates/email/invitation/subject.txt`
+In `app/service/email_template.py`:
+
+```python
+class EmailTemplate(str, Enum):
+    INVITATION = "invitation"
+    ANNOUNCEMENT = "announcement"
+    DATASET_REMINDER = "dataset_reminder"
+    NOTIFICATION = "notification"
+    DATASET_INVITATION = "dataset_invitation"
+    EMBARGO_REMINDER = "embargo_reminder"
+    EMBARGO_ENDED = "embargo_ended"
+
+
+_OPTIONAL_DEFAULTS: dict[EmailTemplate, dict[str, Any]] = {
+    EmailTemplate.ANNOUNCEMENT: {"image_url": None, "image_alt": "", "highlights": []},
+    EmailTemplate.DATASET_REMINDER: {"missing_fields": []},
+    EmailTemplate.NOTIFICATION: {"actor_name": None, "details": []},
+    EmailTemplate.EMBARGO_ENDED: {"ended_early": False, "ended_by_manual_doi": False},
+}
 ```
-{{ inviter_name }} shared “{{ dataset_name }}” with you on DataMap
-```
 
-`app/templates/email/invitation/body.html`
+- [ ] **Step 4: Write the templates**
+
+`app/resources/email_templates/dataset_invitation.html`
+
 ```html
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ inviter_name }} shared “{{ dataset_name }}” with you on DataMap{% endblock %}
+{% block preheader %}{{ inviter_name }} gave you {{ "edit" if level == "write" else "read" }} access to a dataset under embargo.{% endblock %}
+{% block label %}Invitation{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px 0;">{{ inviter_name }} gave you {{ "edit" if level == "write" else "read" }} access to the dataset <strong>{{ dataset_name }}</strong> on DataMap.</p>
-<p style="margin:0 0 16px 0;">The dataset is under embargo: only the people its author names can see it. Open the link below and sign in, with any account, to accept.</p>
-<p style="margin:24px 0;"><a href="{{ link }}" style="display:inline-block;padding:12px 20px;border:1px solid #1f2937;border-radius:4px;color:#1f2937;text-decoration:none;font-weight:600;">Accept the invitation</a></p>
-<p style="margin:0 0 16px 0;color:#4b5563;font-size:13px;">The link works once. If you did not expect this message, ignore it.</p>
+{{ m.heading("You've been invited to a dataset") }}
+{% call m.paragraph() %}{{ m.strong(inviter_name) }} gave you {{ "edit" if level == "write" else "read" }} access to the dataset {{ m.strong(dataset_name) }} on DataMap.{% endcall %}
+{{ m.details([
+  {"label": "Dataset", "value": dataset_name},
+  {"label": "Access", "value": "Edit" if level == "write" else "Read"},
+  {"label": "Invited by", "value": inviter_name},
+]) }}
+{% call m.paragraph() %}The dataset is under embargo: only the people its author names can see it. Accept the invitation and sign in, with any account, to open it.{% endcall %}
+{{ m.button("Accept invitation", link) }}
+{{ m.spacer(16) }}
+{% call m.note(bottom=16) %}The link works once. If you weren't expecting this invitation, you can ignore this email.{% endcall %}
+{{ m.link_fallback(link) }}
 {% endblock %}
+{% block reason %}You received this email because someone shared a DataMap dataset with this address.{% endblock %}
 ```
 
-`app/templates/email/invitation/body.txt`
+`app/resources/email_templates/dataset_invitation.txt`
+
 ```
 {% extends "base.txt" %}
 {% block content %}
-{{ inviter_name }} gave you {{ "edit" if level == "write" else "read" }} access to the dataset "{{ dataset_name }}" on DataMap.
+{{ inviter_name }} gave you {{ "edit" if level == "write" else "read" }} access to the dataset “{{ dataset_name }}” on DataMap.
 
 The dataset is under embargo: only the people its author names can see it. Open the link below and sign in, with any account, to accept:
 
 {{ link }}
 
-The link works once. If you did not expect this message, ignore it.
+The link works once. If you weren't expecting this invitation, you can ignore this email.
 {% endblock %}
+{% block reason %}You received this email because someone shared a DataMap dataset with this address.{% endblock %}
 ```
 
-`app/templates/email/access_granted/subject.txt`
-```
-You now have access to “{{ dataset_name }}” on DataMap
-```
+`app/resources/email_templates/embargo_reminder.html`
 
-`app/templates/email/access_granted/body.html`
 ```html
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Embargo on “{{ dataset_name }}” ends in {{ days_remaining }} day{{ "" if days_remaining == 1 else "s" }}{% endblock %}
+{% block preheader %}On {{ embargo_until_date }} the files become available to the dataset's tenancy.{% endblock %}
+{% block label %}Reminder{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px 0;">{{ granter_name }} gave you {{ "edit" if level == "write" else "read" }} access to the dataset <strong>{{ dataset_name }}</strong>.</p>
-<p style="margin:24px 0;"><a href="{{ dataset_url }}" style="display:inline-block;padding:12px 20px;border:1px solid #1f2937;border-radius:4px;color:#1f2937;text-decoration:none;font-weight:600;">Open the dataset</a></p>
-<p style="margin:0;color:#4b5563;font-size:13px;">You can also find it under “Shared with me”.</p>
-{% endblock %}
-```
-
-`app/templates/email/access_granted/body.txt`
-```
-{% extends "base.txt" %}
-{% block content %}
-{{ granter_name }} gave you {{ "edit" if level == "write" else "read" }} access to the dataset "{{ dataset_name }}".
-
-Open it: {{ dataset_url }}
-
-You can also find it under "Shared with me".
-{% endblock %}
-```
-
-`app/templates/email/embargo_reminder/subject.txt`
-```
-Embargo on “{{ dataset_name }}” ends in {{ days_remaining }} day{{ "" if days_remaining == 1 else "s" }}
-```
-
-`app/templates/email/embargo_reminder/body.html`
-```html
-{% extends "base.html" %}
-{% block content %}
-<p style="margin:0 0 16px 0;">The embargo on <strong>{{ dataset_name }}</strong> ends in {{ days_remaining }} day{{ "" if days_remaining == 1 else "s" }}, on {{ embargo_until_date }}.</p>
-<p style="margin:0 0 16px 0;">When it ends, the files become available to the members of the dataset's tenancy. Nothing is made public until the DOI is promoted.</p>
+{{ m.heading("The embargo ends in " ~ days_remaining ~ (" day" if days_remaining == 1 else " days")) }}
+{% call m.paragraph() %}The embargo on {{ m.strong(dataset_name) }} ends on {{ embargo_until_date }}. When it ends, the files become available to the members of the dataset's tenancy. Nothing is made public until the DOI is promoted.{% endcall %}
+{{ m.details([
+  {"label": "Dataset", "value": dataset_name},
+  {"label": "Embargo ends", "value": embargo_until_date},
+  {"label": "Days remaining", "value": days_remaining},
+]) }}
 {% if can_extend %}
-<p style="margin:0 0 16px 0;">If the article is still under review, the embargo can be extended by up to 90 days at a time.</p>
-<p style="margin:24px 0;"><a href="{{ dataset_url }}" style="display:inline-block;padding:12px 20px;border:1px solid #1f2937;border-radius:4px;color:#1f2937;text-decoration:none;font-weight:600;">Extend the embargo</a></p>
+{% call m.paragraph() %}If the article is still under review, the embargo can be extended by up to 90 days at a time.{% endcall %}
+{{ m.button("Extend the embargo", dataset_url) }}
+{{ m.spacer(16) }}
+{{ m.link_fallback(dataset_url) }}
 {% else %}
-<p style="margin:0 0 16px 0;">If it needs more time, {{ owner_name }} can extend it by up to 90 days at a time.</p>
+{% call m.note() %}If it needs more time, {{ m.strong(owner_name) }} can extend it by up to 90 days at a time.{% endcall %}
 {% endif %}
 {% endblock %}
+{% block reason %}You received this email because you have access to a dataset under embargo on DataMap.{% endblock %}
 ```
 
-`app/templates/email/embargo_reminder/body.txt`
+`app/resources/email_templates/embargo_reminder.txt`
+
 ```
 {% extends "base.txt" %}
 {% block content %}
-The embargo on "{{ dataset_name }}" ends in {{ days_remaining }} day{{ "" if days_remaining == 1 else "s" }}, on {{ embargo_until_date }}.
+The embargo on “{{ dataset_name }}” ends in {{ days_remaining }} day{{ "" if days_remaining == 1 else "s" }}, on {{ embargo_until_date }}.
 
 When it ends, the files become available to the members of the dataset's tenancy. Nothing is made public until the DOI is promoted.
+
 {% if can_extend %}
 If the article is still under review, the embargo can be extended by up to 90 days at a time: {{ dataset_url }}
 {% else %}
 If it needs more time, {{ owner_name }} can extend it by up to 90 days at a time.
 {% endif %}
 {% endblock %}
+{% block reason %}You received this email because you have access to a dataset under embargo on DataMap.{% endblock %}
 ```
 
-`app/templates/email/embargo_ended/subject.txt`
-```
-The embargo on “{{ dataset_name }}” has ended
-```
+`app/resources/email_templates/embargo_ended.html`
 
-`app/templates/email/embargo_ended/body.html`
 ```html
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}The embargo on “{{ dataset_name }}” has ended{% endblock %}
+{% block preheader %}{% if ended_by_manual_doi %}A DOI registered in manual mode ended the embargo, and the public page is published.{% else %}The files are available to the dataset's tenancy. Nothing is public yet.{% endif %}{% endblock %}
+{% block label %}Embargo{% endblock %}
 {% block content %}
+{{ m.heading("The embargo has ended") }}
 {% if ended_by_manual_doi %}
-<p style="margin:0 0 16px 0;">The embargo on <strong>{{ dataset_name }}</strong> ended early: {{ owner_name }} registered a DOI for it in manual mode, which requires the dataset to be public.</p>
-<p style="margin:0 0 16px 0;">The dataset's public page is now published, and its files are available on DataMap to the members of the dataset's tenancy.</p>
-<p style="margin:24px 0;"><a href="{{ dataset_url }}" style="display:inline-block;padding:12px 20px;border:1px solid #1f2937;border-radius:4px;color:#1f2937;text-decoration:none;font-weight:600;">Open the dataset</a></p>
+{% call m.paragraph() %}The embargo on {{ m.strong(dataset_name) }} ended early: {{ owner_name }} registered a DOI for it in manual mode, which requires the dataset to be public.{% endcall %}
+{% call m.paragraph() %}The dataset's public page is now published, and its files are available on DataMap to the members of the dataset's tenancy.{% endcall %}
 {% else %}
-<p style="margin:0 0 16px 0;">The embargo on <strong>{{ dataset_name }}</strong> has ended{% if ended_early %}: {{ owner_name }} ended it early{% endif %}. Its files are now available on DataMap to the members of the dataset's tenancy.</p>
-<p style="margin:0 0 16px 0;">Nothing has been made public. The dataset's DOI is <strong>registered but not findable</strong>: the identifier resolves, but DataCite does not index it, so the dataset will not appear in DataCite search or in the services that harvest from it.</p>
-{% if is_owner %}
-<p style="margin:0 0 16px 0;">Promoting the DOI to findable publishes the dataset's public page and indexes the DOI. It is a manual step on the dataset page, and nothing will do it for you.</p>
-<p style="margin:24px 0;"><a href="{{ dataset_url }}" style="display:inline-block;padding:12px 20px;border:1px solid #1f2937;border-radius:4px;color:#1f2937;text-decoration:none;font-weight:600;">Open the dataset</a></p>
-{% else %}
-<p style="margin:0 0 16px 0;">Publishing it is a manual step that {{ owner_name }} takes on the dataset page.</p>
+{% call m.paragraph() %}The embargo on {{ m.strong(dataset_name) }} has ended{% if ended_early %}: {{ owner_name }} ended it early{% endif %}.{% endcall %}
+{{ m.bullets([
+  "The files are now available on DataMap to the members of the dataset's tenancy.",
+  "Nothing has been made public yet.",
+  "The DOI is registered but not findable: it resolves, but DataCite does not index it, so the dataset will not appear in DataCite search or in the services that harvest from it.",
+  "Promoting the DOI to findable publishes the dataset's public page and indexes the DOI. It is a manual step on the dataset page, and nothing will do it for you." if is_owner else "Publishing it is a manual step that " ~ owner_name ~ " takes on the dataset page.",
+]) }}
 {% endif %}
-{% endif %}
+{{ m.spacer(8) }}
+{{ m.button("Open dataset", dataset_url) }}
 {% endblock %}
+{% block reason %}You received this email because you have access to this dataset on DataMap.{% endblock %}
 ```
 
-`app/templates/email/embargo_ended/body.txt`
+`app/resources/email_templates/embargo_ended.txt`
+
 ```
 {% extends "base.txt" %}
 {% block content %}
 {% if ended_by_manual_doi %}
-The embargo on "{{ dataset_name }}" ended early: {{ owner_name }} registered a DOI for it in manual mode, which requires the dataset to be public.
+The embargo on “{{ dataset_name }}” ended early: {{ owner_name }} registered a DOI for it in manual mode, which requires the dataset to be public.
 
 The dataset's public page is now published, and its files are available on DataMap to the members of the dataset's tenancy: {{ dataset_url }}
 {% else %}
-The embargo on "{{ dataset_name }}" has ended{% if ended_early %}: {{ owner_name }} ended it early{% endif %}. Its files are now available on DataMap to the members of the dataset's tenancy.
+The embargo on “{{ dataset_name }}” has ended{% if ended_early %}: {{ owner_name }} ended it early{% endif %}.
 
-Nothing has been made public. The dataset's DOI is registered but not findable: the identifier resolves, but DataCite does not index it, so the dataset will not appear in DataCite search or in the services that harvest from it.
+- The files are now available on DataMap to the members of the dataset's tenancy.
+- Nothing has been made public yet.
+- The DOI is registered but not findable: it resolves, but DataCite does not index it, so the dataset will not appear in DataCite search or in the services that harvest from it.
 {% if is_owner %}
-Promoting the DOI to findable publishes the dataset's public page and indexes the DOI. It is a manual step on the dataset page, and nothing will do it for you: {{ dataset_url }}
+- Promoting the DOI to findable publishes the dataset's public page and indexes the DOI. It is a manual step on the dataset page, and nothing will do it for you.
 {% else %}
-Publishing it is a manual step that {{ owner_name }} takes on the dataset page.
+- Publishing it is a manual step that {{ owner_name }} takes on the dataset page.
 {% endif %}
+
+Open the dataset: {{ dataset_url }}
 {% endif %}
 {% endblock %}
+{% block reason %}You received this email because you have access to this dataset on DataMap.{% endblock %}
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+`m.bullets` escapes its items, so the list in `embargo_ended.html` is plain strings; the owner's name is joined with `~` and escaped like the rest.
 
-Run: `python -m pytest app/service/sharing_templates_test.py -v`
-Expected: 8 passed. `StrictUndefined` makes a missing context key fail here rather than in someone's inbox; if plan 01's `base.html` needs a key beyond `public_base_url`, pass it in `base_context` exactly as the container does.
+- [ ] **Step 5: Run them to verify they pass**
 
-- [ ] **Step 5: Commit**
+Run: `python -m pytest app/service/email_template_test.py -v`
+Expected: PASS — the existing tests, plan 01's, and the 10 in `TestEmbargoTemplates` (`StrictUndefined` makes a missing key fail here rather than in someone's inbox).
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add app/templates/email/invitation app/templates/email/access_granted app/templates/email/embargo_reminder app/templates/email/embargo_ended app/service/sharing_templates_test.py
-git commit -m "feat: email content for invitations, granted access and embargo reminders"
+git add app/service/email_template.py app/service/email_template_test.py app/resources/email_templates/dataset_invitation.html app/resources/email_templates/dataset_invitation.txt app/resources/email_templates/embargo_reminder.html app/resources/email_templates/embargo_reminder.txt app/resources/email_templates/embargo_ended.html app/resources/email_templates/embargo_ended.txt
+git commit -m "feat: email templates for invitations and the end of an embargo"
 ```
 
 ---
@@ -4305,5 +4424,5 @@ git commit -m "chore: ruff format"
 
 ## Self-review notes
 
-- **Spec coverage:** invitations by email/ORCID (Tasks 2, 4), tenancy search excluding owner and current holders (Tasks 3, 4), single-use accept by any account and 409 (Task 5), claim on login (Task 5), `datasets_shared` on grant and accept (Tasks 4, 5), reviewer links only while embargoed, redaction allowlist, no file names, views without identity, `ended`/`published` (Task 6), metrics and panel (Tasks 6, 10), audit events for invitations and links (Tasks 4–6), the four templates with the registered-but-not-findable text, the extend button only for who can extend, and the early and manual-DOI endings (Task 8), reminders to everyone with access, nearest offset only, never an offset past at set time, end notice and `expired` once (Task 9), dispatch wiring (Task 9), integration coverage for every route, repository and Casbin path (Task 11).
-- **Not in this plan:** the access rule, `datasets_shared` seed rows, embargo routes and the `access` payload (plan 02); the email table, sender, base template, Mailpit and admin routes (plan 01); the webapp (plan 05).
+- **Spec coverage:** invitations by email/ORCID (Tasks 2, 4), tenancy search excluding owner and current holders (Tasks 3, 4), single-use accept by any account and 409 (Task 5), claim on login (Task 5), `datasets_shared` on grant and accept (Tasks 4, 5), reviewer links only while embargoed, redaction allowlist, no file names, views without identity, `ended`/`published` (Task 6), metrics and panel (Tasks 6, 10), audit events for invitations and links (Tasks 4–6), three new templates in the existing identity (`dataset_invitation`, `embargo_reminder`, `embargo_ended`, each with a written `.txt`) plus access granted through the existing `notification`, with the registered-but-not-findable text, the extend button only for who can extend, and the early and manual-DOI endings (Task 8), reminders to everyone with access, nearest offset only, never an offset past at set time, end notice and `expired` once (Task 9), dispatch wiring (Task 9), integration coverage for every route, repository and Casbin path (Task 11).
+- **Not in this plan:** the access rule, `datasets_shared` seed rows, embargo routes and the `access` payload (plan 02); the email table, sender, the plain-text part of the renderer and `base.txt`, Mailpit and admin routes (plan 01); the base layout and macros (main, #121); the webapp (plan 05).

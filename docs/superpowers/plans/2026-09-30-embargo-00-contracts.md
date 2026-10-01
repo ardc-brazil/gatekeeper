@@ -225,17 +225,27 @@ Plan 01 details the other plans rely on:
 
 - `email_messages` also has `secret_fields jsonb` (fields masked once sent) and `claimed_at timestamptz` (when the row entered `sending`, to find rows a crash left there).
 - `template_version` is the `BUILD_COMMIT` config field (default `"unknown"`), passed as a Docker build arg by the Makefile.
-- The email logo is served by the webapp at `{PUBLIC_BASE_URL}/images/email/datamap-logo.png` (file `public/images/email/datamap-logo.png`, plan 05).
+- Every message is rendered by the existing `EmailTemplateRenderer` (`app/service/email_template.py`, #121) from `app/resources/email_templates/`, with `site_url = PUBLIC_BASE_URL`. Its images load from `{PUBLIC_BASE_URL}/img/email/` (`datamap-tile-36.png`, `datamap-tile-22.png`), which the webapp already serves from `public/img/email/`; no other logo is needed. Plan 01 adds the plain-text part (`RenderedEmail.text`, `<name>.txt` siblings, `base.txt`) and builds on the `fix/email-footer-links` PR, after which the renderer no longer supplies `preferences_url` or `unsubscribe_url`. No template mentions preferences, unsubscribing, snoozing or any feature DataMap does not have.
 - Gatekeeper code runs on Python 3.10 in production (`python:3.10.14-alpine`): no syntax newer than 3.10.
 
-Templates (names are the `template` column and metric label): `invitation`, `access_granted`, `embargo_reminder`, `embargo_ended`.
+Templates (names are `EmailTemplate` values, stored in the `template` column and used as the metric label):
+
+| Message | `EmailTemplate` | Plan |
+|---|---|---|
+| Admin test message | `notification` (existing) | 01 |
+| Access granted | `notification` (existing) | 03 |
+| Invitation | `dataset_invitation` (new) | 03 |
+| Embargo ending in 15/10/5/1 days | `embargo_reminder` (new) | 03 |
+| Embargo ended | `embargo_ended` (new) | 03 |
+
+The existing `invitation` (a workspace invitation with a role and an expiry) is not used.
 
 Gatekeeper email API used by plan 03 (plan 01 builds it):
 
 ```python
 # app/service/email.py
 class EmailService:
-    def enqueue(self, *, template: str, recipient: str, context: dict,
+    def enqueue(self, *, template: str, recipient: str, context: dict,   # template: an EmailTemplate value
                 secret_fields: frozenset[str] = frozenset(),
                 related_type: str | None = None, related_id: UUID | None = None,
                 triggered_by: UUID | None = None, dedup_key: str | None = None) -> UUID | None:
@@ -333,7 +343,7 @@ EmailService.enqueue(...) / dispatch_due(limit=50) -> DispatchResult(queued, sen
 
 | Metric | Type | Labels | Plan |
 |---|---|---|---|
-| `datamap_emails_total` | counter | `template`, `outcome` (`sent`, `retried`, `failed`, `skipped`) | 01 |
+| `datamap_emails_total` | counter | `template` (`notification`, `dataset_invitation`, `embargo_reminder`, `embargo_ended`), `outcome` (`sent`, `retried`, `failed`, `skipped`) | 01 |
 | `datamap_email_pending` | gauge | — | 01 |
 | `datamap_review_link_views_total` | counter | `tenancy`, `outcome` (`shown`, `redirected`, `not_found`) | 03 |
 | `datamap_review_links_created_total` | counter | `tenancy` | 03 |

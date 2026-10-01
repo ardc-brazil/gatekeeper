@@ -4,6 +4,8 @@
 
 **Where the code goes.** This plan lives in the gatekeeper repo with the other embargo plans, but every file it changes is in the **webapp repo, `/Users/caio.maia/workspace/datamap/datamap-webapp`**, except Task 17, which changes `infrastructure/nginx/datamap.conf` in the **gatekeeper repo**. All paths below are relative to the webapp repo root unless a task says otherwise. Work in a git worktree of the webapp repo on branch `feat/dataset-embargo`, created from `origin/main`; never in the main checkout.
 
+**Verified against:** webapp `main` at `8c6f761` (#101, the new DataMap identity; #100, the encrypted environment, touches nothing here). Every file this plan modifies was compared with that commit. If `main` has moved, diff the files in *File Structure* against it before starting.
+
 **Goal:** Give the webapp everything RFC 003 asks of the user interface: embargo at creation and on the dataset page, the share dialog, reviewer links, the anonymous review page, the DOI embargo notice, invitation acceptance, a *Shared with me* list that works for an account with no tenancy, and the post-embargo banner.
 
 **Architecture:** Server-side calls to the gatekeeper live in `lib/embargo.ts` and `lib/share.ts` (axiosInstance + buildHeaders); browser mutations go through new `BFFAPI` methods to new `pages/api` routes built on one helper, `lib/bffRoute.ts`, whose chain authenticates but does not require a tenancy. UI is split into small components under `components/Embargo`, `components/Share`, `components/Review` and `components/Invitation`, each with a jsdom test; the public pages are thin and keep their decisions in tested `lib/*` functions.
@@ -18,7 +20,8 @@
 - Redaction marker: `"[redacted]"`.
 - Mutations go through `gateways/BFFAPI.ts`, which emits `trackUiEvent` after success and throws `httpErrorHandler(error)` on failure. Reads use SWR with `lib/fetcher.js`. Forms use Formik.
 - Constants live in `contants/{Category}Constants.ts` (the directory is spelled `contants`).
-- Material Symbols: `<MaterialSymbol ... grade={-25} weight={200} />`.
+- Visual language: the DataMap identity of webapp #101 (`8c6f761`). Near-black `primary-900` on `primary-50` ground; white cards `rounded-lg border border-primary-200 bg-primary-0`; section `h2` at `m-0 text-lg leading-snug tracking-[-0.01em]` with a `text-sm text-primary-600` subtitle; form fields from `contants/EditFormConstants.ts`; card footers `border-t border-primary-200 bg-primary-50 px-5 py-3 rounded-b-lg`; notices in the mint tint `bg-secondary-500`; pills `px-2.5 py-[3px] rounded-full text-xs leading-[18px] font-semibold`; dialogs through `components/base/PopupModal.tsx` (with `destructive` and `maxWidthClassName`). Do not use the pre-#101 patterns (`border-t-4` callouts, `h6` section titles, `font-extrabold` page titles).
+- Material Symbols: `<MaterialSymbol ... grade={-25} weight={400} />`, size 14–22, as #101 uses them.
 - Component tests start with `/** @jest-environment jsdom */`, live in `__tests__` next to the component, and import components by relative path (Jest does not map `@/`). Components that a test imports must not import `react-markdown` (ESM, not transformed by Jest).
 - Every new page must be listed in `PAGES` (`contants/TelemetryConstants.ts`), or `contants/__tests__/TelemetryConstants.test.ts` fails.
 - Comments: none narrating code. One line only where a reader would otherwise undo something on purpose.
@@ -52,7 +55,8 @@
 | `components/LoggedLayout.tsx`, `components/DatasetDetailsPage.tsx`, `components/DatasetDetails/TabPanelSettings.tsx`, `components/DatasetDetails/DataCard/DataExplorer.tsx`, `components/Search/ListItem.tsx`, `components/Tenancy/AccessPending.tsx`, `pages/app/datasets/new.tsx`, `types/new-dataset.d.ts`, `pages/api/auth/[...nextauth].ts` (modify) | Wiring |
 | `pages/app/datasets/shared.tsx`, `pages/review/[token].tsx`, `pages/doi/datasets/[datasetId]/versions/[versionName].tsx`, `pages/invitations/[token].tsx` (create) | New pages |
 | `lib/doi.ts`, `components/DatasetDetails/DatasetCitation.tsx` (modify), `components/Embargo/ManualDoiConfirmation.tsx` (create) | A manual DOI ends the embargo only after confirmation |
-| `public/images/email/datamap-logo.png` (create) | Logo plan 01's emails point to |
+| `lib/__tests__/emailImages.test.ts` (create) | Keeps `public/img/email/datamap-tile-{36,22}.png`, which the gatekeeper's email templates load, from being deleted |
+| `contants/ShareConstants.ts`, `components/Share/PersonInitial.tsx` (create) | Share dialog row styles and the initial avatar |
 
 ## Task order and parallelism
 
@@ -72,7 +76,7 @@
 | 12 DOI landing page | 2, 4 | 7–11 |
 | 13 Invitation page and claim on sign-in | 2, 4, 6 | 7–12 |
 | 14 Manual DOI confirmation | 1, 3 | 7–13, 15 |
-| 15 Email logo PNG | — | everything |
+| 15 Guard on the email images | — | everything |
 | 16 Full verification | all | — |
 | 17 nginx (gatekeeper repo) | 12 deployed | — |
 
@@ -2354,21 +2358,21 @@ export function EmbargoBadge(props: Props) {
     return (
         <span
             data-testid="embargo-badge"
-            className="inline-flex items-center gap-1 py-1 px-2 text-sm font-medium text-primary-800 bg-primary-100 rounded-full border border-primary-300"
+            className="inline-flex items-center gap-1 px-2.5 py-[3px] text-xs leading-[18px] font-semibold rounded-full text-primary-900 bg-secondary-500 whitespace-nowrap"
         >
-            <MaterialSymbol icon="lock_clock" size={18} grade={-25} weight={200} />
+            <MaterialSymbol icon="lock_clock" size={14} grade={-25} weight={400} />
             Under embargo until {formatEmbargoDate(props.embargo.until)}
         </span>
     );
 }
 ```
 
-`components/Tenancy/AccessPending.tsx` — add `import Link from "next/link";` and `import { ROUTE_PAGE_DATASETS_SHARED } from "../../contants/InternalRoutesConstants";`, and after the second `<p>`:
+`components/Tenancy/AccessPending.tsx` — add `import Link from "next/link";` and `import { ROUTE_PAGE_DATASETS_SHARED } from "../../contants/InternalRoutesConstants";`, and after the second `<p>` (the one ending "there is no need to sign out and back in."):
 
 ```tsx
-            <p className="text-primary-700 mt-2">
+            <p className="text-sm text-primary-700 mt-2 mb-0">
                 If a researcher shared a dataset with you, it is already in{" "}
-                <Link href={ROUTE_PAGE_DATASETS_SHARED} className="underline">Shared with me</Link>.
+                <Link href={ROUTE_PAGE_DATASETS_SHARED} className="text-sm font-semibold underline underline-offset-2">Shared with me</Link>.
             </p>
 ```
 
@@ -2384,15 +2388,13 @@ export function EmbargoBadge(props: Props) {
   }
 ```
 
-3. Add `ROUTE_PAGE_DATASETS_SHARED` to the `InternalRoutesConstants` import and `import { MaterialSymbol } from "react-material-symbols";`, and after the `Datasets` `MenuItem`:
+3. Add `ROUTE_PAGE_DATASETS_SHARED` to the `InternalRoutesConstants` import (`MaterialSymbol` is already imported), and after the `Datasets` `MenuItem`:
 
 ```tsx
-            <MenuItem href={ROUTE_PAGE_DATASETS_SHARED} text="Shared with me">
-              <MaterialSymbol icon="folder_shared" size={24} grade={-25} weight={200} />
-            </MenuItem>
+            <MenuItem href={ROUTE_PAGE_DATASETS_SHARED} text="Shared with me" icon="folder_shared" collapsed={menuClosed} />
 ```
 
-4. In `MenuItem`, `active` becomes an exact match, so `/app/datasets` stops highlighting *Shared with me* (the old `href.indexOf(path)` matched any prefix):
+4. In `MenuItem`, `active` becomes an exact match. The current `href.indexOf(browserPath) >= 0` lights *Shared with me* on `/app/datasets`, because `/app/datasets/shared` contains `/app/datasets`:
 
 ```tsx
   function active(href: string) {
@@ -2400,12 +2402,17 @@ export function EmbargoBadge(props: Props) {
   }
 ```
 
+`isActive` and the rest of `MenuItem` stay as they are.
+
+5. The tenancy line at the bottom of the sidebar (`{!menuClosed && tenancySelected && (...)}`) already renders nothing without a tenancy; leave it.
+
 `pages/app/datasets/shared.tsx`:
 
 ```tsx
 import { useState } from "react";
 import useSWR from "swr";
 import LoggedLayout from "../../../components/LoggedLayout";
+import { EmptySearch } from "../../../components/Search/EmptySearch";
 import { ListDataset } from "../../../components/Search/ListDataset";
 import { SWRRetry, fetcher } from "../../../lib/fetcher";
 import { GetDatasetsResponse } from "../../../types/BffAPI";
@@ -2423,14 +2430,17 @@ export default function SharedDatasetsPage() {
 
     return (
         <LoggedLayout tenancyOptional>
-            <div className="container mx-auto">
-                <h1 className="font-extrabold">Shared with me</h1>
-                <p className="text-primary-500">Datasets other researchers gave you access to, in any namespace.</p>
+            <div className="w-full max-w-5xl mx-auto">
+                <h2 className="m-0 text-3xl leading-tight">Shared with me</h2>
+                <p className="mt-2 mb-0 text-[15px] leading-[23px] text-primary-600">
+                    Datasets other researchers gave you access to, in any namespace.
+                </p>
 
-                {isLoading && <p className="py-8">Loading...</p>}
-                {error && <p className="py-8 text-error-600">The shared datasets could not be loaded.</p>}
+                <div className="mt-7">
+                {isLoading && <EmptySearch>Loading datasets...</EmptySearch>}
+                {error && <EmptySearch>The shared datasets could not be loaded.</EmptySearch>}
                 {datasets && datasets.content.length === 0 &&
-                    <p className="py-8 text-primary-500">Nothing has been shared with you yet.</p>
+                    <EmptySearch>Nothing has been shared with you yet.</EmptySearch>
                 }
                 {datasets && datasets.content.length > 0 &&
                     <ListDataset
@@ -2449,6 +2459,7 @@ export default function SharedDatasetsPage() {
                         }}
                     />
                 }
+                </div>
             </div>
         </LoggedLayout>
     );
@@ -2460,11 +2471,11 @@ SharedDatasetsPage.auth = {
 };
 ```
 
-`components/Search/ListItem.tsx` — add `import { EmbargoBadge } from "../Embargo/EmbargoBadge";` and replace the last column with:
+`components/Search/ListItem.tsx` — add `import { EmbargoBadge } from "../Embargo/EmbargoBadge";` and replace the last column (`<div className="self-start"><DesignStatePill ... /></div>`) with:
 
 ```tsx
-        <div className="place-self-start flex flex-col items-end gap-2">
-          <Badge>{props.dataset.current_version.design_state}</Badge>
+        <div className="self-start flex flex-col items-end gap-1.5">
+          <DesignStatePill state={props.dataset.current_version.design_state} />
           <EmbargoBadge embargo={props.dataset.embargo} />
         </div>
 ```
@@ -2699,6 +2710,8 @@ Expected: `all call sites pass the dataset`.
 
 - [ ] **Step 4: Implement the components**
 
+They follow the identity introduced by webapp #101: sections are white cards (`rounded-lg border border-primary-200 bg-primary-0`) with an `h2` at `text-lg`, form fields use the classes in `contants/EditFormConstants.ts`, notices use the mint tint `bg-secondary-500`, and icons are `MaterialSymbol` at weight 400, grade -25.
+
 `components/Embargo/FilesWithheldNotice.tsx`:
 
 ```tsx
@@ -2718,9 +2731,9 @@ export function FilesWithheldNotice(props: Props) {
     const summary = props.version.files_summary;
 
     return (
-        <div data-testid="files-withheld" className="flex gap-2 items-start p-4 my-2 border-t-4 border-primary-500 bg-primary-50 rounded-lg">
-            <MaterialSymbol icon="lock" size={22} grade={-25} weight={200} />
-            <p className="text-sm">
+        <div data-testid="files-withheld" className="flex gap-3 items-start rounded-lg border border-primary-200 bg-secondary-500 px-4 py-3">
+            <MaterialSymbol icon="lock" size={18} grade={-25} weight={400} className="mt-0.5 text-primary-700" />
+            <p className="m-0 text-sm leading-5 text-primary-700">
                 The file list is hidden while this dataset is under embargo.
                 {summary && <> It holds {summary.count} files, {bytesToSize(summary.total_size_bytes)} in total.</>}
             </p>
@@ -2742,12 +2755,12 @@ interface Props {
 
 export function EmbargoEndedBanner(props: Props) {
     return (
-        <div role="status" className="flex gap-3 items-start p-4 my-4 border-t-4 border-primary-500 bg-primary-50 rounded-lg shadow-sm">
-            <MaterialSymbol icon="lock_open" size={28} grade={-25} weight={200} />
-            <div className="text-sm space-y-1">
-                <p className="font-semibold">The embargo on this dataset ended on {formatEmbargoDate(props.dataset.embargo.until)}.</p>
-                <p>Its files are now available to the members of its namespace. Nothing has been made public.</p>
-                <p>
+        <div role="status" className="flex gap-3 items-start rounded-lg border border-primary-200 bg-secondary-500 p-4">
+            <MaterialSymbol icon="lock_open" size={20} grade={-25} weight={400} className="mt-0.5 text-primary-900" />
+            <div className="flex flex-col gap-1.5 text-sm leading-5 text-primary-700">
+                <p className="m-0 font-semibold text-primary-900">The embargo on this dataset ended on {formatEmbargoDate(props.dataset.embargo.until)}.</p>
+                <p className="m-0">Its files are now available to the members of its namespace. Nothing has been made public.</p>
+                <p className="m-0">
                     Its DOI is registered but not findable: it resolves, but DataCite does not index it, so the dataset
                     does not appear in DataCite search. To publish the dataset page and index the DOI, move the DOI to
                     Findable in the Citation section. Nothing will do it for you.
@@ -2764,6 +2777,12 @@ export function EmbargoEndedBanner(props: Props) {
 import { ErrorMessage, Field, Form, Formik } from "formik";
 import { useRouter } from "next/router";
 import { useState } from "react";
+import {
+    EDIT_FORM_ERROR_CLASS,
+    EDIT_FORM_HINT_CLASS,
+    EDIT_FORM_INPUT_CLASS,
+    EDIT_FORM_LABEL_CLASS,
+} from "../../contants/EditFormConstants";
 import { EMBARGO_ERROR_MESSAGES, messageForApiError } from "../../contants/EmbargoConstants";
 import { BFFAPI } from "../../gateways/BFFAPI";
 import {
@@ -2815,22 +2834,24 @@ export function EmbargoSettings(props: Props) {
     }
 
     return (
-        <section className="max-w-3xl py-4" aria-labelledby="embargo-settings-title">
-            <h6 id="embargo-settings-title" className="font-bold py-4">Embargo</h6>
-
-            {embargo?.active &&
-                <p className="text-sm pb-4">
-                    Under embargo until {formatEmbargoDate(embargo.until)}, {embargo.metadata_visible
-                        ? "visible to the namespace with an embargo badge"
-                        : "hidden from everyone without access"}.
-                    Only the owner and the people the owner authorised reach the files.
+        <section className="flex flex-col gap-3 min-w-0" aria-labelledby="embargo-settings-title">
+            <div>
+                <h2 id="embargo-settings-title" className="m-0 text-lg leading-snug tracking-[-0.01em]">Embargo</h2>
+                <p className="m-0 mt-1 text-sm text-primary-600">
+                    {embargo?.active
+                        ? <>Under embargo until {formatEmbargoDate(embargo.until)}, {embargo.metadata_visible
+                            ? "visible to the namespace with an embargo badge"
+                            : "hidden from everyone without access"}. Only the owner and the people the owner authorised reach the files.</>
+                        : "Keep the files closed while the article that describes them is under review."}
                 </p>
-            }
+            </div>
 
-            {serverError && <p role="alert" className="text-sm text-error-600 pb-4">{serverError}</p>}
+            {serverError && <p role="alert" className="m-0 text-sm text-error-600">{serverError}</p>}
 
             {showManualDoiNote &&
-                <p className="text-sm">{EMBARGO_ERROR_MESSAGES.embargo_manual_doi}</p>
+                <div className="rounded-lg border border-primary-200 bg-primary-0 p-5">
+                    <p className="m-0 text-sm text-primary-700">{EMBARGO_ERROR_MESSAGES.embargo_manual_doi}</p>
+                </div>
             }
 
             {showSet &&
@@ -2843,12 +2864,18 @@ export function EmbargoSettings(props: Props) {
                     onSubmit={(values) => run(() => bffGateway.setEmbargo(props.dataset.id, embargoRequestFrom(values)))}
                 >
                     {({ isSubmitting }) => (
-                        <Form className="space-y-3">
-                            <EmbargoModeFields />
-                            <label htmlFor="embargoUntil">Embargo until</label>
-                            <Field type="date" id="embargoUntil" name="embargoUntil" min={minEmbargoDate(now)} max={maxEmbargoDate(now)} />
-                            <ErrorMessage name="embargoUntil" component="div" className="text-xs text-error-600" />
-                            <button type="submit" className="btn-primary" disabled={isSubmitting}>Set embargo</button>
+                        <Form className="rounded-lg border border-primary-200 bg-primary-0">
+                            <div className="flex flex-col gap-5 p-5">
+                                <EmbargoModeFields />
+                                <div>
+                                    <label htmlFor="embargoUntil" className={EDIT_FORM_LABEL_CLASS}>Embargo until</label>
+                                    <Field type="date" id="embargoUntil" name="embargoUntil" min={minEmbargoDate(now)} max={maxEmbargoDate(now)} className={EDIT_FORM_INPUT_CLASS} />
+                                    <ErrorMessage name="embargoUntil" component="div" className={EDIT_FORM_ERROR_CLASS} />
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-2 border-t border-primary-200 bg-primary-50 px-5 py-3 rounded-b-lg">
+                                <button type="submit" className="btn-primary m-0" disabled={isSubmitting}>Set embargo</button>
+                            </div>
                         </Form>
                     )}
                 </Formik>
@@ -2865,12 +2892,16 @@ export function EmbargoSettings(props: Props) {
                     onSubmit={(values) => run(() => bffGateway.extendEmbargo(props.dataset.id, { until: toEmbargoUntil(values.until) }))}
                 >
                     {({ isSubmitting }) => (
-                        <Form className="space-y-3 py-4">
-                            <label htmlFor="extendUntil">New end date</label>
-                            <Field type="date" id="extendUntil" name="until" min={minExtensionDate(embargo.until, now)} max={maxEmbargoDate(now)} />
-                            <ErrorMessage name="until" component="div" className="text-xs text-error-600" />
-                            <p className="text-xs text-primary-500">Each extension reaches at most 90 days from today.</p>
-                            <button type="submit" className="btn-primary-outline" disabled={isSubmitting}>Extend</button>
+                        <Form className="rounded-lg border border-primary-200 bg-primary-0">
+                            <div className="flex flex-col gap-1.5 p-5">
+                                <label htmlFor="extendUntil" className={EDIT_FORM_LABEL_CLASS}>New end date</label>
+                                <Field type="date" id="extendUntil" name="until" min={minExtensionDate(embargo.until, now)} max={maxEmbargoDate(now)} className={EDIT_FORM_INPUT_CLASS} />
+                                <ErrorMessage name="until" component="div" className={EDIT_FORM_ERROR_CLASS} />
+                                <p className={EDIT_FORM_HINT_CLASS}>Each extension reaches at most 90 days from today.</p>
+                            </div>
+                            <div className="flex items-center justify-end gap-2 border-t border-primary-200 bg-primary-50 px-5 py-3 rounded-b-lg">
+                                <button type="submit" className="btn-primary-outline m-0" disabled={isSubmitting}>Extend</button>
+                            </div>
                         </Form>
                     )}
                 </Formik>
@@ -2883,26 +2914,31 @@ export function EmbargoSettings(props: Props) {
                         onSubmit={(values) => run(() => bffGateway.setEmbargoMode(props.dataset.id, { metadata_visible: values.embargoMode === "open" }))}
                     >
                         {({ isSubmitting }) => (
-                            <Form className="space-y-3 py-4">
-                                <EmbargoModeFields />
-                                <button type="submit" className="btn-primary-outline" disabled={isSubmitting}>Save visibility</button>
+                            <Form className="rounded-lg border border-primary-200 bg-primary-0">
+                                <div className="p-5">
+                                    <EmbargoModeFields />
+                                </div>
+                                <div className="flex items-center justify-between gap-2 border-t border-primary-200 bg-primary-50 px-5 py-3 rounded-b-lg">
+                                    <button type="button" className="btn-primary-outline m-0" onClick={() => setConfirmEnd(true)}>End embargo now</button>
+                                    <button type="submit" className="btn-primary m-0" disabled={isSubmitting}>Save visibility</button>
+                                </div>
                             </Form>
                         )}
                     </Formik>
 
-                    <button type="button" className="btn-primary-outline" onClick={() => setConfirmEnd(true)}>End embargo now</button>
                     <Modal
                         title="End the embargo"
                         show={confirmEnd}
                         confimButtonText="End embargo"
                         cancelButtonText="Cancel"
+                        destructive
                         cancel={() => setConfirmEnd(false)}
                         confim={() => {
                             setConfirmEnd(false);
                             run(() => bffGateway.endEmbargo(props.dataset.id));
                         }}
                     >
-                        <p>The files become available to the members of the namespace now. This cannot be undone.</p>
+                        <p className="m-0">The files become available to the members of the namespace now. This cannot be undone.</p>
                     </Modal>
                 </>
             }
@@ -2912,48 +2948,71 @@ export function EmbargoSettings(props: Props) {
 
 function EmbargoModeFields() {
     return (
-        <fieldset className="space-y-1">
-            <legend className="text-sm font-medium">While under embargo, the dataset is</legend>
-            <label className="flex gap-2 items-center">
-                <Field type="radio" name="embargoMode" value="hidden" /> Hidden
-            </label>
-            <p className="text-xs text-primary-500 pl-6">Nobody without access knows it exists.</p>
-            <label className="flex gap-2 items-center">
-                <Field type="radio" name="embargoMode" value="open" /> Visible with a badge
-            </label>
-            <p className="text-xs text-primary-500 pl-6">The namespace sees it in listings; files stay closed.</p>
+        <fieldset className="flex flex-col gap-3 m-0 p-0 border-0">
+            <legend className={EDIT_FORM_LABEL_CLASS}>While under embargo, the dataset is</legend>
+            <div>
+                <label className="flex gap-2 items-center m-0 text-sm font-medium text-primary-900">
+                    <Field type="radio" name="embargoMode" value="hidden" className="h-4 w-4 accent-primary-900" /> Hidden
+                </label>
+                <p className={`${EDIT_FORM_HINT_CLASS} pl-6`}>Nobody without access knows it exists.</p>
+            </div>
+            <div>
+                <label className="flex gap-2 items-center m-0 text-sm font-medium text-primary-900">
+                    <Field type="radio" name="embargoMode" value="open" className="h-4 w-4 accent-primary-900" /> Visible with a badge
+                </label>
+                <p className={`${EDIT_FORM_HINT_CLASS} pl-6`}>The namespace sees it in listings; files stay closed.</p>
+            </div>
         </fieldset>
     );
 }
 ```
 
-The radio labels must match the test: `getByLabelText("Hidden")` finds the radio by its wrapping label text "Hidden". Keep the label text exactly `Hidden` and `Visible with a badge`.
+The radio labels must match the test: `getByLabelText("Hidden")` finds the radio by its wrapping label text "Hidden". Keep the label text exactly `Hidden` and `Visible with a badge`. `globals.css` styles every bare `input` with `w-full p-2.5`; the explicit `h-4 w-4` on the radios overrides it.
 
 - [ ] **Step 5: Wire the dataset page**
 
-`components/DatasetDetailsPage.tsx` — imports:
+`components/DatasetDetailsPage.tsx` (as on main since #101: `StatusPill`, `max-w-5xl` column, actions in `flex flex-none items-center gap-2`) — imports:
 
 ```tsx
 import { EmbargoBadge } from "./Embargo/EmbargoBadge";
 import { EmbargoEndedBanner } from "./Embargo/EmbargoEndedBanner";
 import { canSeeSettings, isFilesWithheld, shouldShowEmbargoEndedBanner } from "../lib/embargoState";
+import { bytesToSize } from "../lib/file";
 ```
 
-`LoggedLayout` gets `tenancyOptional`; under `<DatasetInstitution .../>` add `<EmbargoBadge embargo={props.dataset.embargo} />`; after the title row's closing `</div>` of `flex flex-row`, add:
+`totalDatasetVersionFilesSize` stays imported from `../lib/file` too. Replace the `filesCount` line with:
+
+```tsx
+  const filesWithheld = selectedVersion?.files_withheld ?? false;
+  const filesCount = filesWithheld
+    ? selectedVersion?.files_summary?.count ?? 0
+    : selectedVersion?.files_in?.length ?? 0;
+  const filesSize = filesWithheld
+    ? bytesToSize(selectedVersion?.files_summary?.total_size_bytes ?? 0)
+    : totalDatasetVersionFilesSize(selectedVersion);
+```
+
+and in the mono line use `{filesSize}` instead of `{totalDatasetVersionFilesSize(selectedVersion)}`.
+
+`<LoggedLayout>` becomes `<LoggedLayout tenancyOptional>`. In the pill row, after `<StatusPill designState={selectedVersion?.design_state} />`:
+
+```tsx
+                <EmbargoBadge embargo={props.dataset.embargo} />
+```
+
+The actions block becomes:
+
+```tsx
+            <div className="flex flex-none items-center gap-2">
+              {!isFilesWithheld(props.dataset) && <DownloadDatafilesButton dataset={props.dataset} />}
+              {(props.dataset.access?.can_delete ?? true) && <DatasetMoreSettingsButton dataset={props.dataset} />}
+            </div>
+```
+
+Between the header block (the `md:flex-row` div) and `<Tabs className="pt-7">`:
 
 ```tsx
           {shouldShowEmbargoEndedBanner(props.dataset) && <EmbargoEndedBanner dataset={props.dataset} />}
-```
-
-The action columns become:
-
-```tsx
-            <div>
-              {!isFilesWithheld(props.dataset) && <DownloadDatafilesButton dataset={props.dataset} />}
-            </div>
-            <div>
-              {(props.dataset.access?.can_delete ?? true) && <DatasetMoreSettingsButton dataset={props.dataset} />}
-            </div>
 ```
 
 and the settings tab condition:
@@ -2964,12 +3023,34 @@ and the settings tab condition:
             }
 ```
 
-`components/DatasetDetails/TabPanelSettings.tsx` — add `import { EmbargoSettings } from "../Embargo/EmbargoSettings";` and `import { canEditDataset } from "../../lib/users";`; render `<EmbargoSettings dataset={props.dataset} />` directly after `<h5>Settings</h5>`, and wrap the existing `<h6 ...>General</h6>` and `<Formik ...>` in `{canEditDataset(props.user, props.dataset) && <>…</>}`.
-
-`components/DatasetDetails/DataCard/DataExplorer.tsx` — add `import { FilesWithheldNotice } from "../../Embargo/FilesWithheldNotice";` and directly above `<DatasetFilesList`:
+`components/DatasetDetails/TabPanelSettings.tsx` — add `import { EmbargoSettings } from "../Embargo/EmbargoSettings";` and `import { canEditDataset } from "../../lib/users";`. The left column (`<section className="flex flex-col gap-3 min-w-0">` holding *General*) becomes a column of sections:
 
 ```tsx
-            <FilesWithheldNotice version={selectedDatasetVersion} />
+        <div className="flex flex-col gap-10 min-w-0">
+          {canEditDataset(props.user, props.dataset) &&
+            <section className="flex flex-col gap-3 min-w-0">
+              {/* the existing General heading and Formik, unchanged */}
+            </section>
+          }
+          <EmbargoSettings dataset={props.dataset} />
+        </div>
+```
+
+Move the existing `<div><h2 …>General</h2>…</div>` and `<Formik …>…</Formik>` into that `section` without changing them; the `<aside>` stays where it is, as the grid's second column.
+
+`components/DatasetDetails/DataCard/DataExplorer.tsx` — add `import { FilesWithheldNotice } from "../../Embargo/FilesWithheldNotice";` and `import { bytesToSize } from "../../../lib/file";`. The count in the header (`{getVersionByName(...)?.files_in?.length ?? 0} files · {totalDatasetVersionFilesSize(selectedDatasetVersion)}`) becomes:
+
+```tsx
+            {selectedDatasetVersion?.files_withheld
+              ? <>{selectedDatasetVersion.files_summary?.count ?? 0} files · {bytesToSize(selectedDatasetVersion.files_summary?.total_size_bytes ?? 0)}</>
+              : <>{getVersionByName(props.selectedVersionName, props.dataset.versions, props.dataset)?.files_in?.length ?? 0} files · {totalDatasetVersionFilesSize(selectedDatasetVersion)}</>
+            }
+```
+
+`NewVersionButton` is shown only to whoever may edit: `{props.dataset.access?.can_edit !== false && <NewVersionButton onClick={() => setShowUploadDataModal(true)} />}`. Directly above `<DatasetFilesList`:
+
+```tsx
+      <FilesWithheldNotice version={selectedDatasetVersion} />
 ```
 
 Both dataset pages (`pages/app/datasets/[datasetId]/index.tsx`, `pages/app/datasets/[datasetId]/versions/[versionName]/index.tsx`) already route errors through `handleDatasetRequestErrors`, which now renders not-found on 404 (Task 5); no change needed beyond that.
@@ -3050,41 +3131,45 @@ Expected: FAIL — `Cannot find module '../EmbargoChoice'`.
 
 - [ ] **Step 3: Implement**
 
-`components/Embargo/EmbargoChoice.tsx`:
+`components/Embargo/EmbargoChoice.tsx` — styled like the blocks of `pages/app/datasets/new.tsx` since #101 (`flex flex-col gap-2`, `text-sm font-semibold` label, `text-[13px]` hint), with each option a bordered row:
 
 ```tsx
 import { ErrorMessage, Field, useFormikContext } from "formik";
+import { EDIT_FORM_ERROR_CLASS, EDIT_FORM_INPUT_CLASS } from "../../contants/EditFormConstants";
 import { maxEmbargoDate, minEmbargoDate } from "../../lib/embargoDates";
+
+const OPTIONS = [
+    { value: "none", label: "No embargo", hint: "The namespace reaches the files as soon as they are uploaded." },
+    { value: "hidden", label: "Embargo, hidden", hint: "Nobody without access knows the dataset exists." },
+    { value: "open", label: "Embargo, visible with a badge", hint: "The namespace sees it in listings; files stay closed." },
+];
 
 export function EmbargoChoice() {
     const { values } = useFormikContext<{ embargoMode: string, embargoUntil: string }>();
     const now = new Date();
 
     return (
-        <div className="mt-8">
-            <h6 className="font-bold">Embargo</h6>
-            <p className="text-xs">
+        <div className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-primary-900">Embargo</span>
+            <span className="text-[13px] leading-[19px] text-primary-500">
                 Under embargo, only you and the people you authorise reach the files, for up to 90 days,
                 extendable. Use it while the article that describes the data is under review.
-            </p>
-            <fieldset className="my-2 space-y-1">
-                <label className="flex gap-2 items-center">
-                    <Field type="radio" name="embargoMode" value="none" /> No embargo
-                </label>
-                <label className="flex gap-2 items-center">
-                    <Field type="radio" name="embargoMode" value="hidden" /> Embargo, hidden
-                </label>
-                <p className="text-xs text-primary-500 pl-6">Nobody without access knows the dataset exists.</p>
-                <label className="flex gap-2 items-center">
-                    <Field type="radio" name="embargoMode" value="open" /> Embargo, visible with a badge
-                </label>
-                <p className="text-xs text-primary-500 pl-6">The namespace sees it in listings; files stay closed.</p>
+            </span>
+            <fieldset className="flex flex-col gap-2 m-0 p-0 border-0">
+                {OPTIONS.map(option => (
+                    <div key={option.value} className={`rounded-md border px-3.5 py-3 ${values.embargoMode === option.value ? "border-primary-900 bg-primary-0" : "border-primary-300 bg-primary-0"}`}>
+                        <label className="flex gap-2.5 items-center m-0 text-sm font-medium text-primary-900 cursor-pointer">
+                            <Field type="radio" name="embargoMode" value={option.value} className="h-4 w-4 p-0 accent-primary-900" /> {option.label}
+                        </label>
+                        <p className="m-0 mt-0.5 pl-[26px] text-[13px] leading-[19px] text-primary-500">{option.hint}</p>
+                    </div>
+                ))}
             </fieldset>
             {values.embargoMode !== "none" &&
-                <div className="my-2">
-                    <label htmlFor="embargoUntil" className="block mb-2 text-sm font-medium">Embargo until</label>
-                    <Field type="date" id="embargoUntil" name="embargoUntil" min={minEmbargoDate(now)} max={maxEmbargoDate(now)} />
-                    <ErrorMessage name="embargoUntil" component="div" className="text-xs text-error-600" />
+                <div className="flex flex-col gap-1.5 pt-1">
+                    <label htmlFor="embargoUntil" className="m-0 text-sm font-semibold text-primary-900">Embargo until</label>
+                    <Field type="date" id="embargoUntil" name="embargoUntil" min={minEmbargoDate(now)} max={maxEmbargoDate(now)} className={EDIT_FORM_INPUT_CLASS} />
+                    <ErrorMessage name="embargoUntil" component="div" className={EDIT_FORM_ERROR_CLASS} />
                 </div>
             }
         </div>
@@ -3105,7 +3190,7 @@ interface FormValues {
 }
 ```
 
-`pages/app/datasets/new.tsx`:
+`pages/app/datasets/new.tsx` (as on main since #101):
 
 1. Imports: `import { EmbargoChoice } from "../../../components/Embargo/EmbargoChoice";` and `import { embargoRequestFrom, validateEmbargoDate } from "../../../lib/embargoDates";`.
 2. `initialValues` gains `embargoMode: 'none', embargoUntil: ''`.
@@ -3120,7 +3205,7 @@ interface FormValues {
     }
 ```
 
-4. In `handleSubmitForm`, the chain starts with the embargo, so no file is uploaded to a dataset the tenancy can still read:
+4. In `handleSubmitForm`, the chain starts with the embargo, so no file is uploaded to a dataset the tenancy can still read. Replace the first two links (`uploadFiles()` and `.then(() => updateDataset(datasetUpdateRequest))`) with:
 
 ```ts
     const embargoRequest = embargoRequestFrom(values);
@@ -3131,9 +3216,9 @@ interface FormValues {
       .then(() => updateDataset(datasetUpdateRequest))
 ```
 
-and the rest of the existing chain (`.then(() => { … publishDatasetVersion … })` onward) is unchanged.
+The rest of the chain (`.then(() => { … publishDatasetVersion … })` onward) is unchanged.
 
-5. Render `<EmbargoChoice />` directly after the dataset-title block (after its `<ErrorMessage name="datasetTitle" … />` `</div>`) and before `<h6 className="font-bold">Data files</h6>`.
+5. Render `<EmbargoChoice />` between the *Title* block (the `flex flex-col gap-2` div that ends with the `text-[13px]` hint "Give a unique name for your dataset…") and the *Data files* block (the `flex flex-col gap-2` div that starts with `<span className="text-sm font-semibold text-primary-900">Data files</span>`). Both are children of the `flex flex-col gap-10` column, so the spacing comes from it.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -3153,7 +3238,7 @@ git commit -m "feat: choose an embargo when creating a dataset"
 
 **Files:**
 - Create: `hooks/UseDebouncedValue.ts`
-- Create: `components/Share/ShareInput.tsx`, `components/Share/OneTimeLink.tsx`, `components/Share/AccessList.tsx`, `components/Share/ReviewLinksSection.tsx`, `components/Share/ShareDialog.tsx`, `components/Share/ShareButton.tsx`
+- Create: `contants/ShareConstants.ts`, `components/Share/PersonInitial.tsx`, `components/Share/ShareInput.tsx`, `components/Share/OneTimeLink.tsx`, `components/Share/AccessList.tsx`, `components/Share/ReviewLinksSection.tsx`, `components/Share/ShareDialog.tsx`, `components/Share/ShareButton.tsx`
 - Modify: `components/DatasetDetailsPage.tsx`
 - Test: `components/Share/__tests__/ShareInput.test.tsx`, `components/Share/__tests__/AccessList.test.tsx`, `components/Share/__tests__/ReviewLinksSection.test.tsx`, `components/Share/__tests__/ShareDialog.test.tsx`
 
@@ -3441,6 +3526,8 @@ Expected: FAIL — the component modules do not exist.
 
 - [ ] **Step 3: Implement**
 
+The dialog follows the identity of webapp #101: `PopupModal` (white card, `border-b` header, footer with the Close button) widened with `maxWidthClassName`, inputs and selects from `contants/EditFormConstants.ts`, section labels in the uppercase 11px style of `CardItem`, row actions in the text-link style of `components/DatasetDetails/TextActionButton.tsx` (written inline here because those buttons need an `aria-label`, which `TextActionButton` does not take), and the one-time link in the mint `bg-secondary-500` notice.
+
 `hooks/UseDebouncedValue.ts`:
 
 ```ts
@@ -3458,15 +3545,44 @@ export function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 ```
 
+`contants/ShareConstants.ts`:
+
+```ts
+export const SHARE_SECTION_LABEL_CLASS = "m-0 text-[11px] leading-4 font-semibold uppercase tracking-[0.08em] text-primary-500";
+
+export const SHARE_ROW_ACTION_CLASS = "text-[13px] leading-5 font-medium text-primary-600 hover:text-primary-900 underline-offset-2 hover:underline transition-colors";
+
+export const SHARE_PERSON_NAME_CLASS = "text-sm font-medium text-primary-900";
+
+export const SHARE_PERSON_DETAIL_CLASS = "text-[13px] text-primary-500";
+```
+
+`components/Share/PersonInitial.tsx`:
+
+```tsx
+export function PersonInitial(props: { name?: string | null }) {
+    const initial = (props.name ?? "?").trim().charAt(0).toUpperCase() || "?";
+
+    return (
+        <span aria-hidden="true" className="flex flex-none items-center justify-center h-8 w-8 rounded-full bg-primary-200 text-xs font-semibold text-primary-700">
+            {initial}
+        </span>
+    );
+}
+```
+
 `components/Share/ShareInput.tsx`:
 
 ```tsx
 import { useEffect, useState } from "react";
+import { EDIT_FORM_ERROR_CLASS, EDIT_FORM_INPUT_CLASS, EDIT_FORM_SELECT_CLASS } from "../../contants/EditFormConstants";
 import { EMBARGO_ERROR_MESSAGES } from "../../contants/EmbargoConstants";
+import { SHARE_PERSON_DETAIL_CLASS, SHARE_PERSON_NAME_CLASS } from "../../contants/ShareConstants";
 import { BFFAPI } from "../../gateways/BFFAPI";
 import { useDebouncedValue } from "../../hooks/UseDebouncedValue";
 import { classifyShareInput } from "../../lib/shareTarget";
 import { GrantRequest, PermissionLevel, ShareUser } from "../../types/GatekeeperAPI";
+import { PersonInitial } from "./PersonInitial";
 
 interface Props {
     datasetId: string
@@ -3501,33 +3617,38 @@ export function ShareInput(props: Props) {
     }
 
     return (
-        <div className="space-y-2">
+        <div className="relative flex flex-col gap-2">
             <div className="flex gap-2">
                 <label htmlFor="share-input" className="sr-only">Add people</label>
                 <input
                     id="share-input"
                     type="text"
                     autoComplete="off"
-                    className="w-full"
+                    className={EDIT_FORM_INPUT_CLASS}
                     placeholder="Add people by name, email or ORCID"
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                 />
                 <label htmlFor="share-level" className="sr-only">Access level</label>
-                <select id="share-level" value={level} onChange={(e) => setLevel(e.target.value as PermissionLevel)}>
+                <select
+                    id="share-level"
+                    className={`${EDIT_FORM_SELECT_CLASS} w-36 flex-none`}
+                    value={level}
+                    onChange={(e) => setLevel(e.target.value as PermissionLevel)}
+                >
                     <option value="read">Can view</option>
                     <option value="write">Can edit</option>
                 </select>
             </div>
 
             {target.kind === "invalid_orcid" &&
-                <p className="text-xs text-error-600">{EMBARGO_ERROR_MESSAGES.invalid_orcid}</p>
+                <p className={`${EDIT_FORM_ERROR_CLASS} m-0`}>{EMBARGO_ERROR_MESSAGES.invalid_orcid}</p>
             }
 
             {(target.kind === "email" || target.kind === "orcid") &&
                 <button
                     type="button"
-                    className="btn-primary-outline btn-small"
+                    className="self-start btn-primary-outline btn-small m-0"
                     onClick={() => grant(target.kind === "email"
                         ? { email: target.value, level }
                         : { orcid: target.value, level })}
@@ -3537,15 +3658,19 @@ export function ShareInput(props: Props) {
             }
 
             {target.kind === "text" && suggestions.length > 0 &&
-                <ul className="border border-primary-200 rounded divide-y divide-primary-100">
+                <ul className="m-0 p-1 list-none rounded-md border border-primary-200 bg-primary-0 shadow-lg shadow-primary-900/10">
                     {suggestions.map((user) => (
                         <li key={user.id}>
                             <button
                                 type="button"
-                                className="w-full text-left px-3 py-2 hover:bg-primary-100"
+                                className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left hover:bg-primary-100"
                                 onClick={() => grant({ user_id: user.id, level })}
                             >
-                                {user.name} <span className="text-primary-500 text-sm">{user.email}</span>
+                                <PersonInitial name={user.name} />
+                                <span className="flex flex-col min-w-0">
+                                    <span className={SHARE_PERSON_NAME_CLASS}>{user.name}</span>
+                                    <span className={`${SHARE_PERSON_DETAIL_CLASS} truncate`}>{user.email}</span>
+                                </span>
                             </button>
                         </li>
                     ))}
@@ -3561,6 +3686,8 @@ export function ShareInput(props: Props) {
 ```tsx
 import { useState } from "react";
 import { MaterialSymbol } from "react-material-symbols";
+import { EDIT_FORM_INPUT_CLASS } from "../../contants/EditFormConstants";
+import { SHARE_ROW_ACTION_CLASS } from "../../contants/ShareConstants";
 
 interface Props {
     link: string
@@ -3576,16 +3703,16 @@ export function OneTimeLink(props: Props) {
     }
 
     return (
-        <div className="p-4 border-t-4 border-primary-500 bg-primary-50 rounded-lg space-y-2">
-            <p className="text-sm font-semibold">This link is shown only once. Copy it now and send it yourself.</p>
+        <div className="flex flex-col gap-2.5 rounded-lg border border-primary-200 bg-secondary-500 p-4">
+            <p className="m-0 text-sm font-semibold text-primary-900">This link is shown only once. Copy it now and send it yourself.</p>
             <div className="flex gap-2">
                 <label htmlFor="one-time-link" className="sr-only">Link</label>
-                <input id="one-time-link" readOnly className="w-full" value={props.link} onFocus={(e) => e.target.select()} />
-                <button type="button" className="btn-primary btn-small" onClick={copy}>
-                    <MaterialSymbol icon="content_copy" size={18} grade={-25} weight={200} /> {copied ? "Copied" : "Copy"}
+                <input id="one-time-link" readOnly className={`${EDIT_FORM_INPUT_CLASS} font-mono text-xs`} value={props.link} onFocus={(e) => e.target.select()} />
+                <button type="button" className="inline-flex flex-none items-center gap-1.5 h-10 px-3.5 rounded-md bg-primary-900 text-primary-50 text-[13px] font-semibold whitespace-nowrap hover:bg-primary-800 transition-colors" onClick={copy}>
+                    <MaterialSymbol icon="content_copy" size={16} grade={-25} weight={400} /> {copied ? "Copied" : "Copy"}
                 </button>
             </div>
-            <button type="button" className="text-xs underline" onClick={props.onDismiss}>Done</button>
+            <button type="button" className={`self-start ${SHARE_ROW_ACTION_CLASS}`} onClick={props.onDismiss}>Done</button>
         </div>
     );
 }
@@ -3594,7 +3721,10 @@ export function OneTimeLink(props: Props) {
 `components/Share/AccessList.tsx`:
 
 ```tsx
+import { EDIT_FORM_SELECT_CLASS } from "../../contants/EditFormConstants";
+import { SHARE_PERSON_DETAIL_CLASS, SHARE_PERSON_NAME_CLASS, SHARE_ROW_ACTION_CLASS, SHARE_SECTION_LABEL_CLASS } from "../../contants/ShareConstants";
 import { PermissionLevel, ShareState } from "../../types/GatekeeperAPI";
+import { PersonInitial } from "./PersonInitial";
 
 interface Props {
     state: ShareState
@@ -3608,59 +3738,78 @@ export function AccessList(props: Props) {
     const invitations = props.state.invitations.filter((invitation) => !invitation.revoked_at);
 
     return (
-        <ul className="divide-y divide-primary-100">
-            <li className="flex justify-between py-2">
-                <span>{props.state.owner.name} <span className="text-primary-500 text-sm">{props.state.owner.email}</span></span>
-                <span className="text-sm text-primary-500">Owner</span>
-            </li>
-
-            {props.state.permissions.map((permission) => (
-                <li key={permission.user.id} className="flex justify-between items-center py-2 gap-2">
-                    <span>{permission.user.name} <span className="text-primary-500 text-sm">{permission.user.email}</span></span>
-                    <span className="flex gap-2 items-center">
-                        <label htmlFor={`level-${permission.user.id}`} className="sr-only">Access level for {permission.user.name}</label>
-                        <select
-                            id={`level-${permission.user.id}`}
-                            value={permission.level}
-                            onChange={(e) => props.onChangeLevel(permission.user.id, e.target.value as PermissionLevel)}
-                        >
-                            <option value="read">Can view</option>
-                            <option value="write">Can edit</option>
-                        </select>
-                        <button
-                            type="button"
-                            aria-label={`Remove ${permission.user.name}`}
-                            className="btn-primary-outline btn-small"
-                            onClick={() => props.onRevokePermission(permission.user.id)}
-                        >
-                            Remove
-                        </button>
+        <section className="flex flex-col gap-2" aria-labelledby="access-list-title">
+            <h4 id="access-list-title" className={SHARE_SECTION_LABEL_CLASS}>People with access</h4>
+            <ul className="m-0 p-0 list-none divide-y divide-primary-100">
+                <li className="flex justify-between items-center gap-3 py-3">
+                    <span className="flex items-center gap-3 min-w-0">
+                        <PersonInitial name={props.state.owner.name} />
+                        <span className="flex flex-col min-w-0">
+                            <span className={SHARE_PERSON_NAME_CLASS}>{props.state.owner.name}</span>
+                            <span className={`${SHARE_PERSON_DETAIL_CLASS} truncate`}>{props.state.owner.email}</span>
+                        </span>
                     </span>
+                    <span className="text-[13px] font-medium text-primary-500">Owner</span>
                 </li>
-            ))}
 
-            {invitations.map((invitation) => {
-                const who = invitation.email ?? invitation.orcid;
-                return (
-                    <li key={invitation.id} className="flex justify-between items-center py-2 gap-2">
-                        {invitation.accepted_by
-                            ? <span>{who} <span className="text-primary-500 text-sm">Accepted by {invitation.accepted_by.name} ({invitation.accepted_by.email})</span></span>
-                            : <span>{who} <span className="text-primary-500 text-sm">· pending</span></span>
-                        }
-                        {!invitation.accepted_at &&
-                            <span className="flex gap-2">
-                                <button type="button" aria-label={`New link for ${who}`} className="btn-primary-outline btn-small" onClick={() => props.onRegenerateLink(invitation.id)}>
-                                    New link
-                                </button>
-                                <button type="button" aria-label={`Revoke invitation for ${who}`} className="btn-primary-outline btn-small" onClick={() => props.onRevokeInvitation(invitation.id)}>
-                                    Revoke
-                                </button>
+                {props.state.permissions.map((permission) => (
+                    <li key={permission.user.id} className="flex justify-between items-center gap-3 py-3">
+                        <span className="flex items-center gap-3 min-w-0">
+                            <PersonInitial name={permission.user.name} />
+                            <span className="flex flex-col min-w-0">
+                                <span className={SHARE_PERSON_NAME_CLASS}>{permission.user.name}</span>
+                                <span className={`${SHARE_PERSON_DETAIL_CLASS} truncate`}>{permission.user.email}</span>
                             </span>
-                        }
+                        </span>
+                        <span className="flex flex-none items-center gap-3">
+                            <label htmlFor={`level-${permission.user.id}`} className="sr-only">Access level for {permission.user.name}</label>
+                            <select
+                                id={`level-${permission.user.id}`}
+                                className={`${EDIT_FORM_SELECT_CLASS} h-9 w-32`}
+                                value={permission.level}
+                                onChange={(e) => props.onChangeLevel(permission.user.id, e.target.value as PermissionLevel)}
+                            >
+                                <option value="read">Can view</option>
+                                <option value="write">Can edit</option>
+                            </select>
+                            <button
+                                type="button"
+                                aria-label={`Remove ${permission.user.name}`}
+                                className={SHARE_ROW_ACTION_CLASS}
+                                onClick={() => props.onRevokePermission(permission.user.id)}
+                            >
+                                Remove
+                            </button>
+                        </span>
                     </li>
-                );
-            })}
-        </ul>
+                ))}
+
+                {invitations.map((invitation) => {
+                    const who = invitation.email ?? invitation.orcid;
+                    return (
+                        <li key={invitation.id} className="flex justify-between items-center gap-3 py-3">
+                            <span className="flex items-center gap-3 min-w-0">
+                                <PersonInitial name={who} />
+                                {invitation.accepted_by
+                                    ? <span className={SHARE_PERSON_NAME_CLASS}>{who} <span className={SHARE_PERSON_DETAIL_CLASS}>Accepted by {invitation.accepted_by.name} ({invitation.accepted_by.email})</span></span>
+                                    : <span className={SHARE_PERSON_NAME_CLASS}>{who} <span className={SHARE_PERSON_DETAIL_CLASS}>· pending</span></span>
+                                }
+                            </span>
+                            {!invitation.accepted_at &&
+                                <span className="flex flex-none gap-3">
+                                    <button type="button" aria-label={`New link for ${who}`} className={SHARE_ROW_ACTION_CLASS} onClick={() => props.onRegenerateLink(invitation.id)}>
+                                        New link
+                                    </button>
+                                    <button type="button" aria-label={`Revoke invitation for ${who}`} className={SHARE_ROW_ACTION_CLASS} onClick={() => props.onRevokeInvitation(invitation.id)}>
+                                        Revoke
+                                    </button>
+                                </span>
+                            }
+                        </li>
+                    );
+                })}
+            </ul>
+        </section>
     );
 }
 ```
@@ -3669,7 +3818,9 @@ export function AccessList(props: Props) {
 
 ```tsx
 import { useState } from "react";
+import { EDIT_FORM_HINT_CLASS, EDIT_FORM_INPUT_CLASS, EDIT_FORM_LABEL_CLASS } from "../../contants/EditFormConstants";
 import { REVIEW_LINK_LABEL_MAX } from "../../contants/EmbargoConstants";
+import { SHARE_PERSON_DETAIL_CLASS, SHARE_PERSON_NAME_CLASS, SHARE_ROW_ACTION_CLASS, SHARE_SECTION_LABEL_CLASS } from "../../contants/ShareConstants";
 import { formatEmbargoDate } from "../../lib/embargoDates";
 import { ReviewLink } from "../../types/GatekeeperAPI";
 
@@ -3695,44 +3846,49 @@ export function ReviewLinksSection(props: Props) {
     }
 
     return (
-        <section className="space-y-3" aria-labelledby="review-links-title">
-            <h6 id="review-links-title" className="font-bold">Reviewer links</h6>
-            <p className="text-xs text-primary-500">
+        <section className="flex flex-col gap-2.5 border-t border-primary-200 pt-5" aria-labelledby="review-links-title">
+            <h4 id="review-links-title" className={SHARE_SECTION_LABEL_CLASS}>Reviewer links</h4>
+            <p className={EDIT_FORM_HINT_CLASS}>
                 A reviewer link lets a venue&apos;s reviewers read the metadata without an account. Authors, contacts,
                 collaborators, institution, project and references are redacted, and no file can be downloaded.
                 The description and other free text are shown as written: check that they do not name you.
             </p>
 
             {!props.embargoActive &&
-                <p className="text-sm">Reviewer links exist only while the dataset is under embargo.</p>
+                <p className="m-0 text-sm text-primary-700">Reviewer links exist only while the dataset is under embargo.</p>
             }
 
             {props.embargoActive &&
                 <div className="flex gap-2 items-end">
                     <div className="w-full">
-                        <label htmlFor="review-link-label" className="text-sm">Label, seen only by you</label>
+                        <label htmlFor="review-link-label" className={EDIT_FORM_LABEL_CLASS}>Label, seen only by you</label>
                         <input
                             id="review-link-label"
                             type="text"
-                            className="w-full"
+                            className={EDIT_FORM_INPUT_CLASS}
                             maxLength={REVIEW_LINK_LABEL_MAX}
                             placeholder="e.g. JGR Atmospheres, round 1"
                             value={label}
                             onChange={(e) => setLabel(e.target.value)}
                         />
                     </div>
-                    <button type="button" className="btn-primary btn-small" disabled={creating || label.trim() === ""} onClick={create}>
+                    <button
+                        type="button"
+                        className="flex-none h-10 px-3.5 rounded-md bg-primary-900 text-primary-50 text-[13px] font-semibold whitespace-nowrap hover:bg-primary-800 transition-colors disabled:opacity-50"
+                        disabled={creating || label.trim() === ""}
+                        onClick={create}
+                    >
                         Create reviewer link
                     </button>
                 </div>
             }
 
-            <ul className="divide-y divide-primary-100">
+            <ul className="m-0 p-0 list-none divide-y divide-primary-100">
                 {props.links.map((link) => (
-                    <li key={link.id} className="flex justify-between items-center py-2 gap-2">
-                        <span>
-                            {link.label}{" "}
-                            <span className="text-primary-500 text-sm">
+                    <li key={link.id} className="flex justify-between items-center gap-3 py-3">
+                        <span className="flex flex-col min-w-0">
+                            <span className={SHARE_PERSON_NAME_CLASS}>{link.label}</span>
+                            <span className={SHARE_PERSON_DETAIL_CLASS}>
                                 {link.revoked_at
                                     ? "Revoked"
                                     : link.views.count === 0
@@ -3741,7 +3897,7 @@ export function ReviewLinksSection(props: Props) {
                             </span>
                         </span>
                         {!link.revoked_at &&
-                            <button type="button" aria-label={`Revoke ${link.label}`} className="btn-primary-outline btn-small" onClick={() => props.onRevoke(link.id)}>
+                            <button type="button" aria-label={`Revoke ${link.label}`} className={`flex-none ${SHARE_ROW_ACTION_CLASS}`} onClick={() => props.onRevoke(link.id)}>
                                 Revoke
                             </button>
                         }
@@ -3804,14 +3960,21 @@ export function ShareDialog(props: Props) {
     }
 
     return (
-        <Modal title={`Share “${props.dataset.name}”`} show={props.show} confimButtonText="" cancelButtonText="Close" cancel={props.onClose}>
-            <div className="space-y-6 text-primary-900 text-base min-w-[36rem]">
-                {error && <p role="alert" className="text-sm text-error-600">{error}</p>}
+        <Modal
+            title={`Share “${props.dataset.name}”`}
+            show={props.show}
+            confimButtonText=""
+            cancelButtonText="Close"
+            cancel={props.onClose}
+            maxWidthClassName="max-w-2xl"
+        >
+            <div className="flex flex-col gap-5">
+                {error && <p role="alert" className="m-0 text-sm text-error-600">{error}</p>}
                 {oneTimeLink && <OneTimeLink link={oneTimeLink} onDismiss={() => setOneTimeLink(null)} />}
 
                 <ShareInput datasetId={datasetId} onGrant={onGrant} />
 
-                {loadError && <p className="text-sm text-error-600">The people with access could not be loaded.</p>}
+                {loadError && <p className="m-0 text-sm text-error-600">The people with access could not be loaded.</p>}
                 {state &&
                     <AccessList
                         state={state}
@@ -3842,7 +4005,7 @@ export function ShareDialog(props: Props) {
 }
 ```
 
-`components/Share/ShareButton.tsx`:
+`components/Share/ShareButton.tsx` — an outline twin of the dark *Download* button in the dataset header (`components/DownloadDatafilesButton.tsx`):
 
 ```tsx
 import { useState } from "react";
@@ -3855,8 +4018,12 @@ export function ShareButton(props: { dataset: GetDatasetDetailsResponse }) {
 
     return (
         <>
-            <button type="button" className="btn-primary-outline flex items-center gap-1" onClick={() => setShow(true)}>
-                <MaterialSymbol icon="person_add" size={22} grade={-25} weight={200} /> Share
+            <button
+                type="button"
+                className="inline-flex items-center gap-2 h-[38px] px-3.5 rounded-md border border-primary-300 bg-primary-0 text-primary-900 text-sm font-semibold whitespace-nowrap hover:bg-primary-100 transition-colors"
+                onClick={() => setShow(true)}
+            >
+                <MaterialSymbol icon="person_add" size={18} grade={-25} weight={400} /> Share
             </button>
             <ShareDialog dataset={props.dataset} show={show} onClose={() => setShow(false)} />
         </>
@@ -3864,12 +4031,10 @@ export function ShareButton(props: { dataset: GetDatasetDetailsResponse }) {
 }
 ```
 
-`components/DatasetDetailsPage.tsx` — add `import { ShareButton } from "./Share/ShareButton";` and, before the download column:
+`components/DatasetDetailsPage.tsx` — add `import { ShareButton } from "./Share/ShareButton";` and make it the first child of the header actions (`<div className="flex flex-none items-center gap-2">`, as changed in Task 8):
 
 ```tsx
-            <div>
               {props.dataset.access?.can_share && <ShareButton dataset={props.dataset} />}
-            </div>
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -3880,7 +4045,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add hooks/UseDebouncedValue.ts components/Share/ components/DatasetDetailsPage.tsx
+git add hooks/UseDebouncedValue.ts contants/ShareConstants.ts components/Share/ components/DatasetDetailsPage.tsx
 git commit -m "feat: share dialog with tenancy search, invitations and reviewer links"
 ```
 
@@ -4069,29 +4234,34 @@ export function reviewPageProps(page: ReviewPageResponse) {
 }
 ```
 
-`components/Review/ReviewMetadataList.tsx`:
+`components/Review/ReviewMetadataList.tsx` — one `FactRow` per field, the row component #101 introduced for the dataset page's facts:
 
 ```tsx
 import { reviewMetadataEntries } from "../../lib/reviewMetadata";
+import { FactRow } from "../DatasetDetails/DataCard/FactRow";
 
 export function ReviewMetadataList(props: { data: Record<string, unknown> }) {
     return (
-        <dl className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-3">
+        <div className="flex flex-col">
             {reviewMetadataEntries(props.data).map((entry) => (
-                <div key={entry.key} className="md:contents">
-                    <dt className="text-sm text-primary-500">{entry.label}</dt>
-                    <dd className={`md:col-span-2 text-sm ${entry.redacted ? "italic text-primary-400" : ""}`}>{entry.value}</dd>
-                </div>
+                <FactRow
+                    key={entry.key}
+                    label={entry.label}
+                    valueClassName={entry.redacted ? "italic font-normal text-primary-400" : "font-medium"}
+                >
+                    {entry.value}
+                </FactRow>
             ))}
-        </dl>
+        </div>
     );
 }
 ```
 
-`pages/review/[token].tsx`:
+`pages/review/[token].tsx` — laid out like the logged-in dataset page since #101 (`max-w-5xl` column, status pill row, 30px title, white cards), inside the public `Layout`:
 
 ```tsx
 import Head from "next/head";
+import { MaterialSymbol } from "react-material-symbols";
 import { Description } from "../../components/DatasetSnapshot/Description";
 import Layout from "../../components/Layout";
 import { ReviewMetadataList } from "../../components/Review/ReviewMetadataList";
@@ -4112,36 +4282,58 @@ export default function ReviewPage(props: Props) {
             <Head>
                 <meta name="robots" content="noindex, nofollow" />
             </Head>
-            <div className="container mx-auto px-8 space-y-10 pt-8 mb-24 max-w-4xl">
+            <div className="mx-auto w-full max-w-5xl px-8 pt-10 pb-24 flex flex-col gap-7">
                 {props.ended &&
-                    <div className="p-6 border-t-4 border-primary-500 bg-primary-50 rounded-b-lg" role="status">
-                        <h3 className="text-lg font-semibold">The embargo on this dataset has ended</h3>
-                        <p className="mt-2 text-sm">The dataset has not been published yet. Its page will appear here once it is.</p>
+                    <div className="flex gap-3 items-start rounded-lg border border-primary-200 bg-primary-0 p-6" role="status">
+                        <MaterialSymbol icon="lock_open" size={20} grade={-25} weight={400} className="mt-1 text-primary-700" />
+                        <div>
+                            <h2 className="m-0 text-lg leading-snug tracking-[-0.01em]">The embargo on this dataset has ended</h2>
+                            <p className="m-0 mt-1 text-sm text-primary-600">The dataset has not been published yet. Its page will appear here once it is.</p>
+                        </div>
                     </div>
                 }
 
                 {props.page &&
                     <>
-                        <div className="p-4 border-t-4 border-primary-500 bg-primary-50 rounded-b-lg text-sm" role="note">
-                            Anonymous copy for review. Information that identifies the authors is redacted.
-                            The data are under embargo until {formatEmbargoDate(props.page.embargo_until)} and cannot be downloaded.
+                        <div className="flex gap-3 items-start rounded-lg border border-primary-200 bg-secondary-500 px-4 py-3 text-sm leading-5 text-primary-700" role="note">
+                            <MaterialSymbol icon="visibility_off" size={18} grade={-25} weight={400} className="mt-0.5 text-primary-900" />
+                            <span>
+                                Anonymous copy for review. Information that identifies the authors is redacted.
+                                The data are under embargo until {formatEmbargoDate(props.page.embargo_until)} and cannot be downloaded.
+                            </span>
                         </div>
-                        <h1 className="font-extrabold leading-[1.2]">{props.page.dataset.name}</h1>
-                        <Description title="About Dataset" description={String(props.page.dataset.data.description ?? "")} />
-                        <section className="space-y-4">
-                            <h3>Files</h3>
-                            <ul className="text-sm space-y-1">
-                                {props.page.dataset.versions.map((version) => (
-                                    <li key={version.name}>
-                                        Version {version.name}: {version.files_summary.count} files, {bytesToSize(version.files_summary.total_size_bytes)}
-                                    </li>
-                                ))}
-                            </ul>
-                        </section>
-                        <section className="space-y-4">
-                            <h3>Metadata</h3>
-                            <ReviewMetadataList data={props.page.dataset.data} />
-                        </section>
+
+                        <div className="flex flex-col gap-2.5 min-w-0">
+                            <div className="flex items-center gap-2.5">
+                                <span className="inline-flex px-2.5 py-[3px] rounded-full text-xs leading-[18px] font-semibold text-primary-900 bg-secondary-500">For review</span>
+                            </div>
+                            <h1 className="m-0 text-[30px] leading-[1.2] font-semibold tracking-tight text-primary-900 [text-wrap:balance]">
+                                {props.page.dataset.name}
+                            </h1>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-10 items-start">
+                            <div className="flex flex-col gap-7 min-w-0">
+                                <Description title="About Dataset" description={String(props.page.dataset.data.description ?? "")} />
+
+                                <section className="flex flex-col gap-3">
+                                    <h2 className="m-0 text-lg leading-7 font-semibold tracking-[-0.01em] text-primary-900">Files</h2>
+                                    <div className="rounded-lg border border-primary-200 bg-primary-0 px-4">
+                                        {props.page.dataset.versions.map((version) => (
+                                            <div key={version.name} className="flex justify-between items-baseline gap-4 py-3 border-b border-primary-100 last:border-b-0 text-sm">
+                                                <span className="font-mono text-primary-500">v{version.name}</span>
+                                                <span className="text-primary-900">{version.files_summary.count} files · {bytesToSize(version.files_summary.total_size_bytes)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                            </div>
+
+                            <aside className="rounded-lg border border-primary-200 bg-primary-0 px-4 pt-3 pb-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary-500">Metadata</span>
+                                <ReviewMetadataList data={props.page.dataset.data} />
+                            </aside>
+                        </div>
                     </>
                 }
             </div>
@@ -4160,6 +4352,8 @@ export async function getServerSideProps({ query }) {
     }
 }
 ```
+
+`Description` (from `components/DatasetSnapshot`) renders markdown through `react-markdown`; it is used only by the page, which no Jest test imports.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -4254,11 +4448,13 @@ export default function DoiLandingPage(props: { until: string }) {
             <Head>
                 <meta name="robots" content="noindex, nofollow" />
             </Head>
-            <div className="container mx-auto px-8 pt-16">
-                <div className="flex flex-col items-center max-w-lg mx-auto p-6 border-t-4 border-primary-500 bg-primary-50 rounded-b-lg" role="status">
-                    <MaterialSymbol icon="lock_clock" size={48} grade={-25} weight={200} />
-                    <h3 className="text-lg font-semibold mt-2">This dataset is under embargo</h3>
-                    <p className="mt-2 text-sm text-center">
+            <div className="mx-auto w-full max-w-lg px-8 pt-16 pb-24">
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-primary-200 bg-primary-0 p-8 text-center" role="status">
+                    <span className="flex items-center justify-center h-11 w-11 rounded-full bg-secondary-500 text-primary-900">
+                        <MaterialSymbol icon="lock_clock" size={22} grade={-25} weight={400} />
+                    </span>
+                    <h1 className="m-0 text-xl leading-snug font-semibold tracking-[-0.01em] text-primary-900">This dataset is under embargo</h1>
+                    <p className="m-0 text-sm leading-5 text-primary-600">
                         Its data will be available after {formatEmbargoDate(props.until)}.
                     </p>
                 </div>
@@ -4440,6 +4636,7 @@ export function invitationPageProps(signedIn: boolean, token: string, host: stri
 ```tsx
 import Router from "next/router";
 import { useEffect, useRef, useState } from "react";
+import { MaterialSymbol } from "react-material-symbols";
 import { GENERIC_ERROR_MESSAGE } from "../../contants/EmbargoConstants";
 import { ROUTE_PAGE_DATASETS_DETAILS } from "../../contants/InternalRoutesConstants";
 import { BFFAPI } from "../../gateways/BFFAPI";
@@ -4468,8 +4665,11 @@ export function AcceptInvitation(props: { token: string }) {
     }, [props.token]);
 
     return (
-        <div className="max-w-lg mx-auto p-6 border-t-4 border-primary-500 bg-primary-50 rounded-b-lg" role="status">
-            {message ?? "Accepting the invitation..."}
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-primary-200 bg-primary-0 p-8 text-center" role="status">
+            <span className="flex items-center justify-center h-11 w-11 rounded-full bg-secondary-500 text-primary-900">
+                <MaterialSymbol icon={message ? "info" : "progress_activity"} size={22} grade={-25} weight={400} className={message ? "" : "animate-spin"} />
+            </span>
+            <p className="m-0 text-sm leading-5 text-primary-700">{message ?? "Accepting the invitation..."}</p>
         </div>
     );
 }
@@ -4486,7 +4686,7 @@ import { invitationPageProps } from "../../lib/invitationPage";
 export default function InvitationPage(props: { token: string }) {
     return (
         <Layout fluid={true} hideFooter={true}>
-            <div className="container mx-auto px-8 pt-16">
+            <div className="mx-auto w-full max-w-lg px-8 pt-16 pb-24">
                 <AcceptInvitation token={props.token} />
             </div>
         </Layout>
@@ -4711,11 +4911,11 @@ export function ManualDoiConfirmation(props: Props) {
     if (props.gate === "owner_only") {
         return (
             <Modal title="Only the owner can do this" show={props.show} confimButtonText="" cancelButtonText="Close" cancel={props.onCancel}>
-                <p>
+                <p className="m-0">
                     A manual DOI is managed outside DataMap and is usually already public at DataCite, so registering
                     one ends the embargo. Only the owner of this dataset can end its embargo.
                 </p>
-                <p className="mt-2">To keep the embargo, use a DOI generated by DataMap.</p>
+                <p className="m-0 mt-2">To keep the embargo, use a DOI generated by DataMap.</p>
             </Modal>
         );
     }
@@ -4727,15 +4927,16 @@ export function ManualDoiConfirmation(props: Props) {
                 show={props.show}
                 confimButtonText="End embargo and register DOI"
                 cancelButtonText="Cancel"
+                destructive
                 cancel={props.onCancel}
                 confim={props.onConfirm}
             >
-                <p>
+                <p className="m-0">
                     A manual DOI is managed outside DataMap and is usually already public at DataCite. Registering it
                     here ends the embargo: the files become available to the namespace and the dataset&apos;s public
                     page is published. This cannot be undone.
                 </p>
-                <p className="mt-2">To keep the embargo, use a DOI generated by DataMap.</p>
+                <p className="m-0 mt-2">To keep the embargo, use a DOI generated by DataMap.</p>
             </Modal>
         );
     }
@@ -4749,7 +4950,7 @@ export function ManualDoiConfirmation(props: Props) {
             cancel={props.onCancel}
             confim={props.onConfirm}
         >
-            <p>After a manual DOI is registered, this dataset can no longer be put under embargo.</p>
+            <p className="m-0">After a manual DOI is registered, this dataset can no longer be put under embargo.</p>
         </Modal>
     );
 }
@@ -4803,7 +5004,11 @@ export function ManualDoiConfirmation(props: Props) {
     }
 ```
 
-3. The Save button becomes `disabled={isSubmitting || sending}`.
+3. Since #101 the form ends in `<EditFormActions onCancel={props.onManualDOIFormEditionCancel} isSubmitting={isSubmitting} />`; it becomes:
+
+```tsx
+                        <EditFormActions onCancel={props.onManualDOIFormEditionCancel} isSubmitting={isSubmitting || sending} />
+```
 
 4. After the closing `</Formik>` and before the closing `</div>` of `CitationManualDOIForm`'s return:
 
@@ -4841,65 +5046,64 @@ git commit -m "feat: a manual DOI ends the embargo only after the owner confirms
 
 ---
 
-### Task 15: The logo the emails show
+### Task 15: The images the emails show stay where they are served
 
-Plan 01 renders `{PUBLIC_BASE_URL}/images/email/datamap-logo.png` in every message (contracts, *Notifications*). Email clients do not display SVG, so the webapp serves a PNG rendered from the logo it already has, `public/img/logo.svg` (viewBox 85×30, black on transparent).
+The gatekeeper's email templates (`app/resources/email_templates/base.html`, gatekeeper #121) load `{site_url}/img/email/datamap-tile-36.png` in the header and `{site_url}/img/email/datamap-tile-22.png` in the footer. Webapp #101 already ships both under `public/img/email/` (72×72 and 44×44: twice the size they are shown at). Nothing in this repo refers to them, so nothing stops a later clean-up from deleting them and every email from losing its logo. This task adds that guard; it creates no image.
 
 **Files:**
-- Create: `public/images/email/datamap-logo.png` (340×120: the logo at twice the 170×60 it is shown at, on white, so it stays legible when a mail client forces dark mode)
-- Test: `lib/__tests__/emailLogo.test.ts`
+- Test: `lib/__tests__/emailImages.test.ts`
 
 **Interfaces:**
-- Produces: the static file at `/images/email/datamap-logo.png`, 340×120, PNG.
+- Produces: nothing at runtime; a test that fails if either file goes missing or changes format.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the test**
 
-`lib/__tests__/emailLogo.test.ts`:
+`lib/__tests__/emailImages.test.ts`:
 
 ```ts
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const LOGO = join(__dirname, "..", "..", "public", "images", "email", "datamap-logo.png");
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-describe("the logo the emails show", () => {
-    test("is a 340x120 PNG under public/, where the webapp serves it", () => {
-        const bytes = readFileSync(LOGO);
+function png(name: string): Buffer {
+    return readFileSync(join(__dirname, "..", "..", "public", "img", "email", name));
+}
 
-        expect(bytes.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-        expect(bytes.readUInt32BE(16)).toBe(340);
-        expect(bytes.readUInt32BE(20)).toBe(120);
+describe("the images the gatekeeper's emails load from the webapp", () => {
+    test.each([
+        ["datamap-tile-36.png", 72],
+        ["datamap-tile-22.png", 44],
+    ])("%s is a %ipx square PNG under public/img/email", (name, size) => {
+        const bytes = png(name);
+
+        expect(bytes.subarray(0, 8)).toEqual(PNG_SIGNATURE);
+        expect(bytes.readUInt32BE(16)).toBe(size);
+        expect(bytes.readUInt32BE(20)).toBe(size);
     });
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run it, then prove it can fail**
 
-Run: `npx jest lib/__tests__/emailLogo.test.ts`
-Expected: FAIL — `ENOENT: no such file or directory`.
+Run: `npx jest lib/__tests__/emailImages.test.ts`
+Expected: PASS (both files exist on main since 8c6f761).
 
-- [ ] **Step 3: Render the PNG**
+Then make it fail once, so it is known to test something:
 
 ```bash
-mkdir -p public/images/email
-npx --yes @resvg/resvg-js-cli@2.6.2-beta.1 --fit-width 340 --background white public/img/logo.svg public/images/email/datamap-logo.png
-file public/images/email/datamap-logo.png
+mv public/img/email/datamap-tile-22.png /tmp/datamap-tile-22.png
+npx jest lib/__tests__/emailImages.test.ts; echo "exit=$?"
+mv /tmp/datamap-tile-22.png public/img/email/datamap-tile-22.png
 ```
 
-Expected: `public/images/email/datamap-logo.png: PNG image data, 340 x 120, 8-bit/color RGBA, non-interlaced`
+Expected: `ENOENT` for `datamap-tile-22.png` and `exit=1`; after moving it back, `git status --short public/` prints nothing.
 
-Open it (`open public/images/email/datamap-logo.png`) and check by eye that it is the DataMap logo, black on white, not cropped.
-
-- [ ] **Step 4: Run the test to verify it passes**
-
-Run: `npx jest lib/__tests__/emailLogo.test.ts`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add public/images/email/datamap-logo.png lib/__tests__/emailLogo.test.ts
-git commit -m "feat: a PNG of the logo for the emails, which cannot show SVG"
+git add lib/__tests__/emailImages.test.ts
+git commit -m "test: keep the images the emails load where the webapp serves them"
 ```
 
 ---
@@ -4918,10 +5122,10 @@ Expected: `Tests:` line with `0 failed`; `Test Suites:` all passed. Read the exi
 Run: `npm run build; echo "exit=$?"`
 Expected: `exit=0`; the route list includes `/app/datasets/shared`, `/review/[token]`, `/invitations/[token]`, `/doi/datasets/[datasetId]/versions/[versionName]` and the new `/api/...` routes.
 
-- [ ] **Step 3: The email logo is served**
+- [ ] **Step 3: The images the emails load are served**
 
-Run: `npm run start & sleep 5; curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://localhost:3000/images/email/datamap-logo.png; kill %1`
-Expected: `200 image/png`
+Run: `npm run start & sleep 5; for f in datamap-tile-36.png datamap-tile-22.png; do curl -s -o /dev/null -w "$f %{http_code} %{content_type}\n" http://localhost:3000/img/email/$f; done; kill %1`
+Expected: `datamap-tile-36.png 200 image/png` and `datamap-tile-22.png 200 image/png`
 
 - [ ] **Step 4: Lint**
 
@@ -5068,4 +5272,4 @@ Expected: `307 https://datamap.pcs.usp.br/app/datasets/<dataset-id>/versions/1`.
 | Post-embargo banner: registered but not findable, manual promotion | 3, 8 |
 | Telemetry pages and events | 2, 6 |
 | Manual DOI under embargo: confirm, `end_embargo: true`, owner only; no embargo after a manual DOI | 1, 3, 8, 14 |
-| Email logo at `{PUBLIC_BASE_URL}/images/email/datamap-logo.png` | 15, 16 |
+| Email images at `{PUBLIC_BASE_URL}/img/email/datamap-tile-{36,22}.png` (shipped by #101; guarded here) | 15, 16 |

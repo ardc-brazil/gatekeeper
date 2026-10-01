@@ -481,12 +481,16 @@ Local development and the integration suite run [Mailpit](https://mailpit.axllen
 
 #### Templates
 
-HTML and plain-text versions of every message, rendered with Jinja2 (pinned in `requirements.txt`; today it arrives only as a transitive dependency) from `app/templates/email/`. One base layout carries the DataMap identity — logo, border, footer — and each notification fills in its content block. The layout follows a design made in Claude Design, adapted to what email clients render:
+Every message is rendered by the gatekeeper's existing `EmailTemplateRenderer` from `app/resources/email_templates/`, in the DataMap identity those templates already carry: `base.html` holds the header, footer and dark-mode styles, `_macros.html` the building blocks (heading, paragraph, details panel, bullet list, button, note, link fallback). New messages are new templates in the same style, extending `base.html` and built only from the macros:
 
-- table-based layout, 600 px wide, all CSS inline;
-- the logo as a PNG served from `PUBLIC_BASE_URL`, not SVG, which Gmail does not display;
-- system fonts only, and legible in the dark mode that mail clients force;
-- every message has a plain-text part that says the same thing.
+| Message | Template |
+|---|---|
+| Invitation | `dataset_invitation` (new) |
+| Access granted | `notification` (existing) |
+| Embargo ending | `embargo_reminder` (new) |
+| Embargo ended | `embargo_ended` (new) |
+
+The templates are table-based, 600 px wide, with inline styles and PNG images served by the webapp from `public/img/email/`. Every message also has a plain-text part that says the same thing, which is what the audit record keeps as `body_text`: a template's `.txt` sibling when it has one, otherwise text derived from its HTML. No message mentions notification preferences, unsubscribing or any other feature DataMap does not have; every one of them is transactional.
 
 ## Alternatives considered
 

@@ -6,7 +6,7 @@
 
 **Architecture:** A service enqueues a message as a row in `email_messages` (with a `queued` row in `email_events`). A dispatch pass, triggered over `POST /api/v1/internal/notifications/dispatch` by the Archivist, claims due rows with `SELECT … FOR UPDATE SKIP LOCKED`, moves them to `sending` in their own commit, and hands each to a thin `smtplib` wrapper that tells a definite refusal apart from an uncertain outcome. Only definite refusals are retried; anything uncertain becomes `failed`, so no message is ever delivered twice. Secrets in a message (an invitation link, say) stay in the row only until it leaves, then are masked.
 
-**Tech Stack:** FastAPI 0.111, SQLAlchemy 1.4.23, Alembic, dependency-injector 4.41, Jinja2 3.1, stdlib `smtplib`/`email`, prometheus-client 0.20, pytest/unittest, Mailpit (integration only).
+**Tech Stack:** FastAPI 0.111, SQLAlchemy 1.4.23, Alembic, dependency-injector 4.41, the existing `EmailTemplateRenderer` (Jinja2 3.1.6, already pinned), stdlib `smtplib`/`email`/`html.parser`, prometheus-client 0.20, pytest/unittest, Mailpit (integration only).
 
 **Spec:** `docs/rfcs/003-dataset-embargo.md` §Notifications. **Contracts:** `docs/superpowers/plans/2026-09-30-embargo-00-contracts.md` §Notifications, §Metrics.
 
@@ -23,6 +23,7 @@
 - Comments: only where a reader would otherwise undo something on purpose; one line (CLAUDE.md §Code Style). Empty `__init__.py` files have no comment.
 - `EMAIL_ENABLED` defaults to `false`; with it off, messages are recorded and stay `pending`.
 - Every config field added here has a default, so existing environments keep starting.
+- Every message is rendered by the existing `EmailTemplateRenderer` (`app/service/email_template.py`) from `app/resources/email_templates/`, with `site_url = PUBLIC_BASE_URL`. This plan adds no layout and changes no existing `.html` template. The `template` column and the `template` metric label hold `EmailTemplate` values.
 
 ## File Structure
 
@@ -30,17 +31,16 @@
 |---|---|
 | `app/config.py` (modify) | `EMAIL_*`, `SMTP_*`, `PUBLIC_BASE_URL`, `BUILD_COMMIT` settings |
 | `app/config_email_test.py` (create) | Defaults of the new settings |
-| `requirements.txt` (modify) | Pin `Jinja2==3.1.6` |
 | `Dockerfile`, `docker-compose-infrastructure.yaml`, `docker-compose-integration-test.yaml`, `Makefile` (modify) | Pass the build commit into the image as `BUILD_COMMIT` |
 | `local.env.template` (modify) | Document the new settings |
-| `app/model/email.py` (create) | Domain enums and dataclasses: `EmailStatus`, `EmailEventType`, `RenderedEmail`, `EmailRecord`, `EmailEventRecord`, `EmailQuery`, `DispatchResult` |
+| `app/model/email.py` (create) | Domain enums and dataclasses: `EmailStatus`, `EmailEventType`, `EmailRecord`, `EmailEventRecord`, `EmailQuery`, `DispatchResult` |
 | `app/model/db/email.py` (create) | SQLAlchemy models `EmailMessage`, `EmailEvent` |
 | `migrations/versions/2026_09_30_1200-d4e5f6a7b8c9_add_email_messages.py` (create) | Schema |
 | `migrations/env.py` (modify) | Import the email models for autogenerate |
 | `app/repository/email.py` (create) | Persistence, claiming with `SKIP LOCKED`, search |
-| `app/templates/email/base.html`, `base.txt` (create) | Provisional layout, replaced in Task 10 |
-| `app/templates/email/test_message/{subject.txt,body.txt,body.html}` (create) | Operator's test message |
-| `app/service/email_renderer.py` + `_test.py` (create) | Jinja2 rendering of subject, text and HTML |
+| `app/service/email_text.py` + `_test.py` (create) | HTML → plain text, for templates without a `.txt` |
+| `app/service/email_template.py`, `email_template_test.py` (modify, additive) | `RenderedEmail.text`, `.txt` siblings, `site_url` property |
+| `app/resources/email_templates/base.txt` (create) | Plain-text layout the `.txt` siblings extend |
 | `app/gateway/email/__init__.py`, `smtp.py`, `smtp_test.py` (create) | SMTP wrapper and failure classification |
 | `app/service/email_masking.py` + `_test.py` (create) | Masking of secret fields |
 | `app/service/email.py` + `email_test.py` (create) | `EmailService.enqueue`, `dispatch_due`, `search`, `fetch`, `send_test_message` |
@@ -56,9 +56,9 @@
 ## Task Order and Parallelism
 
 ```
-Task 1 (config, build commit, Jinja2 pin)
+Task 1 (config, build commit)
    ├── Task 2 (models + migration)  ──► Task 4 (repository) ─┐
-   ├── Task 3 (renderer + templates) ────────────────────────┤
+   ├── Task 3 (plain-text part) ─────────────────────────────┤
    └── Task 5 (SMTP gateway)        ─────────────────────────┤
                                                              ▼
                           Task 6 (masking, metrics, EmailService.enqueue)
@@ -68,20 +68,18 @@ Task 1 (config, build commit, Jinja2 pin)
                           Task 8 (routes + wiring)
                                                              ▼
                           Task 9 (Mailpit + integration tests + dashboard + validation loop)
-                                                             ▼
-                          Task 10 (Claude Design layout — blocked on the user's design)
 ```
 
 Tasks 2, 3 and 5 can run in parallel once Task 1 is merged. Everything else is sequential.
 
 ---
 
-### Task 1: Settings, build commit and the Jinja2 pin
+### Task 1: Settings and the build commit
 
 **Files:**
 - Modify: `app/config.py` (after `METRICS_PORT`, before the validator)
 - Create: `app/config_email_test.py`
-- Modify: `requirements.txt`, `Dockerfile`, `docker-compose-infrastructure.yaml`, `docker-compose-integration-test.yaml`, `Makefile`, `local.env.template`
+- Modify: `Dockerfile`, `docker-compose-infrastructure.yaml`, `docker-compose-integration-test.yaml`, `Makefile`, `local.env.template`
 
 **Interfaces:**
 - Produces: `settings.EMAIL_ENABLED: bool`, `EMAIL_FROM_NAME: str`, `EMAIL_FROM_ADDRESS: str`, `EMAIL_REPLY_TO: Optional[str]`, `SMTP_HOST: str`, `SMTP_PORT: int`, `SMTP_USERNAME: Optional[str]`, `SMTP_PASSWORD: Optional[str]`, `SMTP_STARTTLS: bool`, `SMTP_TIMEOUT_SECONDS: float`, `PUBLIC_BASE_URL: str`, `BUILD_COMMIT: str`. Container reads them as `config.<NAME>`.
@@ -190,13 +188,7 @@ In `app/config.py`, after the `METRICS_PORT` field:
 Run: `python -m pytest app/config_email_test.py -v`
 Expected: PASS (2 passed)
 
-- [ ] **Step 5: Pin Jinja2 and pass the build commit into the image**
-
-`requirements.txt` — add, keeping alphabetical order with the existing pins:
-
-```
-Jinja2==3.1.6
-```
+- [ ] **Step 5: Pass the build commit into the image**
 
 `Dockerfile` — in the final stage, before `CMD`:
 
@@ -242,14 +234,14 @@ PUBLIC_BASE_URL=http://localhost:3000
 Run:
 ```bash
 docker build --build-arg BUILD_COMMIT=$(git rev-parse --short HEAD) -t gatekeeper-email-check .
-docker run --rm gatekeeper-email-check python3 -c "import os, jinja2; print(os.environ['BUILD_COMMIT'], jinja2.__version__)"
+docker run --rm gatekeeper-email-check python3 -c "import os; print(os.environ['BUILD_COMMIT'])"
 ```
-Expected: the short commit hash and `3.1.6`.
+Expected: the short commit hash.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add app/config.py app/config_email_test.py requirements.txt Dockerfile docker-compose-infrastructure.yaml docker-compose-integration-test.yaml Makefile local.env.template
+git add app/config.py app/config_email_test.py Dockerfile docker-compose-infrastructure.yaml docker-compose-integration-test.yaml Makefile local.env.template
 git commit -m "feat: email and SMTP settings, off by default"
 ```
 
@@ -268,7 +260,6 @@ git commit -m "feat: email and SMTP settings, off by default"
 ```python
 class EmailStatus(str, enum.Enum): PENDING, SENDING, SENT, FAILED, SKIPPED   # values lower-case
 class EmailEventType(str, enum.Enum): QUEUED, ATTEMPT_FAILED, SENT, FAILED, SKIPPED
-@dataclass RenderedEmail(subject: str, text: str, html: str)
 @dataclass EmailRecord(id, template, template_version, recipient, subject, body_text, context: dict,
                        secret_fields: list[str], related_type, related_id, triggered_by, dedup_key,
                        status: EmailStatus, attempts: int, next_attempt_at, smtp_message_id, sent_at, created_at)
@@ -354,13 +345,6 @@ class EmailEventType(str, enum.Enum):
     SENT = "sent"
     FAILED = "failed"
     SKIPPED = "skipped"
-
-
-@dataclass
-class RenderedEmail:
-    subject: str
-    text: str
-    html: str
 
 
 @dataclass
@@ -640,218 +624,321 @@ git commit -m "feat: tables for every email the platform sends"
 
 ---
 
-### Task 3: Templates and renderer
+### Task 3: A plain-text part for the existing email templates
+
+The templates and their renderer already exist (`app/resources/email_templates/`, `app/service/email_template.py`, merged in #121). This plan sends every message through them and adds nothing to their HTML. What they lack is the plain-text part RFC 003 requires, which is also what `email_messages.body_text` records. This task adds it, additively: existing callers and tests keep working.
+
+It builds on the `fix/email-footer-links` PR, which merges first: that PR removes the *Notification preferences* and *Unsubscribe* links from `base.html`, points the footer's *Datasets* link at `{site_url}/app/datasets`, and stops the renderer from supplying `preferences_url` and `unsubscribe_url`. Nothing in this plan uses or tests those two variables, and no template added by this plan or plan 03 mentions preferences, unsubscribing, snoozing or any other feature DataMap does not have.
 
 **Files:**
-- Create: `app/templates/email/base.html`, `app/templates/email/base.txt`
-- Create: `app/templates/email/test_message/subject.txt`, `body.txt`, `body.html`
-- Create: `app/service/email_renderer.py`, `app/service/email_renderer_test.py`
+- Create: `app/service/email_text.py`, `app/service/email_text_test.py`
+- Modify: `app/service/email_template.py`, `app/service/email_template_test.py` (append only)
+- Create: `app/resources/email_templates/base.txt`
 
 **Interfaces:**
-- Consumes: `RenderedEmail` (Task 2). If Task 2 is not merged yet, this task adds `app/model/email.py` with only `RenderedEmail` and Task 2 extends it.
+- Consumes: nothing from other tasks.
 - Produces:
 
 ```python
-TEMPLATES_DIR: pathlib.Path            # app/templates/email
-class EmailRenderer:
-    def __init__(self, templates_dir: Path = TEMPLATES_DIR, base_context: dict | None = None): ...
-    def render(self, template: str, context: dict) -> RenderedEmail: ...
+# app/service/email_text.py
+def html_to_text(html: str) -> str: ...
+
+# app/service/email_template.py (additions)
+@dataclass(frozen=True)
+class RenderedEmail:
+    subject: str
+    html: str
+    text: str = ""              # new; always filled by render()
+
+class EmailTemplateRenderer:
+    @property
+    def site_url(self) -> str: ...      # new; the origin without a trailing slash
+    def render(self, template: EmailTemplate, context: dict[str, Any]) -> RenderedEmail: ...
 ```
 
-A template `<name>` is a directory with `subject.txt`, `body.txt` and `body.html`. `body.html` extends `base.html`; `body.txt` extends `base.txt`. `base_context` (from the container) carries `public_base_url`; templates use `{{ public_base_url }}/images/email/datamap-logo.png` for the logo. Missing context variables raise (`StrictUndefined`), so a template never goes out with a blank where a link should be.
+`render` also unescapes the subject: it comes from the `title` block of an `.html` template, which autoescaping turns into `Ozone &amp; CO2` — fine in HTML, wrong in a `Subject:` header. And it looks for `<template>.txt` beside `<template>.html`. When it exists it is rendered with the same variables; `select_autoescape(["html"])` already leaves `.txt` unescaped, and `StrictUndefined` still applies. When it does not, the text is derived from the rendered HTML by `html_to_text`. The four templates from #121 have no `.txt`, so they get derived text; templates added later (plan 03) ship a `.txt` that extends `base.txt`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing converter tests**
 
-`app/service/email_renderer_test.py`:
+`app/service/email_text_test.py`:
+
+```python
+import unittest
+
+from app.service.email_text import html_to_text
+
+
+class TestHtmlToText(unittest.TestCase):
+    def test_a_link_keeps_its_address(self):
+        text = html_to_text('<p>Open <a href="https://d.example/x">the dataset</a> now.</p>')
+
+        self.assertEqual(text, "Open the dataset (https://d.example/x) now.")
+
+    def test_a_link_whose_label_is_its_address_is_written_once(self):
+        text = html_to_text('<a href="https://d.example/x">https://d.example/x</a>')
+
+        self.assertEqual(text, "https://d.example/x")
+
+    def test_rows_and_breaks_become_lines_and_whitespace_collapses(self):
+        html = "<table><tr><td>  First   line </td></tr><tr><td>Second<br>Third</td></tr></table>"
+
+        self.assertEqual(html_to_text(html), "First line\nSecond\nThird")
+
+    def test_head_style_and_hidden_preheader_are_left_out(self):
+        html = (
+            "<html><head><title>Subject</title><meta charset=\"utf-8\"><style>a{color:red}</style></head>"
+            '<body><span style="display:none!important;">preheader &#8199;&#847;</span>'
+            "<p>Body</p></body></html>"
+        )
+
+        self.assertEqual(html_to_text(html), "Body")
+
+    def test_entities_are_decoded(self):
+        self.assertEqual(html_to_text("<p>A&nbsp;&amp;&nbsp;B &middot; C</p>"), "A & B · C")
+
+    def test_blank_lines_never_pile_up(self):
+        html = "<p>One</p><p></p><p></p><p>Two</p>"
+
+        self.assertEqual(html_to_text(html), "One\n\nTwo")
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `python -m pytest app/service/email_text_test.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'app.service.email_text'`
+
+- [ ] **Step 3: Write the converter**
+
+`app/service/email_text.py`:
+
+```python
+import re
+from html.parser import HTMLParser
+
+_SKIPPED = {"head", "title", "style", "script"}
+_BLOCKS = {"div", "tr", "table", "br", "li", "ul", "ol"}
+_PARAGRAPHS = {"p", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+
+class _Converter(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skipped: list[str] = []
+        self._hidden_tag: str | None = None
+        self._hidden_depth = 0
+        self._link_href: str | None = None
+        self._link_text: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if self._skipped:
+            if tag in _SKIPPED:
+                self._skipped.append(tag)
+            return
+        if tag in _SKIPPED:
+            self._skipped.append(tag)
+            return
+        if self._hidden_tag is not None:
+            if tag == self._hidden_tag:
+                self._hidden_depth += 1
+            return
+        attributes = dict(attrs)
+        if "display:none" in (attributes.get("style") or "").replace(" ", "").lower():
+            self._hidden_tag, self._hidden_depth = tag, 1
+            return
+        if tag == "a":
+            self._link_href = attributes.get("href")
+            self._link_text = []
+        elif tag in _PARAGRAPHS:
+            self._parts.append("\n\n")
+        elif tag in _BLOCKS:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if self._skipped:
+            if tag == self._skipped[-1]:
+                self._skipped.pop()
+            return
+        if self._hidden_tag is not None:
+            if tag == self._hidden_tag:
+                self._hidden_depth -= 1
+                if self._hidden_depth == 0:
+                    self._hidden_tag = None
+            return
+        if tag == "a" and self._link_href is not None:
+            label = " ".join("".join(self._link_text).split())
+            href = self._link_href
+            self._parts.append(href if not label or label == href else f"{label} ({href})")
+            self._link_href = None
+        elif tag in _PARAGRAPHS:
+            self._parts.append("\n\n")
+
+    def handle_data(self, data):
+        if self._skipped or self._hidden_tag is not None:
+            return
+        if self._link_href is not None:
+            self._link_text.append(data)
+        else:
+            self._parts.append(data)
+
+    def text(self) -> str:
+        lines = [" ".join(line.split()) for line in "".join(self._parts).replace("\xa0", " ").split("\n")]
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def html_to_text(html: str) -> str:
+    converter = _Converter()
+    converter.feed(html)
+    converter.close()
+    return converter.text()
+```
+
+- [ ] **Step 4: Run them to verify they pass**
+
+Run: `python -m pytest app/service/email_text_test.py -v`
+Expected: PASS (6 passed)
+
+- [ ] **Step 5: Write the failing renderer tests**
+
+Append to `app/service/email_template_test.py` (the existing tests stay as they are):
 
 ```python
 import tempfile
-import unittest
 from pathlib import Path
 
-from jinja2 import UndefinedError
 
-from app.service.email_renderer import TEMPLATES_DIR, EmailRenderer
-
-
-class TestEmailRenderer(unittest.TestCase):
+class TestPlainTextPart(unittest.TestCase):
     def setUp(self):
-        self.renderer = EmailRenderer(
-            base_context={"public_base_url": "https://datamap.example"}
+        self.renderer = EmailTemplateRenderer(site_url=SITE_URL)
+
+    def test_a_template_without_a_text_file_gets_text_derived_from_its_html(self):
+        email = self.renderer.render(
+            EmailTemplate.NOTIFICATION, CONTEXTS[EmailTemplate.NOTIFICATION]
         )
 
-    def test_the_test_message_renders_in_the_datamap_layout(self):
-        rendered = self.renderer.render("test_message", {"code": "c0ffee12"})
+        self.assertIn("André Maia approved your request.", email.text)
+        self.assertIn("Open dataset (https://datamap.example.org/datasets/7b21d4)", email.text)
+        self.assertNotIn("<", email.text)
+        self.assertNotIn("You now have access to Manaus", email.text)
 
-        self.assertEqual(rendered.subject, "DataMap test message")
-        self.assertIn("c0ffee12", rendered.text)
-        self.assertIn("c0ffee12", rendered.html)
-        self.assertIn(
-            'src="https://datamap.example/images/email/datamap-logo.png"', rendered.html
-        )
-        self.assertIn('width="600"', rendered.html)
-        self.assertIn("DataMap", rendered.text)
-
-    def test_html_escapes_what_it_is_given(self):
-        rendered = self.renderer.render("test_message", {"code": "<b>x</b>"})
-
-        self.assertIn("&lt;b&gt;x&lt;/b&gt;", rendered.html)
-        self.assertIn("<b>x</b>", rendered.text)
-
-    def test_a_missing_variable_is_an_error_not_a_blank(self):
-        with self.assertRaises(UndefinedError):
-            self.renderer.render("test_message", {})
-
-    def test_the_subject_is_one_line(self):
+    def test_a_text_file_beside_the_html_is_used_unescaped(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "t").mkdir()
-            (root / "t" / "subject.txt").write_text("  Hello {{ name }}\n\n")
-            (root / "t" / "body.txt").write_text("Hi")
-            (root / "t" / "body.html").write_text("<p>Hi</p>")
+            (root / "notification.html").write_text(
+                "{% block title %}{{ title }}{% endblock %}<p>{{ title }}</p>"
+            )
+            (root / "notification.txt").write_text("Plain: {{ title }} at {{ site_url }}")
+            renderer = EmailTemplateRenderer(site_url=SITE_URL, templates_dir=root)
 
-            rendered = EmailRenderer(templates_dir=root).render("t", {"name": "Ana"})
+            email = renderer.render(EmailTemplate.NOTIFICATION, {"title": "A & B"})
 
-        self.assertEqual(rendered.subject, "Hello Ana")
+        self.assertEqual(email.text, "Plain: A & B at https://datamap.example.org")
+        self.assertIn("A &amp; B", email.html)
 
-    def test_templates_live_inside_the_app_package(self):
-        self.assertTrue((TEMPLATES_DIR / "base.html").is_file())
+    def test_a_missing_variable_in_the_text_file_raises(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "notification.html").write_text("{% block title %}t{% endblock %}")
+            (root / "notification.txt").write_text("{{ nowhere }}")
+            renderer = EmailTemplateRenderer(site_url=SITE_URL, templates_dir=root)
+
+            with self.assertRaises(UndefinedError):
+                renderer.render(EmailTemplate.NOTIFICATION, {})
+
+    def test_the_site_url_is_exposed_without_a_trailing_slash(self):
+        self.assertEqual(self.renderer.site_url, "https://datamap.example.org")
+
+    def test_the_subject_is_plain_text_not_html(self):
+        context = {**CONTEXTS[EmailTemplate.NOTIFICATION], "title": "Ozone & CO2 — Ana's data"}
+
+        email = self.renderer.render(EmailTemplate.NOTIFICATION, context)
+
+        self.assertEqual(email.subject, "Ozone & CO2 — Ana's data")
+        self.assertIn("Ozone &amp; CO2", email.html)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 6: Run them to verify they fail**
 
-Run: `python -m pytest app/service/email_renderer_test.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'app.service.email_renderer'`
+Run: `python -m pytest app/service/email_template_test.py -v`
+Expected: the existing tests PASS; the five new ones FAIL with `AttributeError: 'RenderedEmail' object has no attribute 'text'`, `AttributeError: 'EmailTemplateRenderer' object has no attribute 'site_url'`, and `'Ozone &amp; CO2 …' != 'Ozone & CO2 …'` — the subject comes from the `title` block of an `.html` template, so it is escaped today.
 
-- [ ] **Step 3: Write the renderer**
+- [ ] **Step 7: Extend the renderer**
 
-`app/service/email_renderer.py`:
+In `app/service/email_template.py`, add the imports:
 
 ```python
-from pathlib import Path
+import html as html_entities
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
+from app.service.email_text import html_to_text
+```
 
-from app.model.email import RenderedEmail
+Replace the `RenderedEmail` dataclass:
 
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "email"
+```python
+@dataclass(frozen=True)
+class RenderedEmail:
+    subject: str
+    html: str
+    text: str = ""
+```
 
+In `EmailTemplateRenderer`, add after `__init__`:
 
-class EmailRenderer:
-    def __init__(
-        self, templates_dir: Path = TEMPLATES_DIR, base_context: dict | None = None
-    ) -> None:
-        self._env = Environment(
-            loader=FileSystemLoader(str(templates_dir)),
-            autoescape=select_autoescape(enabled_extensions=("html",)),
-            undefined=StrictUndefined,
-            trim_blocks=True,
-            lstrip_blocks=True,
-            keep_trailing_newline=True,
-        )
-        self._base_context = dict(base_context or {})
+```python
+    @property
+    def site_url(self) -> str:
+        return self._site_url
+```
 
-    def render(self, template: str, context: dict) -> RenderedEmail:
-        values = {**self._base_context, **context}
-        subject = self._env.get_template(f"{template}/subject.txt").render(values)
+and replace the `return RenderedEmail(...)` at the end of `render` with:
+
+```python
+        html = jinja_template.render(variables)
         return RenderedEmail(
-            subject=" ".join(subject.split()),
-            text=self._env.get_template(f"{template}/body.txt").render(values),
-            html=self._env.get_template(f"{template}/body.html").render(values),
+            subject=html_entities.unescape(subject.strip()),
+            html=html,
+            text=self._text(template, variables, html),
         )
+
+    def _text(self, template: EmailTemplate, variables: dict[str, Any], html: str) -> str:
+        name = f"{template.value}.txt"
+        if name not in self._env.list_templates():
+            return html_to_text(html)
+        return self._env.get_template(name).render(variables).strip()
 ```
 
-- [ ] **Step 4: Write the provisional layout and the test message**
+The presence check uses `list_templates()` rather than catching `TemplateNotFound`, so a `.txt` that extends a missing parent still fails loudly.
 
-`app/templates/email/base.html` — provisional; Task 10 replaces it with the Claude Design layout:
+- [ ] **Step 8: Add the text layout the new templates extend**
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark">
-<title>{% block title %}DataMap{% endblock %}</title>
-</head>
-<body style="margin:0;padding:0;background-color:#f4f5f4;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f5f4;">
-  <tr>
-    <td align="center" style="padding:32px 16px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:#ffffff;border:1px solid #d9dcd9;border-radius:6px;">
-        <tr>
-          <td style="padding:24px 32px;border-bottom:1px solid #d9dcd9;">
-            <img src="{{ public_base_url }}/images/email/datamap-logo.png" width="140" height="36" alt="DataMap" style="display:block;border:0;">
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2421;">
-            {% block content %}{% endblock %}
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:20px 32px;border-top:1px solid #d9dcd9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#5f665f;">
-            DataMap · Universidade de São Paulo<br>
-            <a href="{{ public_base_url }}" style="color:#5f665f;">{{ public_base_url }}</a>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-</body>
-</html>
-```
-
-`app/templates/email/base.txt`:
+`app/resources/email_templates/base.txt`:
 
 ```
 {% block content %}{% endblock %}
 
 --
-DataMap · Universidade de São Paulo
-{{ public_base_url }}
+DataMap — a data platform for atmospheric big data and data science research in Brazil.
+{{ site_url }}/
+
+{% block reason %}{% endblock %}
+
+
+University of São Paulo · Escola Politécnica, PCS
+Av. Prof. Luciano Gualberto, 158 · São Paulo, SP 05508-010 · Brazil
 ```
 
-`app/templates/email/test_message/subject.txt`:
+`trim_blocks` eats the newline after `{% endblock %}`, hence the two empty lines before the address. Nothing renders `base.txt` on its own; it exists for the `.txt` siblings plan 03 adds (`{% extends "base.txt" %}`).
 
-```
-DataMap test message
-```
+- [ ] **Step 9: Run the renderer and converter tests**
 
-`app/templates/email/test_message/body.txt`:
+Run: `python -m pytest app/service/email_template_test.py app/service/email_text_test.py -v`
+Expected: PASS (all existing renderer tests plus 5 + 6 new)
 
-```
-{% extends "base.txt" %}
-{% block content %}
-This is a test message from DataMap.
-
-If it reached your inbox, the platform can send email. Verification code: {{ code }}
-{% endblock %}
-```
-
-`app/templates/email/test_message/body.html`:
-
-```html
-{% extends "base.html" %}
-{% block title %}DataMap test message{% endblock %}
-{% block content %}
-<p style="margin:0 0 16px;">This is a test message from DataMap.</p>
-<p style="margin:0;">If it reached your inbox, the platform can send email. Verification code: <strong>{{ code }}</strong></p>
-{% endblock %}
-```
-
-- [ ] **Step 5: Run test to verify it passes**
-
-Run: `python -m pytest app/service/email_renderer_test.py -v`
-Expected: PASS (5 passed)
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add app/templates/email app/service/email_renderer.py app/service/email_renderer_test.py
-git commit -m "feat: render email from templates in a DataMap layout"
+git add app/service/email_text.py app/service/email_text_test.py app/service/email_template.py app/service/email_template_test.py app/resources/email_templates/base.txt
+git commit -m "feat: a plain-text part for every email template"
 ```
 
 ---
@@ -1399,7 +1486,7 @@ git commit -m "feat: SMTP sender that tells a refusal from an unknown outcome"
 - Create: `app/service/email.py`, `app/service/email_test.py`
 
 **Interfaces:**
-- Consumes: `EmailRepository` (Task 4), `EmailRenderer` (Task 3), `SmtpSender` (Task 5, only as a constructor argument here).
+- Consumes: `EmailRepository` (Task 4), `EmailTemplate`/`EmailTemplateRenderer` (`app/service/email_template.py`, extended in Task 3), `SmtpSender` (Task 5, only as a constructor argument here).
 - Produces:
 
 ```python
@@ -1410,7 +1497,7 @@ metrics.email_outcome(template: str, outcome: str) -> None     # outcome: sent |
 metrics.email_pending(count: int) -> None
 
 class EmailService:
-    def __init__(self, repository: EmailRepository, renderer: EmailRenderer, sender: SmtpSender,
+    def __init__(self, repository: EmailRepository, renderer: EmailTemplateRenderer, sender: SmtpSender,
                  enabled: bool, from_name: str, from_address: str, reply_to: str | None,
                  template_version: str, clock: Callable[[], datetime] = _utcnow): ...
     def enqueue(self, *, template: str, recipient: str, context: dict,
@@ -1419,7 +1506,7 @@ class EmailService:
                 dedup_key: str | None = None) -> UUID | None: ...
 ```
 
-`enqueue` renders immediately, so a broken template fails in the request that caused it, not minutes later in the dispatcher. It returns the message id, or `None` when `dedup_key` already exists. A placeholder recipient is stored as `skipped`, masked at once, and counted.
+`enqueue` renders immediately, so a broken template fails in the request that caused it, not minutes later in the dispatcher. `template` is an `EmailTemplate` value; an unknown name raises `ValueError` there too. It returns the message id, or `None` when `dedup_key` already exists. A placeholder recipient is stored as `skipped`, masked at once, and counted.
 
 - [ ] **Step 1: Write the failing masking test**
 
@@ -1453,6 +1540,26 @@ class TestMaskSecrets(unittest.TestCase):
 
         self.assertEqual(masked_context, {"code": MASK})
         self.assertEqual(masked_body, "body")
+
+    def test_a_secret_repeated_inside_other_fields_is_masked_there_too(self):
+        context = {
+            "code": "c0ffee12",
+            "message": "Verification code: c0ffee12",
+            "details": [{"label": "Code", "value": "c0ffee12"}],
+            "count": 3,
+        }
+
+        masked_context, _ = mask_secrets(context, "", ["code"])
+
+        self.assertEqual(
+            masked_context,
+            {
+                "code": MASK,
+                "message": f"Verification code: {MASK}",
+                "details": [{"label": "Code", "value": MASK}],
+                "count": 3,
+            },
+        )
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -1465,29 +1572,45 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'app.service.email_mas
 `app/service/email_masking.py`:
 
 ```python
-from typing import Iterable
+from typing import Any, Iterable
 
 MASK = "[masked]"
+
+
+def _replace(value: Any, secrets: list[str]) -> Any:
+    if isinstance(value, str):
+        for secret in secrets:
+            value = value.replace(secret, MASK)
+        return value
+    if isinstance(value, list):
+        return [_replace(item, secrets) for item in value]
+    if isinstance(value, dict):
+        return {key: _replace(item, secrets) for key, item in value.items()}
+    return value
 
 
 def mask_secrets(
     context: dict, body_text: str, secret_fields: Iterable[str]
 ) -> tuple[dict, str]:
-    masked = dict(context)
-    for name in secret_fields:
-        if name not in masked:
-            continue
-        value = masked[name]
-        masked[name] = MASK
-        if isinstance(value, str) and value:
-            body_text = body_text.replace(value, MASK)
+    names = set(secret_fields)
+    secrets = [
+        context[name]
+        for name in names
+        if isinstance(context.get(name), str) and context[name]
+    ]
+    masked = {
+        key: MASK if key in names else _replace(value, secrets)
+        for key, value in context.items()
+    }
+    for secret in secrets:
+        body_text = body_text.replace(secret, MASK)
     return masked, body_text
 ```
 
 - [ ] **Step 4: Run it to verify it passes**
 
 Run: `python -m pytest app/service/email_masking_test.py -v`
-Expected: PASS (3 passed)
+Expected: PASS (4 passed)
 
 - [ ] **Step 5: Write the failing metrics test**
 
@@ -1568,9 +1691,20 @@ from app.model.email import EmailEventType, EmailRecord, EmailStatus
 from app.repository.email import EmailRepository
 from app.service.email import EmailService
 from app.service.email_masking import MASK
-from app.service.email_renderer import EmailRenderer
+from app.service.email_template import EmailTemplateRenderer
 
 NOW = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
+
+CODE = "c0ffee12"
+TEST_CONTEXT = {
+    "title": "DataMap test message",
+    "preheader": "A test message from DataMap.",
+    "message": f"If this reached your inbox, the platform can send email. Verification code: {CODE}",
+    "cta_label": "Open DataMap",
+    "cta_url": "https://datamap.example",
+    "reason": "You received this email because a DataMap administrator sent a test message to this address.",
+    "code": CODE,
+}
 
 
 def _sample(name: str, **labels) -> float:
@@ -1580,12 +1714,12 @@ def _sample(name: str, **labels) -> float:
 def _record(**overrides) -> EmailRecord:
     values = dict(
         id=uuid4(),
-        template="test_message",
+        template="notification",
         template_version="abc1234",
         recipient="someone@example.com",
         subject="DataMap test message",
         body_text="Verification code: c0ffee12",
-        context={"code": "c0ffee12"},
+        context=dict(TEST_CONTEXT),
         secret_fields=["code"],
         related_type=None,
         related_id=None,
@@ -1606,9 +1740,7 @@ class EmailServiceTestCase(unittest.TestCase):
     def setUp(self):
         self.repository = Mock(spec=EmailRepository)
         self.sender = Mock(spec=SmtpSender)
-        self.renderer = EmailRenderer(
-            base_context={"public_base_url": "https://datamap.example"}
-        )
+        self.renderer = EmailTemplateRenderer(site_url="https://datamap.example")
         self.service = self.build(enabled=True)
 
     def build(self, enabled: bool) -> EmailService:
@@ -1640,9 +1772,9 @@ class TestEnqueue(EmailServiceTestCase):
         related = uuid4()
 
         message_id = self.service.enqueue(
-            template="test_message",
+            template="notification",
             recipient="someone@example.com",
-            context={"code": "c0ffee12"},
+            context=TEST_CONTEXT,
             secret_fields=frozenset({"code"}),
             related_type="dataset",
             related_id=related,
@@ -1656,7 +1788,7 @@ class TestEnqueue(EmailServiceTestCase):
         self.assertEqual(event, EmailEventType.QUEUED)
         self.assertEqual(message.subject, "DataMap test message")
         self.assertIn("c0ffee12", message.body_text)
-        self.assertEqual(message.context, {"code": "c0ffee12"})
+        self.assertEqual(message.context, TEST_CONTEXT)
         self.assertEqual(message.secret_fields, ["code"])
         self.assertEqual(message.template_version, "abc1234")
         self.assertEqual((message.related_type, message.related_id), ("dataset", related))
@@ -1667,9 +1799,9 @@ class TestEnqueue(EmailServiceTestCase):
 
         self.assertIsNone(
             self.service.enqueue(
-                template="test_message",
+                template="notification",
                 recipient="someone@example.com",
-                context={"code": "x"},
+                context=TEST_CONTEXT,
                 dedup_key="test:1",
             )
         )
@@ -1678,12 +1810,12 @@ class TestEnqueue(EmailServiceTestCase):
         self.repository.add.side_effect = lambda message, event, detail=None: _record(
             id=message.id, status=EmailStatus.SKIPPED
         )
-        before = _sample("datamap_emails_total", template="test_message", outcome="skipped")
+        before = _sample("datamap_emails_total", template="notification", outcome="skipped")
 
         self.service.enqueue(
-            template="test_message",
+            template="notification",
             recipient="0000-0002-1825-0097@fake.mail.com",
-            context={"code": "c0ffee12"},
+            context=TEST_CONTEXT,
             secret_fields=frozenset({"code"}),
         )
 
@@ -1691,10 +1823,11 @@ class TestEnqueue(EmailServiceTestCase):
         self.assertEqual(message.status, EmailStatus.SKIPPED.value)
         self.assertEqual(event, EmailEventType.SKIPPED)
         self.assertEqual(detail, "placeholder address")
-        self.assertEqual(message.context, {"code": MASK})
-        self.assertNotIn("c0ffee12", message.body_text)
+        self.assertEqual(message.context["code"], MASK)
+        self.assertNotIn(CODE, str(message.context))
+        self.assertNotIn(CODE, message.body_text)
         self.assertEqual(
-            _sample("datamap_emails_total", template="test_message", outcome="skipped"),
+            _sample("datamap_emails_total", template="notification", outcome="skipped"),
             before + 1,
         )
         self.sender.send.assert_not_called()
@@ -1702,7 +1835,7 @@ class TestEnqueue(EmailServiceTestCase):
     def test_a_template_that_cannot_render_fails_where_it_was_asked_for(self):
         with self.assertRaises(Exception):
             self.service.enqueue(
-                template="test_message", recipient="a@example.com", context={}
+                template="notification", recipient="a@example.com", context={}
             )
 
         self.repository.add.assert_not_called()
@@ -1730,7 +1863,7 @@ from app.model.db.email import EmailMessage
 from app.model.email import EmailEventType, EmailStatus
 from app.repository.email import EmailRepository
 from app.service.email_masking import mask_secrets
-from app.service.email_renderer import EmailRenderer
+from app.service.email_template import EmailTemplate, EmailTemplateRenderer
 
 PLACEHOLDER_DOMAIN = "@fake.mail.com"
 
@@ -1743,7 +1876,7 @@ class EmailService:
     def __init__(
         self,
         repository: EmailRepository,
-        renderer: EmailRenderer,
+        renderer: EmailTemplateRenderer,
         sender: SmtpSender,
         enabled: bool,
         from_name: str,
@@ -1775,7 +1908,7 @@ class EmailService:
         triggered_by: UUID | None = None,
         dedup_key: str | None = None,
     ) -> UUID | None:
-        rendered = self._renderer.render(template, context)
+        rendered = self._renderer.render(EmailTemplate(template), context)
         skipped = recipient.strip().lower().endswith(PLACEHOLDER_DOMAIN)
 
         stored_context, body_text = dict(context), rendered.text
@@ -1904,8 +2037,9 @@ class TestDispatch(EmailServiceTestCase):
         self.assertEqual(kwargs["message_id"], record.id)
         self.assertEqual(kwargs["smtp_message_id"], sent["Message-ID"])
         self.assertEqual(kwargs["sent_at"], NOW)
-        self.assertEqual(kwargs["context"], {"code": MASK})
-        self.assertNotIn("c0ffee12", kwargs["body_text"])
+        self.assertEqual(kwargs["context"]["code"], MASK)
+        self.assertNotIn(CODE, str(kwargs["context"]))
+        self.assertNotIn(CODE, kwargs["body_text"])
 
     def test_a_definite_refusal_is_retried_later(self):
         self.repository.claim_due.return_value = [_record(attempts=0)]
@@ -1929,7 +2063,7 @@ class TestDispatch(EmailServiceTestCase):
         self.assertEqual(result.failed, 1)
         kwargs = self.repository.mark_failed.call_args.kwargs
         self.assertEqual(kwargs["attempts"], MAX_ATTEMPTS)
-        self.assertEqual(kwargs["context"], {"code": MASK})
+        self.assertEqual(kwargs["context"]["code"], MASK)
         self.repository.mark_retry.assert_not_called()
 
     def test_an_uncertain_outcome_is_never_retried(self):
@@ -1973,13 +2107,13 @@ class TestDispatch(EmailServiceTestCase):
         self.assertEqual(_sample("datamap_email_pending"), 4.0)
 
     def test_outcomes_are_counted(self):
-        before = _sample("datamap_emails_total", template="test_message", outcome="sent")
+        before = _sample("datamap_emails_total", template="notification", outcome="sent")
         self.repository.claim_due.return_value = [_record(), _record()]
 
         self.service.dispatch_due()
 
         self.assertEqual(
-            _sample("datamap_emails_total", template="test_message", outcome="sent"),
+            _sample("datamap_emails_total", template="notification", outcome="sent"),
             before + 2,
         )
 
@@ -2026,9 +2160,11 @@ class TestReading(EmailServiceTestCase):
         self.service.send_test_message("ops@example.com", triggered_by=admin)
 
         message, _, _ = self.stored()
-        self.assertEqual(message.template, "test_message")
+        self.assertEqual(message.template, "notification")
         self.assertEqual(message.secret_fields, ["code"])
         self.assertEqual(len(message.context["code"]), 8)
+        self.assertIn(message.context["code"], message.context["message"])
+        self.assertEqual(message.subject, "DataMap test message")
         self.assertEqual(message.triggered_by, admin)
 ```
 
@@ -2093,10 +2229,21 @@ Add these methods to `EmailService`:
         return found
 
     def send_test_message(self, recipient: str, triggered_by: UUID | None) -> UUID:
+        code = secrets.token_hex(4)
         return self.enqueue(
-            template="test_message",
+            template=EmailTemplate.NOTIFICATION.value,
             recipient=recipient,
-            context={"code": secrets.token_hex(4)},
+            context={
+                "title": "DataMap test message",
+                "preheader": "A test message from DataMap.",
+                "message": "If this reached your inbox, the platform can send email. "
+                f"Verification code: {code}",
+                "cta_label": "Open DataMap",
+                "cta_url": self._renderer.site_url,
+                "reason": "You received this email because a DataMap administrator "
+                "sent a test message to this address.",
+                "code": code,
+            },
             secret_fields=frozenset({"code"}),
             triggered_by=triggered_by,
         )
@@ -2166,7 +2313,7 @@ Add these methods to `EmailService`:
         )
 
     def _mime(self, record: EmailRecord) -> MimeMessage:
-        rendered = self._renderer.render(record.template, record.context)
+        rendered = self._renderer.render(EmailTemplate(record.template), record.context)
         message = MimeMessage()
         message["From"] = formataddr((self._from_name, self._from_address))
         message["To"] = record.recipient
@@ -2500,7 +2647,7 @@ In `app/container.py`, add imports:
 from app.gateway.email.smtp import SmtpSender
 from app.repository.email import EmailRepository
 from app.service.email import EmailService
-from app.service.email_renderer import EmailRenderer
+from app.service.email_template import EmailTemplateRenderer
 ```
 
 Add to `wiring_config.modules`:
@@ -2519,8 +2666,8 @@ Add providers after `tus_service`:
     )
 
     email_renderer = providers.Singleton(
-        EmailRenderer,
-        base_context=providers.Dict(public_base_url=config.PUBLIC_BASE_URL),
+        EmailTemplateRenderer,
+        site_url=config.PUBLIC_BASE_URL,
     )
 
     smtp_sender = providers.Factory(
@@ -2687,6 +2834,7 @@ class Mailpit:
 `tests/integration/test_email_delivery.py`:
 
 ```python
+import json
 import uuid
 
 import pytest
@@ -2762,7 +2910,8 @@ class TestEmailDelivery:
         code = body.split("Verification code: ")[1].split()[0]
         assert detail["status"] == "sent"
         assert detail["recipient"] == recipient
-        assert detail["context"] == {"code": "[masked]"}
+        assert detail["context"]["code"] == "[masked]"
+        assert code not in json.dumps(detail["context"])
         assert code not in detail["body_text"]
         assert "[masked]" in detail["body_text"]
         assert detail["smtp_message_id"].strip("<>") == delivered[0]["MessageID"]
@@ -2795,14 +2944,14 @@ class TestEmailDelivery:
 
     def test_sending_is_counted(self, http_client, valid_headers, client_headers):
         before = _sample(
-            _scrape(), "datamap_emails_total", template="test_message", outcome="sent"
+            _scrape(), "datamap_emails_total", template="notification", outcome="sent"
         )
         _queue_test_message(http_client, valid_headers, _recipient())
 
         _dispatch(http_client, client_headers)
 
         after = _sample(
-            _scrape(), "datamap_emails_total", template="test_message", outcome="sent"
+            _scrape(), "datamap_emails_total", template="notification", outcome="sent"
         )
         assert after == before + 1
 
@@ -2879,41 +3028,7 @@ git commit -m "test: email is delivered once, recorded, and masked, against Mail
 
 ---
 
-### Task 10: The DataMap email layout from Claude Design
-
-**Blocked until the user provides the Claude Design template.** Everything before this task works with the provisional layout; this task only replaces `base.html` and `base.txt`.
-
-**Files:**
-- Modify: `app/templates/email/base.html`, `app/templates/email/base.txt`
-- Modify: `app/service/email_renderer_test.py` (only if the logo path or width changes)
-
-**Interfaces:**
-- Consumes: the design (HTML export or screenshots) from the user.
-- Produces: the same blocks (`title`, `content`) and the same variables (`public_base_url`), so no other template changes.
-
-- [ ] **Step 1: Translate the design into an email-safe layout**
-
-Rules the translation must keep (RFC 003 §Templates): table-based layout, 600 px wide, every style inline, the logo as a PNG at `{{ public_base_url }}/images/email/datamap-logo.png` (not SVG), system fonts only, legible under the dark mode mail clients force, and the `{% block content %}` slot where each message's body goes. Keep `base.txt` saying the same as the HTML footer.
-
-- [ ] **Step 2: Run the renderer tests**
-
-Run: `python -m pytest app/service/email_renderer_test.py -v`
-Expected: PASS.
-
-- [ ] **Step 3: Look at it in real clients**
-
-Run `make ENV_FILE_PATH=integration-test.env integration-test-up`, queue a test message with `POST /api/v1/admin/emails/test` to a Mailpit address, dispatch, and open `http://localhost:8025` — check the HTML and the "HTML Check" tab. Then send one through the production account to a Gmail inbox and to an Outlook inbox, in light and dark mode, and attach the screenshots to the PR.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add app/templates/email/base.html app/templates/email/base.txt app/service/email_renderer_test.py
-git commit -m "feat: DataMap email layout"
-```
-
----
-
 ## Self-Review
 
-- **Spec coverage:** settings (T1); tables with every audit column and the append-only events (T2); render at enqueue with subject/body as rendered and template version (T1 build commit, T6); secrets masked once the message leaves, in context and body (T6, T7); dedup returning `None` (T4, T6); placeholder `@fake.mail.com` skipped (T6); SMTP with STARTTLS/login (T5); at-most-once — claim in own commit with `SKIP LOCKED`, retry only definite refusals up to 5, uncertain and stale `sending` to `failed` (T4, T5, T7); metrics (T6, T7) and dashboard (T9); logs with `email_id`/`template`/`outcome` only (T6, T7); dispatch route under `/api/v1/internal` with client credentials (T8); admin record routes (T8); Jinja2 pinned (T1); Mailpit and integration assertions of exactly-once and masking (T9); provisional sober layout replaced by the Claude Design one (T3, T10). Reminders and the four embargo templates are plan 03.
+- **Spec coverage:** settings (T1); tables with every audit column and the append-only events (T2); render at enqueue with subject/body as rendered and template version (T1 build commit, T6); secrets masked once the message leaves, in context and body (T6, T7); dedup returning `None` (T4, T6); placeholder `@fake.mail.com` skipped (T6); SMTP with STARTTLS/login (T5); at-most-once — claim in own commit with `SKIP LOCKED`, retry only definite refusals up to 5, uncertain and stale `sending` to `failed` (T4, T5, T7); metrics (T6, T7) and dashboard (T9); logs with `email_id`/`template`/`outcome` only (T6, T7); dispatch route under `/api/v1/internal` with client credentials (T8); admin record routes and the test message, rendered with the existing `notification` template (T7, T8); Mailpit and integration assertions of exactly-once and masking (T9); every message rendered by the existing `EmailTemplateRenderer` and templates from #121, with the plain-text part the RFC requires added to it (T3). Reminders and the embargo templates are plan 03.
 - **Deviations from the RFC table, deliberate:** `secret_fields` and `claimed_at` columns; `POST /admin/emails/test`; `BUILD_COMMIT` as the template version source. Recorded in this plan; the RFC can absorb them when plan 03 updates it.
