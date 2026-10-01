@@ -11,8 +11,7 @@ email = renderer.render(EmailTemplate.INVITATION, {...})
 email.subject, email.html
 ```
 
-The renderer supplies `site_url`, `asset_url`, `preferences_url` and
-`unsubscribe_url`. Images load from `{site_url}/img/email/`, which the webapp
+The renderer supplies `site_url` and `asset_url`. Images load from `{site_url}/img/email/`, which the webapp
 serves from `public/img/email/`.
 
 | Template | Required | Optional |
