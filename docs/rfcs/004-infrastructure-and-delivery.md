@@ -446,6 +446,50 @@ depended on `pg_hba`, the latency while reading the auth path during the rotatio
 That is an argument for the RFC being a living document rather than a plan
 executed, and for looking at what is there rather than at what was written down.
 
+### What encrypting the secrets left behind, 2026-10-01
+
+Item 6 moved every environment file into the repositories and deleted the
+plaintext on the host. The encryption was the easy half. Four things only came out
+afterwards, and each one was a consumer the change had quietly orphaned.
+
+**The observability deploy was broken and nobody could have noticed.** Its
+workflow still read `~/environment/gatekeeper.prod.env`, which is where Grafana's
+admin password came from. It runs only when its own files change, so the failure
+was latent, waiting for whoever next touched a dashboard. Found by asking what
+still referenced the directory before deleting it — not by any test.
+
+**Four runbooks taught the deleted path.** Fifteen references to `cd ~/gatekeeper`
+and `../environment/gatekeeper.prod.env` across credential rotation,
+observability, post-deploy verification and the two-instance notes. A runbook that
+fails on its first command is worse than no runbook, because it is consulted
+under pressure.
+
+**Applying infrastructure by hand had four separate traps**, and hitting three of
+them took three attempts: the service is `gatekeeper-pgadmin` rather than the
+container name; `ENV_FILE_PATH` alone leaves `${VAR}` in a compose file blank,
+because `env_file:` goes to the container while `${VAR}` is expanded from
+Compose's own environment — and the two left blank were the host paths of the
+database and the object storage; and merging changes nothing until a later deploy
+updates the runner's checkout. `Makefile.infra` now makes the first three
+impossible and reports the fourth. The main `Makefile` refuses to run without
+`ENV_FILE_PATH` rather than proceeding with everything blank, which is the same
+defect: an empty `include` is a silent no-op in make.
+
+**The retired plaintext was not a recovery path.** It was kept as insurance
+against losing the age key. Compared file by file against the encrypted versions:
+three identical, one missing nine variables added since, and one holding a value
+that had been fixed as a bug. Restoring from it would have broken email and
+reintroduced a frontend misconfiguration. The recovery path is the key backup,
+which was tested in a container that could not see the local key, plus the
+encrypted files in three repositories — and failing both, rotation, which this
+document now has a runbook for.
+
+The pattern in all four: the question that matters when changing a mechanism is
+not whether the new one works, it is which consumers were changed and which were
+not. Three of four application deploys were updated. The fourth, the runbooks, the
+manual procedure and the fallback were not, and each was found by looking rather
+than by any check failing.
+
 ### Where this stands, 2026-09-11
 
 **In production.** Tests gate every merge; merging `main` deploys; the schema is
