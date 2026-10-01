@@ -206,12 +206,25 @@ first.
 2. `ALTER USER gk_admin PASSWORD '<new>';`
 3. Roll the API (`docker-deployment-rolling`), then recreate the archivist.
 
-Verify by asking the application, not the database: a `200` from the API means
-it authenticated with the new value through its own pool.
+Verify by asking the application, not the database. The proof is that the rolled
+instance started at all: the app runs `alembic upgrade head` before it serves, so
+an instance that reports healthy has authenticated with the new value through its
+own pool. `docker-deployment-rolling` waits for exactly that, and fails if it does
+not come.
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://datamap.pcs.usp.br/api/v1/health-check/dependencies/
+docker ps --filter name=datamap_gatekeeper --format "{{.Names}}\t{{.Status}}"
 ```
+
+Both `healthy`, and the roll returned. `/api/v1/health-check/` is not the proof —
+it is deliberately shallow and does no I/O, so it answers whether or not the
+database is reachable.
+
+`/api/v1/health-check/dependencies` does report the database, but it is behind
+authentication *and* a Casbin policy — three headers and a client that has been
+granted the route. Measured: no credential in any environment file reaches it
+(`{"detail":"not_authorized"}`). It is for an operator who has set that up, not
+for a check at the end of a rotation.
 
 `local.env` on each developer's machine still holds the old password, because
 that is where the leak came from. Give it a value of its own; it has no reason
