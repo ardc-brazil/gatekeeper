@@ -49,8 +49,6 @@ class EmailTemplateRenderer:
         variables = {
             "site_url": self._site_url,
             "asset_url": f"{self._site_url}/img/email",
-            "preferences_url": f"{self._site_url}/profile",
-            "unsubscribe_url": f"{self._site_url}/unsubscribe",
             **_OPTIONAL_DEFAULTS.get(template, {}),
             **context,
         }

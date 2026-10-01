@@ -32,7 +32,6 @@ CONTEXTS = {
         "files_summary": "14 files · 2.3 GB",
         "missing_fields": ["License", "Contact person"],
         "complete_url": "https://datamap.example.org/datasets/3f9c1e/edit",
-        "snooze_url": "https://datamap.example.org/datasets/3f9c1e/reminders",
     },
     EmailTemplate.NOTIFICATION: {
         "title": "Your access request was approved",
@@ -70,8 +69,32 @@ class TestEmailTemplateRenderer(unittest.TestCase):
             'src="https://datamap.example.org/img/email/datamap-tile-36.png"',
             email.html,
         )
-        self.assertIn('href="https://datamap.example.org/profile"', email.html)
-        self.assertIn('href="https://datamap.example.org/unsubscribe"', email.html)
+        self.assertIn('href="https://datamap.example.org/project/about"', email.html)
+
+    def test_no_template_links_to_preferences_or_unsubscribe(self):
+        for template in EmailTemplate:
+            with self.subTest(template=template):
+                html = self.renderer.render(template, CONTEXTS[template]).html.lower()
+
+                self.assertNotIn("unsubscribe", html)
+                self.assertNotIn("preferences", html)
+                self.assertNotIn('href="https://datamap.example.org/profile"', html)
+
+    def test_no_template_offers_snoozing_or_turning_off_reminders(self):
+        for template in EmailTemplate:
+            with self.subTest(template=template):
+                html = self.renderer.render(template, CONTEXTS[template]).html.lower()
+
+                self.assertNotIn("snooze", html)
+                self.assertNotIn("turn off reminders", html)
+
+    def test_footer_datasets_link_points_to_the_dataset_list(self):
+        for template in EmailTemplate:
+            with self.subTest(template=template):
+                html = self.renderer.render(template, CONTEXTS[template]).html
+
+                self.assertIn('href="https://datamap.example.org/app/datasets"', html)
+                self.assertNotIn('href="https://datamap.example.org/datasets"', html)
 
     def test_context_values_are_substituted(self):
         email = self.renderer.render(
