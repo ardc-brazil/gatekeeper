@@ -458,3 +458,17 @@ class TestExposition(MetricsTestCase):
 
         self.assertIn("datamap_tus_hook_total", rendered)
         self.assertIn('outcome="error"', rendered)
+
+
+class TestDatasetAccessEvents(MetricsTestCase):
+    def test_each_event_is_counted_by_its_type(self):
+        self.metrics.dataset_access_event("created")
+        self.metrics.dataset_access_event("created")
+        self.metrics.dataset_access_event("extended")
+
+        self.assertEqual(
+            self.value("datamap_dataset_access_events_total", event="created"), 2.0
+        )
+        self.assertEqual(
+            self.value("datamap_dataset_access_events_total", event="extended"), 1.0
+        )

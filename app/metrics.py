@@ -224,6 +224,12 @@ class Metrics:
             ["outcome"],
             registry=self.registry,
         )
+        self._dataset_access_events = Counter(
+            "datamap_dataset_access_events_total",
+            "Sharing and embargo decisions recorded in the access audit trail",
+            ["event"],
+            registry=self.registry,
+        )
         self._collocation_pending = Gauge(
             "datamap_collocation_pending",
             "Datasets waiting for their files to be collocated",
@@ -330,6 +336,9 @@ class Metrics:
 
     def snapshot_published(self, success: bool) -> None:
         self._snapshots.labels(outcome="success" if success else "error").inc()
+
+    def dataset_access_event(self, event: str) -> None:
+        self._dataset_access_events.labels(event=event).inc()
 
     def collocation_pending(self, count: int) -> None:
         self._collocation_pending.set(count)
