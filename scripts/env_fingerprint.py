@@ -4,14 +4,17 @@ A credential shared by two services is correct when both files print the same
 fingerprint. Nothing else about the value is revealed, so the comparison can be
 made, quoted and shared.
 
-    python3 scripts/env_fingerprint.py ~/environment/frontend.prod.env AUTH_FILE_UPLOAD_TOKEN_SECRET
+    python3 scripts/env_fingerprint.py secrets/decrypted.env AUTH_FILE_UPLOAD_TOKEN_SECRET
 """
 
 import re
 import sys
 from pathlib import Path
 
-from scripts.set_env_value import fingerprint
+try:  # invoked as `python3 -m scripts.env_fingerprint`
+    from scripts.set_env_value import fingerprint
+except ImportError:  # invoked as `python3 scripts/env_fingerprint.py`
+    from set_env_value import fingerprint
 
 ABSENT = "absent"
 

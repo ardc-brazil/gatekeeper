@@ -51,8 +51,13 @@ is how a shared secret is checked without anyone reading it, and the only thing
 about a credential that is safe to quote in a message:
 
 ```bash
-python3 scripts/env_fingerprint.py ~/environment/frontend.prod.env AUTH_FILE_UPLOAD_TOKEN_SECRET
+python3 scripts/env_fingerprint.py <file> AUTH_FILE_UPLOAD_TOKEN_SECRET
 ```
+
+Each service's configuration is now encrypted in its own repository, so "the
+file" is a `sops --decrypt` away rather than a path on the host. A secret two
+services share has to change in both repositories: the webapp signs upload
+tokens with `AUTH_FILE_UPLOAD_TOKEN_SECRET` and the API verifies them.
 
 `openssl rand -base64 32 | tr -d '/+=' | cut -c1-32` is enough for a machine
 credential. The credentials a person logs in with — MinIO root, Grafana,
@@ -149,10 +154,17 @@ authorisation error that says nothing about its cause, so confirm the two files
 agree before recreating anything:
 
 ```bash
-for f in gatekeeper.prod.env frontend.prod.env; do
-  python3 scripts/env_fingerprint.py ~/environment/$f AUTH_FILE_UPLOAD_TOKEN_SECRET
+sops --decrypt secrets/production/gatekeeper.env > /tmp/a.env
+sops --decrypt --input-type dotenv --output-type dotenv \
+  <webapp>/secrets/production/frontend.env.sops > /tmp/b.env
+for f in /tmp/a.env /tmp/b.env; do
+  python3 scripts/env_fingerprint.py "$f" AUTH_FILE_UPLOAD_TOKEN_SECRET
 done
+rm -f /tmp/a.env /tmp/b.env
 ```
+
+`--input-type` on the second: sops reads the format from the extension, and
+`.env.sops` is not one it knows.
 
 Two identical fingerprints, and no value on screen.
 
@@ -172,11 +184,10 @@ first.
    `scripts-gatekeeper.prod.env`. Four identical fingerprints before anything
    is recreated:
 
-   ```bash
-   for f in gatekeeper archivist archivist-test scripts-gatekeeper; do
-     python3 scripts/env_fingerprint.py ~/environment/$f.prod.env POSTGRES_PASSWORD
-   done
-   ```
+   The password is shared, and the files now live in two repositories:
+   `secrets/production/gatekeeper.env` and `scripts-gatekeeper.env` here,
+   `archivist.env.sops` and `archivist-test.env.sops` in the archivist. Decrypt
+   each and compare the fingerprints before anything is recreated.
 2. `ALTER USER gk_admin PASSWORD '<new>';`
 3. Roll the API (`docker-deployment-rolling`), then recreate the archivist.
 
