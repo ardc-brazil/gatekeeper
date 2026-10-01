@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import datetime
+from datetime import timedelta
 import json
 import unittest
 
@@ -3125,6 +3126,170 @@ class TestDatasetServiceAuthorization(TestDatasetService):
         self.assertEqual(
             self.dataset_access.require.call_args.kwargs["action"],
             DatasetAction.DELETE,
+        )
+
+    def test_files_are_withheld_when_the_rule_says_so(self):
+        dataset = self._fetched()
+        version = Mock(spec=DatasetVersionDBModel)
+        file = Mock(spec=DataFileDBModel)
+        file.size_bytes = 7
+        version.files = [file]
+        version.files_in = [file]
+        version.doi = None
+        version.design_state = DesignState.DRAFT
+        version.created_at = datetime.datetime(2026, 1, 1)
+        dataset.versions = [version]
+        self.dataset_access.permits.return_value = False
+
+        result = self.dataset_service.fetch_dataset(
+            dataset_id=dataset.id, user_id=uuid4()
+        )
+
+        self.assertEqual(result.versions[0].files_in, [])
+        self.assertTrue(result.versions[0].files_withheld)
+        self.assertEqual(result.versions[0].files_count, 1)
+        self.assertEqual(result.versions[0].files_size_in_bytes, 7)
+
+    def test_promoting_a_doi_to_findable_is_refused_under_embargo(self):
+        dataset = self._fetched()
+        self.dataset_access.embargo_active.return_value = True
+        version = Mock(spec=DatasetVersionDBModel)
+        version.doi = Mock()
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+
+        with self.assertRaises(BadRequestException) as raised:
+            self.dataset_service.change_doi_state(
+                dataset_id=dataset.id,
+                version_name="1",
+                new_state=DOIState.FINDABLE,
+                user_id=uuid4(),
+            )
+
+        self.assertEqual(raised.exception.errors[0].code, "embargo_active")
+        self.doi_service.change_state.assert_not_called()
+        self.minio_gateway.put_file.assert_not_called()
+
+    def test_registering_a_doi_is_allowed_under_embargo(self):
+        dataset = self._fetched()
+        self.dataset_access.embargo_active.return_value = True
+        version = Mock(spec=DatasetVersionDBModel)
+        version.doi = Mock()
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+
+        self.dataset_service.change_doi_state(
+            dataset_id=dataset.id,
+            version_name="1",
+            new_state=DOIState.REGISTERED,
+            user_id=uuid4(),
+        )
+
+        self.doi_service.change_state.assert_called_once()
+
+    def _manual_doi(self, embargoed: bool, level: AccessLevel):
+        dataset = self._fetched()
+        self.dataset_access.embargo_active.return_value = embargoed
+        self.dataset_access.require.return_value = level
+        version = Mock(spec=DatasetVersionDBModel)
+        version.doi = None
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.dataset_service._create_doi_model = Mock(
+            return_value=DOI(mode=DOIMode.MANUAL, identifier="10.1/x")
+        )
+        return dataset
+
+    def _create_manual(self, dataset, end_embargo: bool, user_id=None):
+        return self.dataset_service.create_doi(
+            dataset_id=dataset.id,
+            version_name="1",
+            doi=DOI(mode=DOIMode.MANUAL, identifier="10.1/x"),
+            user_id=user_id or uuid4(),
+            end_embargo=end_embargo,
+        )
+
+    def test_a_manual_doi_under_embargo_needs_the_embargo_to_end(self):
+        dataset = self._manual_doi(embargoed=True, level=AccessLevel.OWNER)
+
+        with self.assertRaises(BadRequestException) as raised:
+            self._create_manual(dataset, end_embargo=False)
+
+        self.assertEqual(
+            raised.exception.errors[0].code, "embargo_manual_doi_ends_embargo"
+        )
+        self.doi_service.create.assert_not_called()
+        self.embargo_termination.end.assert_not_called()
+
+    def test_only_the_owner_may_end_the_embargo_with_a_manual_doi(self):
+        dataset = self._manual_doi(embargoed=True, level=AccessLevel.WRITE)
+
+        with self.assertRaises(ForbiddenException):
+            self._create_manual(dataset, end_embargo=True)
+
+        self.doi_service.create.assert_not_called()
+        self.embargo_termination.end.assert_not_called()
+
+    def test_the_owner_ends_the_embargo_then_the_snapshot_is_published(self):
+        dataset = self._manual_doi(embargoed=True, level=AccessLevel.OWNER)
+        user_id = uuid4()
+        order = []
+        self.doi_service.create.side_effect = lambda doi: order.append("doi") or doi
+        self.embargo_termination.end.side_effect = lambda **kwargs: order.append("end")
+
+        with patch.object(
+            self.dataset_service,
+            "_publish_dataset_snapshot",
+            side_effect=lambda **kwargs: order.append("snapshot"),
+        ):
+            self._create_manual(dataset, end_embargo=True, user_id=user_id)
+
+        self.assertEqual(order, ["doi", "end", "snapshot"])
+        kwargs = self.embargo_termination.end.call_args.kwargs
+        self.assertIs(kwargs["dataset"], dataset)
+        self.assertEqual(kwargs["ended_by"], user_id)
+        self.assertEqual(kwargs["note"], "manual DOI")
+
+    def test_a_manual_doi_without_embargo_is_unchanged(self):
+        dataset = self._manual_doi(embargoed=False, level=AccessLevel.TENANCY)
+
+        with patch.object(self.dataset_service, "_publish_dataset_snapshot") as publish:
+            self._create_manual(dataset, end_embargo=False)
+
+        self.doi_service.create.assert_called_once()
+        publish.assert_called_once()
+        self.embargo_termination.end.assert_not_called()
+
+    def test_the_snapshot_writer_itself_refuses_an_embargoed_dataset(self):
+        self._fetched()
+        self.dataset_access.embargo_active.return_value = True
+
+        with self.assertRaises(BadRequestException) as raised:
+            self.dataset_service._publish_dataset_snapshot(
+                dataset_id=uuid4(), version_name="1"
+            )
+
+        self.assertEqual(raised.exception.errors[0].code, "embargo_active")
+        self.minio_gateway.put_file.assert_not_called()
+
+    def test_a_download_link_under_embargo_lives_one_hour(self):
+        dataset = self._fetched(tenancy="t1")
+        self.dataset_access.embargo_active.return_value = True
+        file = Mock(spec=DataFileDBModel)
+        file.id = uuid4()
+        file.name = "a.nc"
+        file.storage_path = "datamap/a"
+        file.extension = "nc"
+        file.size_bytes = 1
+        version = Mock(spec=DatasetVersionDBModel)
+        version.files_in = [file]
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.minio_gateway.get_pre_signed_url.return_value = "https://x"
+
+        self.dataset_service.get_file_download_url(
+            dataset_id=dataset.id, version_name="1", file_id=file.id, user_id=uuid4()
+        )
+
+        self.assertEqual(
+            self.minio_gateway.get_pre_signed_url.call_args.kwargs["expires_in"],
+            timedelta(hours=1),
         )
 
 

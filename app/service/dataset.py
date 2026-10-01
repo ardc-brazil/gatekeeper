@@ -1,7 +1,9 @@
 import logging
+from datetime import timedelta
 from uuid import UUID
 import json
 from app.exception.bad_request import BadRequestException, ErrorDetails
+from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
@@ -44,6 +46,10 @@ from app.service.embargo_termination import EmbargoTermination
 
 def _mode_of(doi: DOI) -> str:
     return getattr(doi.mode, "value", doi.mode) or ""
+
+
+EMBARGO_DOWNLOAD_TTL = timedelta(hours=1)
+DEFAULT_DOWNLOAD_TTL = timedelta(days=7)
 
 
 class DatasetService:
@@ -199,6 +205,22 @@ class DatasetService:
             level=level,
             now=now,
         )
+        if not self._access.permits(
+            user_id=user_id,
+            dataset=dataset_db,
+            tenancies=tenancies,
+            action=DatasetAction.READ_FILES,
+            now=now,
+        ):
+            for version in (
+                *adapted.versions,
+                adapted.current_version,
+                adapted.version,
+            ):
+                if version is not None:
+                    version.files = []
+                    version.files_in = []
+                    version.files_withheld = True
         return adapted
 
     def _get_current_dataset_version(
@@ -657,8 +679,9 @@ class DatasetService:
         doi: DOI,
         user_id: UUID,
         tenancies: list[str] = None,
+        end_embargo: bool = False,
     ) -> DOI:
-        dataset, _, _ = self.fetch_authorized(
+        dataset, _, level = self.fetch_authorized(
             dataset_id=dataset_id,
             user_id=user_id,
             tenancies=tenancies,
@@ -677,6 +700,18 @@ class DatasetService:
         if version.doi:
             raise BadRequestException(errors=[ErrorDetails(code="already_exists")])
 
+        ends_embargo = doi.mode == DOIMode.MANUAL and self._access.embargo_active(
+            dataset
+        )
+        if ends_embargo and not end_embargo:
+            raise BadRequestException(
+                errors=[ErrorDetails(code="embargo_manual_doi_ends_embargo")]
+            )
+        if ends_embargo and level != AccessLevel.OWNER:
+            raise ForbiddenException(
+                f"forbidden: only the owner ends the embargo of {dataset_id}"
+            )
+
         doi = self._create_doi_model(
             doi=doi, dataset=dataset, version=version, creator_id=user_id
         )
@@ -687,6 +722,11 @@ class DatasetService:
             metrics.doi_operation("create", success=False, mode=_mode_of(doi))
             raise
         metrics.doi_operation("create", success=True, mode=_mode_of(doi))
+
+        if ends_embargo:
+            self._embargo_termination.end(
+                dataset=dataset, ended_by=user_id, now=utcnow(), note="manual DOI"
+            )
 
         if doi.mode == DOIMode.MANUAL:
             self._publish_dataset_snapshot(
@@ -721,6 +761,9 @@ class DatasetService:
 
         if version.doi is None:
             raise NotFoundException(f"not_found: DOI for version {version_name}")
+
+        if new_state == DOIState.FINDABLE and self._access.embargo_active(dataset):
+            raise BadRequestException(errors=[ErrorDetails(code="embargo_active")])
 
         # Before the state change: a findable DOI with no snapshot cannot be
         # retried, because FINDABLE -> FINDABLE is rejected.
@@ -840,6 +883,9 @@ class DatasetService:
             if file.storage_path.startswith(self._dataset_bucket + "/")
             else file.storage_path,
             original_file_name=file.name,
+            expires_in=EMBARGO_DOWNLOAD_TTL
+            if self._access.embargo_active(dataset)
+            else DEFAULT_DOWNLOAD_TTL,
         )
         metrics.download_url_issued(dataset.tenancy, file.extension, file.size_bytes)
         return url
@@ -1054,6 +1100,9 @@ class DatasetService:
 
         if dataset is None:
             raise NotFoundException(f"not_found: {dataset_id}")
+
+        if self._access.embargo_active(dataset):
+            raise BadRequestException(errors=[ErrorDetails(code="embargo_active")])
 
         # Find the specific version
         version: DatasetVersionDBModel = self._version_repository.fetch_version_by_name(

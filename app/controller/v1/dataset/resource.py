@@ -23,11 +23,25 @@ class DOIResponse(BaseModel):
     mode: str = Field(..., title="Registration mode. AUTO or MANUAL")
 
 
+class VersionFilesSummaryResponse(BaseModel):
+    count: int = Field(..., title="Number of files")
+    total_size_bytes: int = Field(..., title="Total size of the files in bytes")
+
+
 class EmbargoResponse(BaseModel):
     until: datetime = Field(..., title="Embargo end")
     active: bool = Field(..., title="Whether the embargo is in force now")
     metadata_visible: bool = Field(..., title="Open mode (true) or hidden mode")
     note: Optional[str] = Field(None, title="Note")
+
+
+class AccessResponse(BaseModel):
+    level: str = Field(..., title="owner, write, read or tenancy")
+    can_edit: bool = Field(..., title="May change the dataset")
+    can_share: bool = Field(..., title="May manage sharing and anonymous links")
+    can_manage_embargo: bool = Field(..., title="May set, end or switch the embargo")
+    can_extend_embargo: bool = Field(..., title="May extend the embargo")
+    can_delete: bool = Field(..., title="May delete the dataset")
 
 
 class DatasetVersionResponse(BaseModel):
@@ -42,6 +56,10 @@ class DatasetVersionResponse(BaseModel):
     updated_at: datetime = Field(..., title="Updated at")
     files_size_in_bytes: int = Field(None, title="Size in bytes of total files")
     files_count: int = Field(None, title="Number of files")
+    files_withheld: bool = Field(False, title="File list withheld by the embargo")
+    files_summary: Optional[VersionFilesSummaryResponse] = Field(
+        None, title="File count and size"
+    )
 
 
 class MinimalDatasetVersionResponse(BaseModel):
@@ -71,6 +89,8 @@ class DatasetGetResponse(BaseModel):
     )
     design_state: str = Field(..., title="Design state")
     visibility: Optional[str] = Field(None, title="Visibility status")
+    embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
+    access: Optional[AccessResponse] = Field(None, title="What the caller may do")
 
 
 class MinimalDatasetGetResponse(BaseModel):
@@ -103,6 +123,8 @@ class DatasetVersionGetResponse(BaseModel):
     version: DatasetVersionResponse = Field(..., title="Specific version information")
     design_state: str = Field(..., title="Design state")
     visibility: Optional[str] = Field(None, title="Visibility status")
+    embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
+    access: Optional[AccessResponse] = Field(None, title="What the caller may do")
 
 
 class PagedDatasetGetResponse(BaseModel):
@@ -151,6 +173,9 @@ class DOIErrorResponse(BaseModel):
 class DOICreateRequest(BaseModel):
     identifier: str = Field(None, title="DOI identifier")
     mode: str = Field(..., title="Mode")
+    end_embargo: bool = Field(
+        False, title="Confirm that a manual DOI ends the dataset's embargo"
+    )
 
 
 class DOIChangeStateRequest(BaseModel):
