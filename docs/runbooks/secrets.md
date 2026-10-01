@@ -91,14 +91,28 @@ the deploy if any of their values appears in a tracked file. That is why every
 file is decrypted and not only the gatekeeper's: reading one would quietly stop
 checking the other services' credentials.
 
-**The encrypted copies are the source of truth.** There is no plaintext to drift
-from any more, which is why the deploy no longer compares against one — with a
-single source, drift is not something to detect, it is something that cannot
-happen. The files that used to hold it are at `~/environment/retired-<date>/` on
-the host, and can be deleted once nobody misses them.
+**For this service, the encrypted copy is the source of truth.** There is no
+plaintext left for `gatekeeper.env` to drift from, which is why the deploy no
+longer compares against one; the retired file is at
+`~/environment/retired-<date>/` on the host.
 
-To change a value, edit the encrypted file and merge it. There is no second copy
-to keep in step:
+**For the others, it is not.** `secrets/production` holds an encrypted copy of
+every service's environment, but only this repository's deploy decrypts one. The
+archivist and the webapp are deployed from their own repositories and still read
+`~/environment/<service>.prod.env` directly, and `scripts-gatekeeper.prod.env` is
+read by hand. Those files are the source of truth for their consumers and must
+stay until those deploys decrypt too.
+
+Which means the encrypted copies of *those* can drift, and nothing detects it.
+After changing one on the host, encrypt it back in:
+
+```bash
+sops --encrypt --input-type dotenv --output-type dotenv \
+  ~/environment/archivist.prod.env > secrets/production/archivist.env
+```
+
+To change a gatekeeper value, edit the encrypted file and merge it. There is no
+second copy to keep in step:
 
 ```bash
 sops secrets/production/gatekeeper.env

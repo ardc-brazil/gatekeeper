@@ -325,8 +325,16 @@ Deleting it was the plan. For three days it was the wrong move:
 
 Both conditions were met on 2026-09-30: `scripts/verify_key_backup.sh` decrypted
 with the password manager's copy inside a container that could not see the local
-key, and refused a deliberately wrong one. The plaintext and the comparison were
-then retired together.
+key, and refused a deliberately wrong one. The gatekeeper's plaintext and the
+comparison were then retired together.
+
+Only the gatekeeper's. Moving all six was the first attempt and it broke the
+archivist's deploy, which reads `~/environment/archivist.prod.env` from its own
+repository — as does the webapp with its own. `secrets/production` holds an
+encrypted copy of every service, but only this repository decrypts one, so for
+the rest the plaintext is still the source of truth and the encrypted copy can
+drift unnoticed. Finishing this means giving those repositories the same deploy
+step, not deleting their files.
 
 What replaced the comparison is not a weaker check but a different one. The guard
 that keeps production credentials out of this public repository used to read the
@@ -693,16 +701,20 @@ second reason to do 9 before 10, independent of the first.
   measuring first was wrong by an order of magnitude in the safe direction: the
   logs are far smaller than expected once probes and idle polling stopped being
   logged.
-- **When to remove the plaintext environment files.** 2026-09-30, once the key
-  backup was tested rather than assumed. They went together with the drift check
-  that depended on them, and the guard moved to the decrypted copies. See
-  decision 6.
+- **When to remove the plaintext environment files.** The gatekeeper's, on
+  2026-09-30, once the key backup was tested rather than assumed. It went
+  together with the drift check that depended on it, and the guard moved to the
+  decrypted copies. See decision 6.
 
 ### Still open
 
 - **Whether the Archivist should move off the production host.** It is the one
   component that must not be duplicated, which makes it awkward under any
   rollout scheme.
+- **The other services' plaintext.** The archivist, the webapp and the
+  hand-run scripts still read `~/environment/*.prod.env`, because only this
+  repository's deploy decrypts. Until theirs do, their encrypted copies can
+  drift and nothing notices.
 - **The second checkout at `~/gatekeeper`.** Running `docker compose` from it
   reverts infrastructure to whatever commit it sits on, silently. It already cost
   a day of Alloy reporting unhealthy after overwriting a correct deploy.
