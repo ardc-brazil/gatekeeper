@@ -16,4 +16,7 @@ RUN apk --no-cache add libpq
 WORKDIR /app
 EXPOSE 9092
 
+ARG BUILD_COMMIT=unknown
+ENV BUILD_COMMIT=$BUILD_COMMIT
+
 CMD ["uvicorn", "app.main:fastAPIApp", "--host", "0.0.0.0", "--port", "9092"]

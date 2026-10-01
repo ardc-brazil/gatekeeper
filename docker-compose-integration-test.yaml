@@ -2,7 +2,10 @@ version: '3'
 
 services:
   gatekeeper_test_integration:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
     image: gatekeeper
     container_name: datamap_gatekeeper_test_integration
     restart: always

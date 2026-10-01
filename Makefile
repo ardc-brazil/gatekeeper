@@ -12,6 +12,7 @@ endif
 
 include ${ENV_FILE_PATH}
 export $(shell sed 's/=.*//' ${ENV_FILE_PATH})
+export BUILD_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
 # Reset
 Color_Off=\033[0m       # Text Reset
