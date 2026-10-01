@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Reminder: your dataset is still a draft{% endblock %}
+{% block preheader %}“{{ dataset_title }}” has been a draft for {{ draft_days }} days.{% if missing_fields %} {{ missing_fields | length }} field{{ "s are" if missing_fields | length != 1 else " is" }} missing.{% endif %}{% endblock %}
+{% block label %}Reminder{% endblock %}
+{% block content %}
+{{ m.heading("Your dataset is still a draft") }}
+{% call m.paragraph() %}The dataset below was created {{ draft_days }} days ago and hasn't been published yet. Once published, it becomes discoverable by other researchers and citable with a DOI.{% endcall %}
+{{ m.details([
+  {"label": "Dataset", "value": dataset_title},
+  {"label": "Status", "value": status},
+  {"label": "Last updated", "value": last_updated_on},
+  {"label": "Files", "value": files_summary},
+]) }}
+{% if missing_fields %}
+{% call m.paragraph(bottom=4) %}{{ m.strong("Missing before publication") }}{% endcall %}
+{{ m.bullets(missing_fields, marker="&#9675;", marker_class="dm-muted", marker_color="#6b7280") }}
+{% endif %}
+{{ m.spacer(8) }}
+{{ m.button("Complete dataset", complete_url) }}
+{{ m.spacer(16) }}
+{% call m.note() %}Not ready yet? You can {{ m.inline_link("snooze this reminder", snooze_url) }} or turn off reminders for this dataset.{% endcall %}
+{% endblock %}
+{% block reason %}You received this email because you are the owner of this dataset.{% endblock %}
