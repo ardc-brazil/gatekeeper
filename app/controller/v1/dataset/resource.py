@@ -23,6 +23,13 @@ class DOIResponse(BaseModel):
     mode: str = Field(..., title="Registration mode. AUTO or MANUAL")
 
 
+class EmbargoResponse(BaseModel):
+    until: datetime = Field(..., title="Embargo end")
+    active: bool = Field(..., title="Whether the embargo is in force now")
+    metadata_visible: bool = Field(..., title="Open mode (true) or hidden mode")
+    note: Optional[str] = Field(None, title="Note")
+
+
 class DatasetVersionResponse(BaseModel):
     id: UUID = Field(..., title="Version ID")
     name: str = Field(..., title="Name")
@@ -234,3 +241,22 @@ class DatasetLatestSnapshotResponse(BaseModel):
     files_summary: FilesSummary = Field(..., title="Summary of dataset files")
     data: dict = Field(..., title="Dataset metadata (untyped)")
     versions: list[DatasetVersionInfo] = Field(..., title="All published versions")
+
+
+class EmbargoSetRequest(BaseModel):
+    until: datetime = Field(..., title="Embargo end, at most 90 days ahead")
+    metadata_visible: bool = Field(False, title="Open mode (true) or hidden mode")
+    note: Optional[str] = Field(None, title="Note", max_length=2000)
+
+
+class EmbargoExtendRequest(BaseModel):
+    until: datetime = Field(..., title="New embargo end, at most 90 days ahead")
+
+
+class EmbargoModeRequest(BaseModel):
+    metadata_visible: bool = Field(..., title="Open mode (true) or hidden mode")
+
+
+class EmbargoStatusResponse(BaseModel):
+    embargoed: bool = Field(..., title="Whether the dataset is under embargo now")
+    until: Optional[datetime] = Field(None, title="Embargo end")

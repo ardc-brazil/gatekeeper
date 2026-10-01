@@ -25,6 +25,7 @@ from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.doi import DOIService
 from app.service.email import EmailService
 from app.service.email_template import EmailTemplateRenderer
+from app.service.embargo import EmbargoService
 from app.service.embargo_termination import EmbargoTermination
 from app.service.permission import PermissionService
 from app.service.tus import TusService
@@ -53,6 +54,8 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.dataset.dataset",
             "app.controller.v1.dataset.dataset_filter",
             "app.controller.v1.dataset.dataset_snapshot",
+            "app.controller.v1.dataset.embargo",
+            "app.controller.v1.dataset.embargo_status",
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
@@ -257,6 +260,15 @@ class Container(containers.DeclarativeContainer):
         access_service=dataset_access_service,
         embargo_termination=embargo_termination,
         dataset_bucket=config.MINIO_DATASET_BUCKET,
+    )
+
+    embargo_service = providers.Factory(
+        EmbargoService,
+        dataset_service=dataset_service,
+        repository=dataset_repository,
+        access_service=dataset_access_service,
+        audit=dataset_access_audit,
+        termination=embargo_termination,
     )
 
     tus_service = providers.Factory(

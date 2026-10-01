@@ -18,6 +18,8 @@ from app.controller.v1.user.user import router as user_router
 from app.controller.v1.dataset.dataset_filter import router as dataset_filter_router
 from app.controller.v1.dataset.dataset import router as dataset_router
 from app.controller.v1.dataset.dataset_snapshot import router as dataset_snapshot_router
+from app.controller.v1.dataset.embargo import router as embargo_router
+from app.controller.v1.dataset.embargo_status import router as embargo_status_router
 from app.controller.v1.internal.dataset_collocation import (
     router as internal_dataset_collocation_router,
 )
@@ -185,6 +187,8 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(dataset_filter_router, prefix="/v1")
     fastAPIApp.include_router(dataset_router, prefix="/v1")
     fastAPIApp.include_router(dataset_snapshot_router, prefix="/v1")
+    fastAPIApp.include_router(embargo_router, prefix="/v1")
+    fastAPIApp.include_router(embargo_status_router, prefix="/v1")
     fastAPIApp.include_router(tenancies_router, prefix="/v1")
     fastAPIApp.include_router(user_router, prefix="/v1")
     fastAPIApp.include_router(client_router, prefix="/v1")
