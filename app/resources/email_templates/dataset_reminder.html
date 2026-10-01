@@ -18,7 +18,5 @@
 {% endif %}
 {{ m.spacer(8) }}
 {{ m.button("Complete dataset", complete_url) }}
-{{ m.spacer(16) }}
-{% call m.note() %}Not ready yet? You can {{ m.inline_link("snooze this reminder", snooze_url) }} or turn off reminders for this dataset.{% endcall %}
 {% endblock %}
 {% block reason %}You received this email because you are the owner of this dataset.{% endblock %}

@@ -18,5 +18,5 @@ serves from `public/img/email/`.
 |---|---|---|
 | `invitation` | `inviter_name`, `inviter_email`, `workspace_name`, `role`, `expires_on`, `accept_url` | |
 | `announcement` | `title`, `preheader`, `published_on`, `body`, `cta_label`, `cta_url` | `image_url`, `image_alt`, `highlights` (list of str) |
-| `dataset_reminder` | `dataset_title`, `draft_days`, `status`, `last_updated_on`, `files_summary`, `complete_url`, `snooze_url` | `missing_fields` (list of str) |
+| `dataset_reminder` | `dataset_title`, `draft_days`, `status`, `last_updated_on`, `files_summary`, `complete_url` | `missing_fields` (list of str) |
 | `notification` | `title`, `preheader`, `message`, `cta_label`, `cta_url`, `reason` | `actor_name`, `details` (list of `{label, value}`) |

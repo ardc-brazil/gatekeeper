@@ -32,7 +32,6 @@ CONTEXTS = {
         "files_summary": "14 files · 2.3 GB",
         "missing_fields": ["License", "Contact person"],
         "complete_url": "https://datamap.example.org/datasets/3f9c1e/edit",
-        "snooze_url": "https://datamap.example.org/datasets/3f9c1e/reminders",
     },
     EmailTemplate.NOTIFICATION: {
         "title": "Your access request was approved",
@@ -80,6 +79,14 @@ class TestEmailTemplateRenderer(unittest.TestCase):
                 self.assertNotIn("unsubscribe", html)
                 self.assertNotIn("preferences", html)
                 self.assertNotIn('href="https://datamap.example.org/profile"', html)
+
+    def test_no_template_offers_snoozing_or_turning_off_reminders(self):
+        for template in EmailTemplate:
+            with self.subTest(template=template):
+                html = self.renderer.render(template, CONTEXTS[template]).html.lower()
+
+                self.assertNotIn("snooze", html)
+                self.assertNotIn("turn off reminders", html)
 
     def test_footer_datasets_link_points_to_the_dataset_list(self):
         for template in EmailTemplate:
