@@ -285,10 +285,11 @@ def update_dataset(
 @inject
 def delete_dataset(
     id: str,
+    user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> None:
-    service.disable_dataset(dataset_id=id, tenancies=tenancies)
+    service.disable_dataset(dataset_id=id, user_id=user_id, tenancies=tenancies)
     return {}
 
 
@@ -326,10 +327,11 @@ def create_dataset(
 @inject
 def enable_dataset(
     id: str,
+    user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> None:
-    service.enable_dataset(dataset_id=id, tenancies=tenancies)
+    service.enable_dataset(dataset_id=id, user_id=user_id, tenancies=tenancies)
     return {}
 
 

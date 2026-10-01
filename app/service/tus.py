@@ -1,5 +1,6 @@
 import logging
 from uuid import UUID
+from app.exception.forbidden import ForbiddenException
 from app.model.dataset import DataFile
 from app.model.tus import TusResult
 from app.logging_config import fields
@@ -34,9 +35,17 @@ class TusService:
                 created_by=user_id,
             )
 
-            self._dataset_service.create_data_file(
-                file=file, dataset_id=dataset_id, user_id=user_id
-            )
+            try:
+                self._dataset_service.create_data_file(
+                    file=file, dataset_id=dataset_id, user_id=user_id
+                )
+            except ForbiddenException:
+                self._logger.warning(
+                    "upload refused", extra=fields(dataset_id=str(dataset_id))
+                )
+                return TusResult(
+                    status_code=403, body_msg="upload_not_allowed", reject_upload=True
+                )
 
             return TusResult(status_code=200, body_msg="")
         except ValueError as e:

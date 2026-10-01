@@ -20,10 +20,12 @@ from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
 from app.service.dataset_collocation import DatasetCollocationService
+from app.service.dataset_access import DatasetAccessService
 from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.doi import DOIService
 from app.service.email import EmailService
 from app.service.email_template import EmailTemplateRenderer
+from app.service.embargo_termination import EmbargoTermination
 from app.service.permission import PermissionService
 from app.service.tus import TusService
 from app.service.user import UserService
@@ -210,27 +212,10 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
-    dataset_service = providers.Factory(
-        DatasetService,
-        repository=dataset_repository,
-        version_repository=dataset_version_repository,
-        data_file_repository=data_file_repository,
-        user_service=user_service,
-        doi_service=doi_service,
-        minio_gateway=minio_gateway,
-        tenancy_service=tenancy_service,
-        dataset_bucket=config.MINIO_DATASET_BUCKET,
-    )
-
     dataset_collocation_service = providers.Factory(
         DatasetCollocationService,
         dataset_repository=dataset_repository,
         datafile_repository=data_file_repository,
-    )
-
-    tus_service = providers.Factory(
-        TusService,
-        dataset_service=dataset_service,
     )
 
     permission_repository = providers.Factory(
@@ -246,6 +231,37 @@ class Container(containers.DeclarativeContainer):
     dataset_access_audit = providers.Factory(
         DatasetAccessAudit,
         event_repository=access_event_repository,
+    )
+
+    dataset_access_service = providers.Factory(
+        DatasetAccessService,
+        permission_repository=permission_repository,
+        user_service=user_service,
+    )
+
+    embargo_termination = providers.Factory(
+        EmbargoTermination,
+        repository=dataset_repository,
+        audit=dataset_access_audit,
+    )
+
+    dataset_service = providers.Factory(
+        DatasetService,
+        repository=dataset_repository,
+        version_repository=dataset_version_repository,
+        data_file_repository=data_file_repository,
+        user_service=user_service,
+        doi_service=doi_service,
+        minio_gateway=minio_gateway,
+        tenancy_service=tenancy_service,
+        access_service=dataset_access_service,
+        embargo_termination=embargo_termination,
+        dataset_bucket=config.MINIO_DATASET_BUCKET,
+    )
+
+    tus_service = providers.Factory(
+        TusService,
+        dataset_service=dataset_service,
     )
 
     permission_service = providers.Factory(
