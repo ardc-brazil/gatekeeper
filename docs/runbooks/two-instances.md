@@ -53,12 +53,18 @@ sudo cp /etc/nginx/sites-enabled/datamap \
 **3. Put the new one in place.**
 
 ```bash
-sudo cp /home/datamap/actions-runner/_work/gatekeeper/gatekeeper/infrastructure/nginx/datamap.conf \
-        /etc/nginx/sites-enabled/datamap
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+make -f Makefile.infra nginx-apply
 ```
 
-That path is the runner's checkout, and it only carries a merged change after a
-later deploy has run. See [host-applied-changes.md](host-applied-changes.md).
+That is the runner's checkout, and it only carries a merged change after a later
+deploy has run; the target says so before it copies anything. See
+[host-applied-changes.md](host-applied-changes.md).
+
+It writes `sites-available/datamap`, which `sites-enabled/datamap` is a symlink
+to. Writing the symlink path works — `cp` follows it — but it writes through a
+link rather than to the file, and loses the link if anything ever replaces it
+with a regular file.
 
 **4. Check it before it takes effect.**
 
