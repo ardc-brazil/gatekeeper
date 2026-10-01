@@ -171,7 +171,8 @@ Reviewer access does not pass through this function. A reviewer has no `user_id`
 |---|---|
 | Read the dataset, its versions, its files; download | owner, `read`, `write` |
 | Update metadata, create or enable versions, upload files, reserve or change a DOI, manage sharing and reviewer links | owner, `write` |
-| Delete the dataset or a version; set, extend or end the embargo; switch its mode | owner |
+| Extend the embargo | owner; or, when the owner's account is disabled, anyone with a permission |
+| Delete the dataset or a version; set or end the embargo; switch its mode | owner |
 
 Anyone else gets **404**, on every route alike, in either mode: a 403 on a write would confirm the dataset exists. The TUS upload hooks count as routes: an upload token is issued only to someone who may upload.
 
@@ -218,6 +219,7 @@ When the embargo ends nothing is published on its own. The author publishes the 
 
 - **Start.** An embargo can be set only on a dataset that has never been published, that is, one with no snapshot. Once a public page with the authors has existed, an embargo cannot take it back. The same rule allows an embargo that ended without the dataset being published to be set again.
 - **End date.** File access opens on its own once `embargo_until` passes; the check is at read time. The owner may end an embargo early; an administrator may not, since ending it early is the same as reaching past it.
+- **Owner gone.** When the owner's account is disabled, anyone with a permission may extend the embargo, within the same 90-day cap, so that a dataset still under review does not open because its owner left. Ending it early, switching its mode and deleting the dataset stay with the owner alone. Extension by someone other than the owner is recorded in `dataset_embargo_events` like any other.
 - **Duration.** An embargo is set for at most 90 days, and each extension reaches at most 90 days from the day it is made. Extensions are unlimited in number. There is no total ceiling, but no embargo drifts for years without someone deciding so again each quarter. The cap is a hard limit, not a warning.
 - **DOI.** Reserved while embargoed and promoted to `findable` **manually by the author** once it ends. The end-of-embargo email says so explicitly (see *Notifications*).
 
@@ -344,7 +346,7 @@ Email is sent in this phase. The mechanism is deliberately small: the gatekeeper
 | Embargo ending in 15, 10, 5 and 1 days | owner and everyone with a permission | `embargo_until` minus each offset |
 | Embargo ended | owner and everyone with a permission | `embargo_until` passed, or ended early by the owner |
 
-Everyone with access is told, not only the owner, so that if the owner is gone the others know the embargo is ending and the dataset still has to be published. Each reminder says how many days remain and that the files will become available to the tenancy when the embargo ends. The owner's copy adds that the embargo can be extended by up to 90 days at a time, with a button to the dataset page; the others' copy names the owner as the person who can. Pending invitations are not people with access yet, and get nothing.
+Everyone with access is told, not only the owner, so that if the owner is gone the others know the embargo is ending and the dataset still has to be published. Each reminder says how many days remain and that the files will become available to the tenancy when the embargo ends. Every copy says the embargo can be extended by up to 90 days at a time. Those who can extend it — the owner, or everyone with a permission when the owner's account is disabled — get a button to the dataset page; the others' copy names the owner as the person who can. Pending invitations are not people with access yet, and get nothing.
 
 The owner's *Embargo ended* message must say, in terms a researcher who has never heard of DataCite will understand:
 
@@ -530,6 +532,7 @@ Resolved on 2026-09-30:
 - When an embargo can be set: only on a dataset that has never been published.
 - What an invitation link proves: nothing about identity. It is single-use and accepted by whoever opens it; the author sees who did.
 - Who is told the embargo is ending: everyone with access, so the dataset is still published if the owner is gone.
+- Who may extend when the owner's account is disabled: anyone with a permission, within the same cap.
 - Whether email may be duplicated: never. A message whose delivery is uncertain is marked failed rather than retried.
 - Who reaches the files during an embargo: the owner and the people the owner authorised. Not the tenancy, not administrators, and not the Data Team unless the owner grants it.
 
