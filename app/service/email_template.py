@@ -1,9 +1,12 @@
+import html as html_entities
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
+
+from app.service.email_text import html_to_text
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "resources" / "email_templates"
 
@@ -26,6 +29,7 @@ _OPTIONAL_DEFAULTS: dict[EmailTemplate, dict[str, Any]] = {
 class RenderedEmail:
     subject: str
     html: str
+    text: str = ""
 
 
 class EmailTemplateRenderer:
@@ -45,6 +49,10 @@ class EmailTemplateRenderer:
             lstrip_blocks=True,
         )
 
+    @property
+    def site_url(self) -> str:
+        return self._site_url
+
     def render(self, template: EmailTemplate, context: dict[str, Any]) -> RenderedEmail:
         variables = {
             "site_url": self._site_url,
@@ -56,6 +64,17 @@ class EmailTemplateRenderer:
         subject = "".join(
             jinja_template.blocks["title"](jinja_template.new_context(variables))
         )
+        html = jinja_template.render(variables)
         return RenderedEmail(
-            subject=subject.strip(), html=jinja_template.render(variables)
+            subject=html_entities.unescape(subject.strip()),
+            html=html,
+            text=self._text(template, variables, html),
         )
+
+    def _text(
+        self, template: EmailTemplate, variables: dict[str, Any], html: str
+    ) -> str:
+        name = f"{template.value}.txt"
+        if name not in self._env.list_templates():
+            return html_to_text(html)
+        return self._env.get_template(name).render(variables).strip()
