@@ -16,9 +16,9 @@ class HttpClient:
         self.base_url = config.base_url
         self.timeout = config.timeout
         self.session = requests.Session()
-        # requests defaults to no retries at all, so a connection closed
-        # between being picked from the pool and being written to surfaces as a
-        # test failure. `read=0` on purpose: a slow endpoint must still fail.
+        # Not an optimisation to undo: a reused socket the server has closed
+        # fails as a read error, which the retry below does not cover.
+        self.session.headers["Connection"] = "close"
         self.session.mount(
             "http://",
             HTTPAdapter(

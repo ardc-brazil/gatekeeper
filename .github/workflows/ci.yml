@@ -156,10 +156,20 @@ jobs:
       - name: Run integration tests
         run: pytest tests/integration -q --durations=15
 
+      # Also as a file: re-running a failed job replaces its log.
       - name: Service logs
         if: failure()
         run: |
-          make ENV_FILE_PATH=integration-test.env integration-test-logs
+          make ENV_FILE_PATH=integration-test.env integration-test-logs \
+            | tee "${{ runner.temp }}/integration-logs.txt"
+
+      - name: Keep the logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/integration-logs.txt
+          retention-days: 14
 
       - name: Stop services
         if: always()
