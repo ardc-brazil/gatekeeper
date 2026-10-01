@@ -2,13 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make a dataset's embargo real in the gatekeeper: the embargo columns, per-dataset permissions, one access rule applied on every dataset route, no snapshot while embargoed, the embargo routes, and access for people outside the tenancy.
+**Goal:** Give the gatekeeper per-dataset sharing as a feature of its own — permissions, one access rule on every dataset route, access for people outside the tenancy — and the embargo as a layer on it: the embargo columns and routes, no snapshot while embargoed.
 
-**Architecture:** A `DatasetAccessService` holds the single access rule (`level_of`, `permits`, `require`). `DatasetService` stops filtering by tenancy in SQL for single-dataset routes: it fetches by id (`restrict_by_tenancy=False`) through one method, `fetch_authorized`, which then asks the access service. Search keeps the filter in SQL, extended with owner and permission clauses. An `EmbargoService` owns set/extend/end/mode, and an `EmbargoAudit` writes the append-only trail and counts it. Permission holders get the `datasets_shared` Casbin role, so a permission is sufficient on its own.
+Sharing must not depend on the embargo: a permission grants access on any dataset, embargoed or not, and the access model (`app/model/dataset_access.py`, `DatasetAccessService`, `PermissionService`, `DatasetAccessAudit`) never imports from `app/model/embargo.py` except where the rule takes the tenancy's default access away during an embargo.
+
+**Architecture:** A `DatasetAccessService` holds the single access rule (`level_of`, `permits`, `require`). `DatasetService` stops filtering by tenancy in SQL for single-dataset routes: it fetches by id (`restrict_by_tenancy=False`) through one method, `fetch_authorized`, which then asks the access service. Search keeps the filter in SQL, extended with owner and permission clauses. An `EmbargoService` owns set/extend/end/mode, and an `DatasetAccessAudit` writes the append-only trail and counts it. Permission holders get the `datasets_shared` Casbin role, so a permission is sufficient on its own.
 
 **Tech Stack:** Python 3.10 (production image `python:3.10.14-alpine`), FastAPI 0.111, SQLAlchemy 1.4.23, Alembic, dependency-injector, Casbin 1.23, prometheus-client, pytest, unittest.mock, integration tests against Docker (PostgreSQL, MinIO, WireMock).
 
-**Spec:** `docs/rfcs/003-dataset-embargo.md` (§Database changes, §Access rule, §People from outside the tenancy, §Public snapshots during the embargo, §Who sees what, §Lifecycle, §Audit). **Contracts:** `docs/superpowers/plans/2026-09-30-embargo-00-contracts.md` (wins over this plan on any interface).
+**Spec:** `docs/rfcs/003-dataset-embargo.md` (§Database changes; §Sharing: Access rule, People from outside the tenancy, Access audit; §Embargo: Every route, Public snapshots during the embargo, Who sees what, Lifecycle). **Contracts:** `docs/superpowers/plans/2026-09-30-embargo-00-contracts.md` (wins over this plan on any interface).
 
 ## Global Constraints
 
@@ -23,7 +25,7 @@
 - A missing or empty `X-Datamap-Tenancies` header is valid on every user route: it means the caller's own tenancies, possibly none. A caller with no tenancy reaches, through a permission, the dataset routes, search (`shared=true` and default), downloads and writes.
 - The production image is `python:3.10.14-alpine`: no syntax newer than Python 3.10 (no `except*`, no `typing.Self`, no PEP 695 generics). `X | None` annotations are fine.
 - Casbin role name: `datasets_shared`.
-- Metric: `datamap_embargo_events_total{event}`.
+- Metric: `datamap_dataset_access_events_total{event}`.
 - Code style (CLAUDE.md): no narrating comments; one-line comment only where a reader would otherwise undo something on purpose. Type hints everywhere. Dataclasses for models.
 - Integration tests are mandatory for this plan: it changes `app/repository/`, route paths, status codes and Casbin seed data.
 - Never pipe `make` into `tail`/`grep` and read the exit code. Confirm the API answered before trusting an integration run.
@@ -32,20 +34,21 @@
 
 | File | Status | Responsibility |
 |---|---|---|
-| `app/model/embargo.py` | create | Enums (`PermissionLevel`, `AccessLevel`, `DatasetAction`, `EmbargoEventType`), constants, `Embargo`, `DatasetAccess`, `DatasetPermission`, `embargo_active()`, `utcnow()` |
-| `app/model/embargo_test.py` | create | Unit tests for the pure helpers |
-| `app/model/db/embargo.py` | create | `DatasetPermission`, `DatasetEmbargoEvent` ORM models |
+| `app/model/dataset_access.py` | create | Sharing and access, independent of the embargo: `PermissionLevel`, `AccessLevel`, `DatasetAction`, `AccessEventType`, `SHARED_ROLE`, `DatasetAccess`, `DatasetPermission`, `utcnow()` |
+| `app/model/embargo.py` | create | Embargo only: `MAX_EMBARGO_PERIOD`, `REMINDER_OFFSETS_DAYS`, `Embargo`, `embargo_active()` |
+| `app/model/dataset_access_test.py`, `app/model/embargo_test.py` | create | Unit tests for the pure helpers |
+| `app/model/db/dataset_access.py` | create | `DatasetPermission`, `DatasetAccessEvent` ORM models |
 | `app/model/db/dataset.py` | modify | Three embargo columns on `Dataset` |
 | `app/model/dataset.py` | modify | `Dataset.embargo`, `Dataset.access`, `DatasetVersion.files_withheld`, `DatasetQuery.shared` |
-| `migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_embargo.py` | create | Schema |
-| `migrations/env.py` | modify | Import `app.model.db.embargo` for autogenerate |
+| `migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_access_and_embargo.py` | create | Schema |
+| `migrations/env.py` | modify | Import `app.model.db.dataset_access` for autogenerate |
 | `app/exception/forbidden.py` | create | `ForbiddenException` |
 | `app/controller/interceptor/exception_handler.py`, `app/setup.py` | modify | 403 handler; register new routers |
 | `app/controller/interceptor/exception_handler_test.py` | create | Handler test |
 | `app/repository/permission.py` | create | `PermissionRepository` |
-| `app/repository/embargo_event.py` | create | `EmbargoEventRepository` |
-| `app/metrics.py`, `app/metrics_test.py` | modify | `datamap_embargo_events_total` |
-| `app/service/embargo_audit.py` (+ `_test.py`) | create | `EmbargoAudit.record()` — append event + metric |
+| `app/repository/access_event.py` | create | `AccessEventRepository` |
+| `app/metrics.py`, `app/metrics_test.py` | modify | `datamap_dataset_access_events_total` |
+| `app/service/dataset_access_audit.py` (+ `_test.py`) | create | `DatasetAccessAudit.record()` — append event + metric |
 | `app/service/embargo_termination.py` (+ `_test.py`) | create | `EmbargoTermination.end()` — the one way an embargo ends early |
 | `app/service/dataset_access.py` (+ `_test.py`) | create | `DatasetAccessService` — the access rule |
 | `app/service/permission.py` (+ `_test.py`) | create | `PermissionService.grant/revoke/list_for_dataset` (plan 03 calls `grant`) |
@@ -80,26 +83,49 @@ Parallelizable: {T1, T3, T11}; then {T2, T5}; then T4; then {T6, T8, T9, T10} (T
 
 ### Task 1: Domain model, ORM models and migration
 
+Sharing and access are a dataset feature of their own; the embargo is a layer on top. The model keeps them apart: `app/model/dataset_access.py` holds everything about who may do what (levels, actions, permissions, the audit event types), and `app/model/embargo.py` only what is specific to an embargo. Nothing in `dataset_access` imports from `embargo`.
+
 **Files:**
-- Create: `app/model/embargo.py`, `app/model/embargo_test.py`, `app/model/db/embargo.py`, `migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_embargo.py`
+- Create: `app/model/dataset_access.py`, `app/model/dataset_access_test.py`, `app/model/embargo.py`, `app/model/embargo_test.py`, `app/model/db/dataset_access.py`, `migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_access_and_embargo.py`
 - Modify: `app/model/db/dataset.py:3-15,58-70`, `app/model/dataset.py:52-104`, `migrations/env.py:27-33`
 
 **Interfaces:**
-- Produces: everything in `app/model/embargo.py` (names used by every later task and by plan 03); ORM `DatasetPermission`, `DatasetEmbargoEvent`; `Dataset.embargo_until`, `Dataset.embargo_metadata_visible`, `Dataset.embargo_note`; domain `Dataset.embargo: Embargo | None`, `Dataset.access: DatasetAccess | None`, `DatasetVersion.files_withheld: bool`, `DatasetQuery.shared: bool`.
+- Produces: everything in `app/model/dataset_access.py` (`PermissionLevel`, `AccessLevel`, `DatasetAction`, `AccessEventType`, `SHARED_ROLE`, `utcnow`, `DatasetAccess`, `DatasetPermission`) and in `app/model/embargo.py` (`MAX_EMBARGO_PERIOD`, `REMINDER_OFFSETS_DAYS`, `embargo_active`, `Embargo`) — names used by every later task and by plan 03; ORM `DatasetPermission`, `DatasetAccessEvent`; `Dataset.embargo_until`, `Dataset.embargo_metadata_visible`, `Dataset.embargo_note`; domain `Dataset.embargo: Embargo | None`, `Dataset.access: DatasetAccess | None`, `DatasetVersion.files_withheld: bool`, `DatasetQuery.shared: bool`.
 
-- [ ] **Step 1: Write the failing test** — `app/model/embargo_test.py`
+- [ ] **Step 1: Write the failing tests** — `app/model/dataset_access_test.py` and `app/model/embargo_test.py`
 
 ```python
+# app/model/dataset_access_test.py
+import unittest
+
+from app.model.dataset_access import AccessEventType, AccessLevel, PermissionLevel
+
+
+class TestAccessModel(unittest.TestCase):
+    def test_levels_serialise_to_the_contract_values(self):
+        self.assertEqual(
+            [level.value for level in AccessLevel],
+            ["owner", "write", "read", "tenancy"],
+        )
+        self.assertEqual([level.value for level in PermissionLevel], ["read", "write"])
+
+    def test_event_types_fit_the_column(self):
+        for event in AccessEventType:
+            self.assertLessEqual(len(event.value), 32)
+
+    def test_the_access_model_does_not_depend_on_the_embargo(self):
+        import app.model.dataset_access as module
+
+        with open(module.__file__) as source:
+            self.assertNotIn("app.model.embargo", source.read())
+```
+
+```python
+# app/model/embargo_test.py
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from app.model.embargo import (
-    MAX_EMBARGO_PERIOD,
-    AccessLevel,
-    EmbargoEventType,
-    PermissionLevel,
-    embargo_active,
-)
+from app.model.embargo import MAX_EMBARGO_PERIOD, REMINDER_OFFSETS_DAYS, embargo_active
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -120,34 +146,24 @@ class TestConstants(unittest.TestCase):
     def test_the_cap_is_ninety_days(self):
         self.assertEqual(MAX_EMBARGO_PERIOD, timedelta(days=90))
 
-    def test_levels_serialise_to_the_contract_values(self):
-        self.assertEqual(
-            [level.value for level in AccessLevel],
-            ["owner", "write", "read", "tenancy"],
-        )
-        self.assertEqual([level.value for level in PermissionLevel], ["read", "write"])
-
-    def test_event_types_fit_the_column(self):
-        for event in EmbargoEventType:
-            self.assertLessEqual(len(event.value), 32)
+    def test_reminders_are_fifteen_ten_five_and_one_day_before(self):
+        self.assertEqual(REMINDER_OFFSETS_DAYS, (15, 10, 5, 1))
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [ ] **Step 2: Run them to verify they fail**
 
-Run: `pytest app/model/embargo_test.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'app.model.embargo'`
+Run: `pytest app/model/dataset_access_test.py app/model/embargo_test.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.model.dataset_access'` and `No module named 'app.model.embargo'`
 
-- [ ] **Step 3: Write `app/model/embargo.py`**
+- [ ] **Step 3: Write `app/model/dataset_access.py` and `app/model/embargo.py`**
 
 ```python
+# app/model/dataset_access.py
 import enum
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-MAX_EMBARGO_PERIOD = timedelta(days=90)
-REMINDER_OFFSETS_DAYS = (15, 10, 5, 1)
-REDACTED = "[redacted]"
 SHARED_ROLE = "datasets_shared"
 
 
@@ -172,7 +188,7 @@ class DatasetAction(enum.Enum):
     MANAGE_EMBARGO = "manage_embargo"
 
 
-class EmbargoEventType(str, enum.Enum):
+class AccessEventType(str, enum.Enum):
     CREATED = "created"
     EXTENDED = "extended"
     ENDED_EARLY = "ended_early"
@@ -182,24 +198,12 @@ class EmbargoEventType(str, enum.Enum):
     PERMISSION_REVOKED = "permission_revoked"
     INVITATION_CREATED = "invitation_created"
     INVITATION_REVOKED = "invitation_revoked"
-    REVIEW_LINK_CREATED = "review_link_created"
-    REVIEW_LINK_REVOKED = "review_link_revoked"
+    ANONYMOUS_LINK_CREATED = "anonymous_link_created"
+    ANONYMOUS_LINK_REVOKED = "anonymous_link_revoked"
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def embargo_active(until: datetime | None, now: datetime) -> bool:
-    return until is not None and until > now
-
-
-@dataclass
-class Embargo:
-    until: datetime
-    active: bool
-    metadata_visible: bool
-    note: str | None = None
 
 
 @dataclass
@@ -221,12 +225,33 @@ class DatasetPermission:
     created_at: datetime | None = None
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+```python
+# app/model/embargo.py
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
-Run: `pytest app/model/embargo_test.py -v`
-Expected: PASS (6 tests)
+MAX_EMBARGO_PERIOD = timedelta(days=90)
+REMINDER_OFFSETS_DAYS = (15, 10, 5, 1)
 
-- [ ] **Step 5: Add the ORM models** — `app/model/db/embargo.py`
+
+def embargo_active(until: datetime | None, now: datetime) -> bool:
+    return until is not None and until > now
+
+
+@dataclass
+class Embargo:
+    until: datetime
+    active: bool
+    metadata_visible: bool
+    note: str | None = None
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pytest app/model/dataset_access_test.py app/model/embargo_test.py -v`
+Expected: PASS (8 tests)
+
+- [ ] **Step 5: Add the ORM models** — `app/model/db/dataset_access.py`
 
 ```python
 import sqlalchemy
@@ -264,8 +289,8 @@ class DatasetPermission(Base):
     )
 
 
-class DatasetEmbargoEvent(Base):
-    __tablename__ = "dataset_embargo_events"
+class DatasetAccessEvent(Base):
+    __tablename__ = "dataset_access_events"
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
     event_type = Column(String(32), nullable=False)
@@ -281,7 +306,7 @@ class DatasetEmbargoEvent(Base):
 
     __table_args__ = (
         Index(
-            "idx_dataset_embargo_events_dataset",
+            "idx_dataset_access_events_dataset",
             "dataset_id",
             sqlalchemy.text("occurred_at DESC"),
         ),
@@ -308,7 +333,8 @@ Add `Text` to the `from sqlalchemy import (...)` list (lines 3-14), then after `
 Add the import at the top (after `from app.model.doi import DOI`):
 
 ```python
-from app.model.embargo import DatasetAccess, Embargo
+from app.model.dataset_access import DatasetAccess
+from app.model.embargo import Embargo
 ```
 
 In `DatasetVersion`, after `doi: DOI = None`:
@@ -330,10 +356,10 @@ In `DatasetQuery`, after `minimal: bool = False`:
     shared: bool = False
 ```
 
-- [ ] **Step 8: Write the migration** — `migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_embargo.py`
+- [ ] **Step 8: Write the migration** — `migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_access_and_embargo.py`
 
 ```python
-"""Add dataset embargo, per-dataset permissions and the embargo audit trail
+"""Add per-dataset permissions, the access audit trail and the embargo columns
 
 Revision ID: e5f6a7b8c9d0
 Revises: d4e5f6a7b8c9
@@ -406,7 +432,7 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "dataset_embargo_events",
+        "dataset_access_events",
         sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
         sa.Column(
             "dataset_id",
@@ -432,17 +458,17 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "idx_dataset_embargo_events_dataset",
-        "dataset_embargo_events",
+        "idx_dataset_access_events_dataset",
+        "dataset_access_events",
         ["dataset_id", sa.text("occurred_at DESC")],
     )
 
 
 def downgrade() -> None:
     op.drop_index(
-        "idx_dataset_embargo_events_dataset", table_name="dataset_embargo_events"
+        "idx_dataset_access_events_dataset", table_name="dataset_access_events"
     )
-    op.drop_table("dataset_embargo_events")
+    op.drop_table("dataset_access_events")
     op.drop_index("idx_dataset_permissions_user", table_name="dataset_permissions")
     op.drop_table("dataset_permissions")
     op.drop_column("datasets", "embargo_note")
@@ -453,7 +479,7 @@ def downgrade() -> None:
 - [ ] **Step 9: Register the models for autogenerate** — `migrations/env.py`, after `from app.model.db import doi  # noqa: E402, F401`:
 
 ```python
-from app.model.db import embargo  # noqa: E402, F401
+from app.model.db import dataset_access  # noqa: E402, F401
 ```
 
 - [ ] **Step 10: Verify the migration against a real database**
@@ -481,8 +507,8 @@ Expected: PASS (no test touches the new columns yet)
 - [ ] **Step 12: Commit**
 
 ```bash
-git add app/model/embargo.py app/model/embargo_test.py app/model/db/embargo.py app/model/db/dataset.py app/model/dataset.py migrations/env.py "migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_embargo.py"
-git commit -m "feat: embargo columns, dataset permissions and the embargo audit table"
+git add app/model/dataset_access.py app/model/dataset_access_test.py app/model/embargo.py app/model/embargo_test.py app/model/db/dataset_access.py app/model/db/dataset.py app/model/dataset.py migrations/env.py "migrations/versions/2026_09_30_1210-e5f6a7b8c9d0_add_dataset_access_and_embargo.py"
+git commit -m "feat: dataset permissions, the access audit table and the embargo columns"
 ```
 
 ---
@@ -490,17 +516,17 @@ git commit -m "feat: embargo columns, dataset permissions and the embargo audit 
 ### Task 2: Repositories for permissions and embargo events
 
 **Files:**
-- Create: `app/repository/permission.py`, `app/repository/embargo_event.py`
+- Create: `app/repository/permission.py`, `app/repository/access_event.py`
 
 **Interfaces:**
-- Consumes: ORM `DatasetPermission`, `DatasetEmbargoEvent` (Task 1).
+- Consumes: ORM `DatasetPermission`, `DatasetAccessEvent` (Task 1).
 - Produces:
   - `PermissionRepository.fetch(dataset_id: UUID, user_id: UUID) -> DatasetPermission | None`
   - `PermissionRepository.upsert(dataset_id: UUID, user_id: UUID, level: str, granted_by: UUID | None) -> DatasetPermission`
   - `PermissionRepository.delete(dataset_id: UUID, user_id: UUID) -> bool`
   - `PermissionRepository.list_for_dataset(dataset_id: UUID) -> list[DatasetPermission]`
-  - `EmbargoEventRepository.append(dataset_id: UUID, event_type: str, changed_by: UUID | None, old_value: dict | None, new_value: dict | None, note: str | None) -> None`
-  - `EmbargoEventRepository.list_for_dataset(dataset_id: UUID) -> list[DatasetEmbargoEvent]`
+  - `AccessEventRepository.append(dataset_id: UUID, event_type: str, changed_by: UUID | None, old_value: dict | None, new_value: dict | None, note: str | None) -> None`
+  - `AccessEventRepository.list_for_dataset(dataset_id: UUID) -> list[DatasetAccessEvent]`
 
 Repositories follow the existing pattern and have no unit tests in this codebase; their SQL is exercised by Task 12's integration suite (CLAUDE.md: unit tests mock the repository and cannot see SQL).
 
@@ -513,7 +539,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.model.db.embargo import DatasetPermission
+from app.model.db.dataset_access import DatasetPermission
 
 
 class PermissionRepository:
@@ -574,7 +600,7 @@ class PermissionRepository:
             )
 ```
 
-- [ ] **Step 2: Write `app/repository/embargo_event.py`**
+- [ ] **Step 2: Write `app/repository/access_event.py`**
 
 ```python
 from contextlib import AbstractContextManager
@@ -583,10 +609,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.model.db.embargo import DatasetEmbargoEvent
+from app.model.db.dataset_access import DatasetAccessEvent
 
 
-class EmbargoEventRepository:
+class AccessEventRepository:
     def __init__(
         self, session_factory: Callable[..., AbstractContextManager[Session]]
     ) -> None:
@@ -603,7 +629,7 @@ class EmbargoEventRepository:
     ) -> None:
         with self._session_factory() as session:
             session.add(
-                DatasetEmbargoEvent(
+                DatasetAccessEvent(
                     dataset_id=dataset_id,
                     event_type=event_type,
                     changed_by=changed_by,
@@ -614,25 +640,25 @@ class EmbargoEventRepository:
             )
             session.commit()
 
-    def list_for_dataset(self, dataset_id: UUID) -> list[DatasetEmbargoEvent]:
+    def list_for_dataset(self, dataset_id: UUID) -> list[DatasetAccessEvent]:
         with self._session_factory() as session:
             return (
-                session.query(DatasetEmbargoEvent)
+                session.query(DatasetAccessEvent)
                 .filter_by(dataset_id=dataset_id)
-                .order_by(DatasetEmbargoEvent.occurred_at.desc())
+                .order_by(DatasetAccessEvent.occurred_at.desc())
                 .all()
             )
 ```
 
 - [ ] **Step 3: Check they import and lint**
 
-Run: `python -c "import app.repository.permission, app.repository.embargo_event" && ruff check app/repository/permission.py app/repository/embargo_event.py`
+Run: `python -c "import app.repository.permission, app.repository.access_event" && ruff check app/repository/permission.py app/repository/access_event.py`
 Expected: no output from Python; `All checks passed!`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add app/repository/permission.py app/repository/embargo_event.py
+git add app/repository/permission.py app/repository/access_event.py
 git commit -m "feat: repositories for dataset permissions and embargo events"
 ```
 
@@ -759,8 +785,8 @@ from uuid import uuid4
 from app.exception.forbidden import ForbiddenException
 from app.exception.not_found import NotFoundException
 from app.model.db.dataset import Dataset as DatasetDBModel
-from app.model.db.embargo import DatasetPermission as DatasetPermissionDBModel
-from app.model.embargo import AccessLevel, DatasetAction
+from app.model.db.dataset_access import DatasetPermission as DatasetPermissionDBModel
+from app.model.dataset_access import AccessLevel, DatasetAction
 from app.repository.permission import PermissionRepository
 from app.service.dataset_access import DatasetAccessService
 from app.service.user import UserService
@@ -970,14 +996,8 @@ from uuid import UUID
 from app.exception.forbidden import ForbiddenException
 from app.exception.not_found import NotFoundException
 from app.model.db.dataset import Dataset as DatasetDBModel
-from app.model.embargo import (
-    AccessLevel,
-    DatasetAccess,
-    DatasetAction,
-    Embargo,
-    embargo_active,
-    utcnow,
-)
+from app.model.dataset_access import AccessLevel, DatasetAccess, DatasetAction, utcnow
+from app.model.embargo import Embargo, embargo_active
 from app.repository.permission import PermissionRepository
 from app.service.user import UserService
 
@@ -1161,17 +1181,17 @@ git commit -m "feat: one access rule for datasets, embargo and permissions inclu
 
 ---
 
-### Task 5: Audit trail, its metric, and the one way an embargo ends early — `EmbargoAudit`, `EmbargoTermination`
+### Task 5: Audit trail, its metric, and the one way an embargo ends early — `DatasetAccessAudit`, `EmbargoTermination`
 
 **Files:**
-- Create: `app/service/embargo_audit.py`, `app/service/embargo_audit_test.py`, `app/service/embargo_termination.py`, `app/service/embargo_termination_test.py`
+- Create: `app/service/dataset_access_audit.py`, `app/service/dataset_access_audit_test.py`, `app/service/embargo_termination.py`, `app/service/embargo_termination_test.py`
 - Modify: `app/metrics.py` (declarations in `Metrics.__init__`, method next to `snapshot_published`), `app/metrics_test.py`
 
 **Interfaces:**
-- Consumes: `EmbargoEventRepository.append` (Task 2), `EmbargoEventType` (Task 1), `DatasetRepository.upsert` (existing).
+- Consumes: `AccessEventRepository.append` (Task 2), `AccessEventType` (Task 1), `DatasetRepository.upsert` (existing).
 - Produces:
-  - `Metrics.embargo_event(event: str) -> None`
-  - `EmbargoAudit.record(dataset_id: UUID, event_type: EmbargoEventType, changed_by: UUID | None, old_value: dict | None = None, new_value: dict | None = None, note: str | None = None) -> None` (plan 03 records invitation and review-link events through it)
+  - `Metrics.dataset_access_event(event: str) -> None`
+  - `DatasetAccessAudit.record(dataset_id: UUID, event_type: AccessEventType, changed_by: UUID | None, old_value: dict | None = None, new_value: dict | None = None, note: str | None = None) -> None` (plan 03 records invitation and anonymous link events through it)
   - `embargo_state(dataset) -> dict` — `{"until": iso | None, "metadata_visible": bool}`, the audit payload shape
   - `EmbargoTermination.end(dataset, ended_by: UUID | None, now: datetime, note: str | None = None) -> None` — sets `embargo_until = now`, upserts, records `ended_early` with `note`. `EmbargoService.end` (Task 10) and the manual-DOI path (Task 7) both end embargoes only through it. It sends nothing: plan 03's dispatch pass announces every embargo whose date has passed.
 
@@ -1180,42 +1200,42 @@ git commit -m "feat: one access rule for datasets, embargo and permissions inclu
 Append to `app/metrics_test.py`:
 
 ```python
-class TestEmbargoEvents(MetricsTestCase):
+class TestDatasetAccessEvents(MetricsTestCase):
     def test_each_event_is_counted_by_its_type(self):
-        self.metrics.embargo_event("created")
-        self.metrics.embargo_event("created")
-        self.metrics.embargo_event("extended")
+        self.metrics.dataset_access_event("created")
+        self.metrics.dataset_access_event("created")
+        self.metrics.dataset_access_event("extended")
 
         self.assertEqual(
-            self.value("datamap_embargo_events_total", event="created"), 2.0
+            self.value("datamap_dataset_access_events_total", event="created"), 2.0
         )
         self.assertEqual(
-            self.value("datamap_embargo_events_total", event="extended"), 1.0
+            self.value("datamap_dataset_access_events_total", event="extended"), 1.0
         )
 ```
 
-`app/service/embargo_audit_test.py`:
+`app/service/dataset_access_audit_test.py`:
 
 ```python
 import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
-from app.model.embargo import EmbargoEventType
-from app.repository.embargo_event import EmbargoEventRepository
-from app.service.embargo_audit import EmbargoAudit
+from app.model.dataset_access import AccessEventType
+from app.repository.access_event import AccessEventRepository
+from app.service.dataset_access_audit import DatasetAccessAudit
 
 
-class TestEmbargoAudit(unittest.TestCase):
+class TestDatasetAccessAudit(unittest.TestCase):
     def test_an_event_is_appended_and_counted(self):
-        events = Mock(spec=EmbargoEventRepository)
-        audit = EmbargoAudit(event_repository=events)
+        events = Mock(spec=AccessEventRepository)
+        audit = DatasetAccessAudit(event_repository=events)
         dataset_id, user_id = uuid4(), uuid4()
 
-        with patch("app.service.embargo_audit.metrics") as metrics:
+        with patch("app.service.dataset_access_audit.metrics") as metrics:
             audit.record(
                 dataset_id=dataset_id,
-                event_type=EmbargoEventType.EXTENDED,
+                event_type=AccessEventType.EXTENDED,
                 changed_by=user_id,
                 old_value={"until": "a"},
                 new_value={"until": "b"},
@@ -1230,22 +1250,22 @@ class TestEmbargoAudit(unittest.TestCase):
             new_value={"until": "b"},
             note="review round 2",
         )
-        metrics.embargo_event.assert_called_once_with("extended")
+        metrics.dataset_access_event.assert_called_once_with("extended")
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `pytest app/metrics_test.py::TestEmbargoEvents app/service/embargo_audit_test.py -v`
-Expected: FAIL — `AttributeError: 'Metrics' object has no attribute 'embargo_event'` and `ModuleNotFoundError: No module named 'app.service.embargo_audit'`
+Run: `pytest app/metrics_test.py::TestDatasetAccessEvents app/service/dataset_access_audit_test.py -v`
+Expected: FAIL — `AttributeError: 'Metrics' object has no attribute 'dataset_access_event'` and `ModuleNotFoundError: No module named 'app.service.dataset_access_audit'`
 
 - [ ] **Step 3: Implement**
 
 `app/metrics.py`, in `Metrics.__init__` after `self._snapshots = Counter(...)`:
 
 ```python
-        self._embargo_events = Counter(
-            "datamap_embargo_events_total",
-            "Embargo decisions recorded in the audit trail",
+        self._dataset_access_events = Counter(
+            "datamap_dataset_access_events_total",
+            "Sharing and embargo decisions recorded in the access audit trail",
             ["event"],
             registry=self.registry,
         )
@@ -1254,28 +1274,28 @@ Expected: FAIL — `AttributeError: 'Metrics' object has no attribute 'embargo_e
 and after `def snapshot_published(...)`:
 
 ```python
-    def embargo_event(self, event: str) -> None:
-        self._embargo_events.labels(event=event).inc()
+    def dataset_access_event(self, event: str) -> None:
+        self._dataset_access_events.labels(event=event).inc()
 ```
 
-`app/service/embargo_audit.py`:
+`app/service/dataset_access_audit.py`:
 
 ```python
 from uuid import UUID
 
 from app.metrics import metrics
-from app.model.embargo import EmbargoEventType
-from app.repository.embargo_event import EmbargoEventRepository
+from app.model.dataset_access import AccessEventType
+from app.repository.access_event import AccessEventRepository
 
 
-class EmbargoAudit:
-    def __init__(self, event_repository: EmbargoEventRepository) -> None:
+class DatasetAccessAudit:
+    def __init__(self, event_repository: AccessEventRepository) -> None:
         self._events = event_repository
 
     def record(
         self,
         dataset_id: UUID,
-        event_type: EmbargoEventType,
+        event_type: AccessEventType,
         changed_by: UUID | None,
         old_value: dict | None = None,
         new_value: dict | None = None,
@@ -1289,12 +1309,12 @@ class EmbargoAudit:
             new_value=new_value,
             note=note,
         )
-        metrics.embargo_event(event_type.value)
+        metrics.dataset_access_event(event_type.value)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `pytest app/metrics_test.py app/service/embargo_audit_test.py -v`
+Run: `pytest app/metrics_test.py app/service/dataset_access_audit_test.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Write the failing test for the termination seam** — `app/service/embargo_termination_test.py`
@@ -1306,9 +1326,9 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 from app.model.db.dataset import Dataset as DatasetDBModel
-from app.model.embargo import EmbargoEventType
+from app.model.dataset_access import AccessEventType
 from app.repository.dataset import DatasetRepository
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.embargo_termination import EmbargoTermination
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -1317,7 +1337,7 @@ NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
 class TestEmbargoTermination(unittest.TestCase):
     def test_ending_moves_the_date_to_now_and_records_it(self):
         repository = Mock(spec=DatasetRepository)
-        audit = Mock(spec=EmbargoAudit)
+        audit = Mock(spec=DatasetAccessAudit)
         termination = EmbargoTermination(repository=repository, audit=audit)
         user_id = uuid4()
         dataset = DatasetDBModel(
@@ -1333,7 +1353,7 @@ class TestEmbargoTermination(unittest.TestCase):
         repository.upsert.assert_called_once_with(dataset=dataset)
         audit.record.assert_called_once_with(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.ENDED_EARLY,
+            event_type=AccessEventType.ENDED_EARLY,
             changed_by=user_id,
             old_value={
                 "until": (NOW + timedelta(days=3)).isoformat(),
@@ -1356,9 +1376,9 @@ from datetime import datetime
 from uuid import UUID
 
 from app.model.db.dataset import Dataset as DatasetDBModel
-from app.model.embargo import EmbargoEventType
+from app.model.dataset_access import AccessEventType
 from app.repository.dataset import DatasetRepository
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 
 
 def embargo_state(dataset: DatasetDBModel) -> dict:
@@ -1369,7 +1389,7 @@ def embargo_state(dataset: DatasetDBModel) -> dict:
 
 
 class EmbargoTermination:
-    def __init__(self, repository: DatasetRepository, audit: EmbargoAudit) -> None:
+    def __init__(self, repository: DatasetRepository, audit: DatasetAccessAudit) -> None:
         self._repository = repository
         self._audit = audit
 
@@ -1385,7 +1405,7 @@ class EmbargoTermination:
         self._repository.upsert(dataset=dataset)
         self._audit.record(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.ENDED_EARLY,
+            event_type=AccessEventType.ENDED_EARLY,
             changed_by=ended_by,
             old_value=before,
             new_value=embargo_state(dataset),
@@ -1395,13 +1415,13 @@ class EmbargoTermination:
 
 - [ ] **Step 8: Run the tests to verify they pass**
 
-Run: `pytest app/service/embargo_termination_test.py app/service/embargo_audit_test.py app/metrics_test.py -v`
+Run: `pytest app/service/embargo_termination_test.py app/service/dataset_access_audit_test.py app/metrics_test.py -v`
 Expected: PASS
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add app/metrics.py app/metrics_test.py app/service/embargo_audit.py app/service/embargo_audit_test.py app/service/embargo_termination.py app/service/embargo_termination_test.py
+git add app/metrics.py app/metrics_test.py app/service/dataset_access_audit.py app/service/dataset_access_audit_test.py app/service/embargo_termination.py app/service/embargo_termination_test.py
 git commit -m "feat: record every embargo decision, and end an embargo through one seam"
 ```
 
@@ -1452,7 +1472,7 @@ Add imports at the top:
 
 ```python
 from app.exception.forbidden import ForbiddenException
-from app.model.embargo import AccessLevel, DatasetAccess, DatasetAction
+from app.model.dataset_access import AccessLevel, DatasetAccess, DatasetAction
 from app.service.dataset_access import DatasetAccessService
 from app.service.embargo_termination import EmbargoTermination
 ```
@@ -1659,7 +1679,7 @@ Imports, after the existing ones:
 
 ```python
 from app.exception.forbidden import ForbiddenException
-from app.model.embargo import AccessLevel, DatasetAction, utcnow
+from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
 from app.service.dataset_access import DatasetAccessService
 from app.service.embargo_termination import EmbargoTermination
 ```
@@ -1930,10 +1950,10 @@ def enable_dataset(
 `app/container.py` — imports and providers (place `permission_repository` with the other repositories, `dataset_access_service` before `dataset_service`):
 
 ```python
-from app.repository.embargo_event import EmbargoEventRepository
+from app.repository.access_event import AccessEventRepository
 from app.repository.permission import PermissionRepository
 from app.service.dataset_access import DatasetAccessService
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.embargo_termination import EmbargoTermination
 ```
 
@@ -1949,20 +1969,20 @@ from app.service.embargo_termination import EmbargoTermination
         user_service=user_service,
     )
 
-    embargo_event_repository = providers.Factory(
-        EmbargoEventRepository,
+    access_event_repository = providers.Factory(
+        AccessEventRepository,
         session_factory=db.provided.session,
     )
 
-    embargo_audit = providers.Factory(
-        EmbargoAudit,
-        event_repository=embargo_event_repository,
+    dataset_access_audit = providers.Factory(
+        DatasetAccessAudit,
+        event_repository=access_event_repository,
     )
 
     embargo_termination = providers.Factory(
         EmbargoTermination,
         repository=dataset_repository,
-        audit=embargo_audit,
+        audit=dataset_access_audit,
     )
 ```
 
@@ -2310,7 +2330,7 @@ class EmbargoResponse(BaseModel):
 class AccessResponse(BaseModel):
     level: str = Field(..., title="owner, write, read or tenancy")
     can_edit: bool = Field(..., title="May change the dataset")
-    can_share: bool = Field(..., title="May manage sharing and reviewer links")
+    can_share: bool = Field(..., title="May manage sharing and anonymous links")
     can_manage_embargo: bool = Field(..., title="May set, end or switch the embargo")
     can_extend_embargo: bool = Field(..., title="May extend the embargo")
     can_delete: bool = Field(..., title="May delete the dataset")
@@ -2334,7 +2354,7 @@ In `DatasetGetResponse` and `DatasetVersionGetResponse` add:
 
 - [ ] **Step 5: Adapters** — `app/controller/v1/dataset/dataset.py`
 
-Import the three new response classes and `Embargo`, `DatasetAccess` from `app.model.embargo`. Add:
+Import the three new response classes, `DatasetAccess` from `app.model.dataset_access` and `Embargo` from `app.model.embargo`. Add:
 
 ```python
 def _adapt_embargo(embargo: Embargo | None) -> EmbargoResponse | None:
@@ -2495,7 +2515,7 @@ Expected: FAIL — `search` called without `user_id`; the hidden item is returne
 
 - [ ] **Step 3: Repository** — `app/repository/dataset.py`
 
-Imports: change `from sqlalchemy import and_, or_, func, text` to `from sqlalchemy import and_, or_, func, text, not_, select`, and add `from app.model.db.embargo import DatasetPermission`.
+Imports: change `from sqlalchemy import and_, or_, func, text` to `from sqlalchemy import and_, or_, func, text, not_, select`, and add `from app.model.db.dataset_access import DatasetPermission`.
 
 Signature: `def search(self, query_params: DatasetQuery, tenancies: list[str] = None, user_id: UUID | None = None) -> PaginatedResult:`
 
@@ -2600,7 +2620,7 @@ git commit -m "feat: search lists owned and shared datasets and hides embargoed 
 - Modify: `app/container.py`
 
 **Interfaces:**
-- Consumes: `PermissionRepository` (Task 2), `EmbargoAudit` (Task 5), `UserService.fetch_by_id/add_roles` (existing), `SHARED_ROLE` (Task 1).
+- Consumes: `PermissionRepository` (Task 2), `DatasetAccessAudit` (Task 5), `UserService.fetch_by_id/add_roles` (existing), `SHARED_ROLE` (Task 1).
 - Produces (plan 03 calls these; no route here):
   - `PermissionService.grant(dataset_id: UUID, user_id: UUID, level: PermissionLevel, granted_by: UUID | None) -> DatasetPermission` — upserts, adds `g, <user_id>, datasets_shared` if missing, records `permission_granted`.
   - `PermissionService.revoke(dataset_id: UUID, user_id: UUID, revoked_by: UUID | None) -> bool` — deletes, records `permission_revoked`; leaves the role (it grants nothing alone).
@@ -2615,11 +2635,11 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 from app.exception.not_found import NotFoundException
-from app.model.db.embargo import DatasetPermission as DatasetPermissionDBModel
-from app.model.embargo import EmbargoEventType, PermissionLevel
+from app.model.db.dataset_access import DatasetPermission as DatasetPermissionDBModel
+from app.model.dataset_access import AccessEventType, PermissionLevel
 from app.model.user import User
 from app.repository.permission import PermissionRepository
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.permission import PermissionService
 from app.service.user import UserService
 
@@ -2628,7 +2648,7 @@ class TestPermissionService(unittest.TestCase):
     def setUp(self):
         self.permissions = Mock(spec=PermissionRepository)
         self.users = Mock(spec=UserService)
-        self.audit = Mock(spec=EmbargoAudit)
+        self.audit = Mock(spec=DatasetAccessAudit)
         self.service = PermissionService(
             permission_repository=self.permissions,
             user_service=self.users,
@@ -2653,7 +2673,7 @@ class TestPermissionService(unittest.TestCase):
         )
         self.audit.record.assert_called_once_with(
             dataset_id=self.dataset_id,
-            event_type=EmbargoEventType.PERMISSION_GRANTED,
+            event_type=AccessEventType.PERMISSION_GRANTED,
             changed_by=self.by,
             old_value=None,
             new_value={"user_id": str(self.user_id), "level": "read"},
@@ -2690,7 +2710,7 @@ class TestPermissionService(unittest.TestCase):
         )
         self.audit.record.assert_called_once_with(
             dataset_id=self.dataset_id,
-            event_type=EmbargoEventType.PERMISSION_REVOKED,
+            event_type=AccessEventType.PERMISSION_REVOKED,
             changed_by=self.by,
             old_value={"user_id": str(self.user_id), "level": "write"},
         )
@@ -2710,15 +2730,15 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'app.service.permission
 ```python
 from uuid import UUID
 
-from app.model.db.embargo import DatasetPermission as DatasetPermissionDBModel
-from app.model.embargo import (
+from app.model.db.dataset_access import DatasetPermission as DatasetPermissionDBModel
+from app.model.dataset_access import (
     SHARED_ROLE,
+    AccessEventType,
     DatasetPermission,
-    EmbargoEventType,
     PermissionLevel,
 )
 from app.repository.permission import PermissionRepository
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.user import UserService
 
 
@@ -2737,7 +2757,7 @@ class PermissionService:
         self,
         permission_repository: PermissionRepository,
         user_service: UserService,
-        audit: EmbargoAudit,
+        audit: DatasetAccessAudit,
     ) -> None:
         self._permissions = permission_repository
         self._user_service = user_service
@@ -2762,7 +2782,7 @@ class PermissionService:
             self._user_service.add_roles(id=user_id, roles=[SHARED_ROLE])
         self._audit.record(
             dataset_id=dataset_id,
-            event_type=EmbargoEventType.PERMISSION_GRANTED,
+            event_type=AccessEventType.PERMISSION_GRANTED,
             changed_by=granted_by,
             old_value={"user_id": str(user_id), "level": previous.level}
             if previous is not None
@@ -2778,7 +2798,7 @@ class PermissionService:
         self._permissions.delete(dataset_id=dataset_id, user_id=user_id)
         self._audit.record(
             dataset_id=dataset_id,
-            event_type=EmbargoEventType.PERMISSION_REVOKED,
+            event_type=AccessEventType.PERMISSION_REVOKED,
             changed_by=revoked_by,
             old_value={"user_id": str(user_id), "level": previous.level},
         )
@@ -2797,14 +2817,14 @@ class PermissionService:
 from app.service.permission import PermissionService
 ```
 
-(`embargo_event_repository` and `embargo_audit` were declared in Task 6.)
+(`access_event_repository` and `dataset_access_audit` were declared in Task 6.)
 
 ```python
     permission_service = providers.Factory(
         PermissionService,
         permission_repository=permission_repository,
         user_service=user_service,
-        audit=embargo_audit,
+        audit=dataset_access_audit,
     )
 ```
 
@@ -2829,7 +2849,7 @@ git commit -m "feat: granting a permission gives the shared role and leaves a tr
 - Modify: `app/controller/v1/dataset/resource.py`, `app/container.py` (providers + `wiring_config`), `app/setup.py` (`setup_routes`)
 
 **Interfaces:**
-- Consumes: `DatasetService.fetch_authorized` (Task 6), `DatasetRepository.fetch/upsert`, `DatasetAccessService` (Task 4), `EmbargoAudit`, `EmbargoTermination`, `embargo_state` (Task 5).
+- Consumes: `DatasetService.fetch_authorized` (Task 6), `DatasetRepository.fetch/upsert`, `DatasetAccessService` (Task 4), `DatasetAccessAudit`, `EmbargoTermination`, `embargo_state` (Task 5).
 - Produces:
   - `EmbargoService.set_embargo(dataset_id, user_id, tenancies, until: datetime, metadata_visible: bool, note: str | None) -> Embargo` — refuses `embargo_manual_doi` when any version has a manual DOI, checked before `embargo_dataset_published`
   - `EmbargoService.extend(dataset_id, user_id, tenancies, until: datetime) -> Embargo`
@@ -2852,12 +2872,12 @@ from app.model.dataset import VisibilityStatus
 from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.db.dataset import DatasetVersion as DatasetVersionDBModel
 from app.model.db.doi import DOI as DOIDBModel
-from app.model.embargo import AccessLevel, DatasetAction, EmbargoEventType
+from app.model.dataset_access import AccessEventType, AccessLevel, DatasetAction
 from app.repository.dataset import DatasetRepository
 from app.service.dataset import DatasetService
 from app.service.dataset_access import DatasetAccessService
 from app.service.embargo import EmbargoService
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.embargo_termination import EmbargoTermination
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -2867,7 +2887,7 @@ class TestEmbargoService(unittest.TestCase):
     def setUp(self):
         self.datasets = Mock(spec=DatasetService)
         self.repository = Mock(spec=DatasetRepository)
-        self.audit = Mock(spec=EmbargoAudit)
+        self.audit = Mock(spec=DatasetAccessAudit)
         self.access = DatasetAccessService(
             permission_repository=Mock(), user_service=Mock()
         )
@@ -2924,7 +2944,7 @@ class TestEmbargoService(unittest.TestCase):
         self.assertEqual(self.dataset.embargo_until, NOW + timedelta(days=30))
         self.repository.upsert.assert_called_once_with(dataset=self.dataset)
         self.assertEqual(
-            self.audit.record.call_args.kwargs["event_type"], EmbargoEventType.CREATED
+            self.audit.record.call_args.kwargs["event_type"], AccessEventType.CREATED
         )
         self.assertEqual(
             self.datasets.fetch_authorized.call_args.kwargs["action"],
@@ -3013,7 +3033,7 @@ class TestEmbargoService(unittest.TestCase):
         self.assertEqual(embargo.until, NOW + timedelta(days=80))
         self.assertEqual(
             self.audit.record.call_args.kwargs["event_type"],
-            EmbargoEventType.EXTENDED,
+            AccessEventType.EXTENDED,
         )
 
     def test_the_cap_applies_on_every_extension(self):
@@ -3057,7 +3077,7 @@ class TestEmbargoService(unittest.TestCase):
         self.assertEqual(self.dataset.embargo_until, NOW)
         self.assertEqual(
             self.audit.record.call_args.kwargs["event_type"],
-            EmbargoEventType.ENDED_EARLY,
+            AccessEventType.ENDED_EARLY,
         )
 
     def test_switching_mode(self):
@@ -3071,7 +3091,7 @@ class TestEmbargoService(unittest.TestCase):
         self.assertTrue(embargo.metadata_visible)
         self.assertEqual(
             self.audit.record.call_args.kwargs["event_type"],
-            EmbargoEventType.METADATA_MODE_CHANGED,
+            AccessEventType.METADATA_MODE_CHANGED,
         )
 
     def test_status_of_an_unknown_dataset_reveals_nothing(self):
@@ -3102,17 +3122,12 @@ from app.exception.forbidden import ForbiddenException
 from app.model.dataset import VisibilityStatus
 from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.doi import Mode as DOIMode
-from app.model.embargo import (
-    MAX_EMBARGO_PERIOD,
-    DatasetAction,
-    Embargo,
-    EmbargoEventType,
-    utcnow,
-)
+from app.model.dataset_access import AccessEventType, DatasetAction, utcnow
+from app.model.embargo import MAX_EMBARGO_PERIOD, Embargo
 from app.repository.dataset import DatasetRepository
 from app.service.dataset import DatasetService
 from app.service.dataset_access import DatasetAccessService
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.embargo_termination import EmbargoTermination, embargo_state
 
 
@@ -3144,7 +3159,7 @@ class EmbargoService:
         dataset_service: DatasetService,
         repository: DatasetRepository,
         access_service: DatasetAccessService,
-        audit: EmbargoAudit,
+        audit: DatasetAccessAudit,
         termination: EmbargoTermination,
     ) -> None:
         self._datasets = dataset_service
@@ -3185,7 +3200,7 @@ class EmbargoService:
         self._repository.upsert(dataset=dataset)
         self._audit.record(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.CREATED,
+            event_type=AccessEventType.CREATED,
             changed_by=user_id,
             old_value=before,
             new_value=embargo_state(dataset),
@@ -3227,7 +3242,7 @@ class EmbargoService:
         self._repository.upsert(dataset=dataset)
         self._audit.record(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.EXTENDED,
+            event_type=AccessEventType.EXTENDED,
             changed_by=user_id,
             old_value=before,
             new_value=embargo_state(dataset),
@@ -3273,7 +3288,7 @@ class EmbargoService:
             self._repository.upsert(dataset=dataset)
             self._audit.record(
                 dataset_id=dataset.id,
-                event_type=EmbargoEventType.METADATA_MODE_CHANGED,
+                event_type=AccessEventType.METADATA_MODE_CHANGED,
                 changed_by=user_id,
                 old_value=before,
                 new_value=embargo_state(dataset),
@@ -3466,7 +3481,7 @@ def get_embargo_status(
         dataset_service=dataset_service,
         repository=dataset_repository,
         access_service=dataset_access_service,
-        audit=embargo_audit,
+        audit=dataset_access_audit,
         termination=embargo_termination,
     )
 ```
@@ -4123,6 +4138,6 @@ git commit -m "style: ruff format"
 
 ## Self-Review Notes
 
-- Spec coverage: columns/permissions/events (T1), access rule incl. every route (T4, T6), outside-the-tenancy access (T4 role scope, T6 `restrict_by_tenancy=False`, T8 search, T9 role grant, T11 policies), snapshots/DOI (T7), manual DOI ends the embargo only with confirmation and only by the owner (T7), no embargo on a dataset with a manual DOI (T10), download TTL (T7), files withheld (T7), lifecycle/cap/owner-gone extension (T10), audit + metric (T5, T9, T10), the termination seam plan 03 hooks into (T5, used by T7 and T10), embargo-status (T10), owner fix (T6), TUS refusal (T6). Invitations, review links, share routes and notifications are plan 03.
+- Spec coverage: columns/permissions/events (T1), access rule incl. every route (T4, T6), outside-the-tenancy access (T4 role scope, T6 `restrict_by_tenancy=False`, T8 search, T9 role grant, T11 policies), snapshots/DOI (T7), manual DOI ends the embargo only with confirmation and only by the owner (T7), no embargo on a dataset with a manual DOI (T10), download TTL (T7), files withheld (T7), lifecycle/cap/owner-gone extension (T10), audit + metric (T5, T9, T10), the termination seam plan 03 hooks into (T5, used by T7 and T10), embargo-status (T10), owner fix (T6), TUS refusal (T6). Invitations, anonymous links, share routes and notifications are plan 03.
 - Natural expiry (`expired` event and its email) is not here: it has no request to hang on, so plan 03's dispatch pass records it.
 - Contract delta to raise: `access.can_delete` is computed by the rule (owner; or tenancy member with the delete role when no embargo is active), not "owner only", so today's tenancy deletion keeps working for unembargoed datasets.

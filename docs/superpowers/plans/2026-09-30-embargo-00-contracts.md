@@ -8,7 +8,7 @@ Spec: `docs/rfcs/003-dataset-embargo.md`. This file fixes the interfaces the gat
 |---|---|---|---|
 | 01 | `2026-09-30-embargo-01-gatekeeper-email.md` | gatekeeper | — |
 | 02 | `2026-09-30-embargo-02-gatekeeper-embargo-access.md` | gatekeeper | — |
-| 03 | `2026-09-30-embargo-03-gatekeeper-sharing-review.md` | gatekeeper | 01, 02 |
+| 03 | `2026-09-30-embargo-03-gatekeeper-sharing-anonymous-links.md` | gatekeeper | 01, 02 |
 | 04 | `2026-09-30-embargo-04-archivist-dispatch.md` | archivist | this file (route only) |
 | 05 | `2026-09-30-embargo-05-webapp.md` | datamap-webapp | this file; merges after 02 and 03 |
 
@@ -30,8 +30,10 @@ Deploy order: gatekeeper (01+02+03) → archivist (04) → webapp (05) → nginx
 
 ## Shared enums and constants
 
+Sharing and access are a dataset feature of their own, used on any dataset, embargoed or not; the embargo is a layer on top. The gatekeeper model keeps them apart, and nothing in `dataset_access` depends on `embargo`.
+
 ```python
-# app/model/embargo.py (gatekeeper)
+# app/model/dataset_access.py (gatekeeper)
 class PermissionLevel(str, enum.Enum):
     READ = "read"
     WRITE = "write"
@@ -42,8 +44,11 @@ class AccessLevel(str, enum.Enum):     # what the caller holds on a dataset
     READ = "read"
     TENANCY = "tenancy"                 # access through tenancy membership only
 
+# app/model/embargo.py (gatekeeper)
 MAX_EMBARGO_PERIOD = timedelta(days=90)
 REMINDER_OFFSETS_DAYS = (15, 10, 5, 1)
+
+# app/service/redaction.py (gatekeeper, anonymous links)
 REDACTED = "[redacted]"
 ```
 
@@ -114,6 +119,8 @@ Manual DOI (`POST /datasets/{id}/versions/{v}/doi` with `mode: MANUAL`) gains an
 
 ## Sharing (plan 03)
 
+Sharing works on **any dataset, embargoed or not** — for example, giving a dataset's contributors read/write access in the system while it is not embargoed. No sharing route checks the embargo, and none of the share UI is conditional on it. The embargo only removes the tenancy's default access and adds anonymous links.
+
 User routes.
 
 | Verb | Path | Body | Success |
@@ -136,7 +143,7 @@ Error codes (400): `share_target_required`, `share_target_ambiguous`, `invalid_e
   "invitations": [{"id": "…", "email": "…"|null, "orcid": "…"|null, "level": "read",
                    "created_at": ts, "accepted_at": ts|null,
                    "accepted_by": {"id","name","email"}|null, "revoked_at": ts|null}],
-  "review_links": [ReviewLink]
+  "anonymous_links": [AnonymousLink]
 }
 // GrantResult
 {"kind": "permission", "permission": Permission}
@@ -155,21 +162,21 @@ The webapp calls `claim` right after sign-in (NextAuth `jwt` callback, `trigger 
 Links are built by the gatekeeper from `PUBLIC_BASE_URL`:
 
 - invitation: `{PUBLIC_BASE_URL}/invitations/{token}`
-- reviewer: `{PUBLIC_BASE_URL}/review/{token}`
+- anonymous: `{PUBLIC_BASE_URL}/anonymous/{token}`
 
 Tokens: `secrets.token_urlsafe(32)`; stored as `sha256(token).hexdigest()`.
 
-## Reviewer links (plan 03)
+## Anonymous links (plan 03)
 
 User routes:
 
 | Verb | Path | Body | Success | Errors |
 |---|---|---|---|---|
-| POST | `/datasets/{id}/review-links` | `{"label": str}` (1–256 chars) | `201 ReviewLink + "link": url` | `400 embargo_not_active` |
-| DELETE | `/datasets/{id}/review-links/{link_id}` | — | `204` | — |
+| POST | `/datasets/{id}/anonymous-links` | `{"label": str}` (1–256 chars) | `201 AnonymousLink + "link": url` | `400 embargo_not_active` |
+| DELETE | `/datasets/{id}/anonymous-links/{link_id}` | — | `204` | — |
 
 ```json
-// ReviewLink
+// AnonymousLink
 {"id": "…", "label": "JGR Atmospheres, round 1", "created_at": ts, "revoked_at": ts|null,
  "views": {"count": 12, "first_at": ts|null, "last_at": ts|null}}
 ```
@@ -178,19 +185,22 @@ Client-only, no user:
 
 | Verb | Path | Success | Errors |
 |---|---|---|---|
-| GET | `/review/{token}` | `200 ReviewPage` | `404` unknown or revoked |
+| GET | `/anonymous/{token}` | `200 AnonymousPage` | `404` unknown or revoked |
 
 ```json
-// ReviewPage, embargo active
+// AnonymousPage, embargo active
 {"state": "active", "embargo_until": ts,
  "dataset": {"name": "…", "data": { …redacted… },
              "versions": [{"name": "1", "created_at": ts,
                            "files_summary": {"count": 42, "total_size_bytes": 1234}}]}}
-// ReviewPage, embargo over
-{"state": "ended", "dataset_id": "…", "published": true}
+// AnonymousPage, embargo over, dataset not published yet
+{"state": "ended", "embargo_ended_at": ts,
+ "dataset": {"name": "…", "data": { …redacted… }, "versions": [ …as above… ]}}
+// AnonymousPage, dataset published
+{"state": "published", "dataset_id": "…"}
 ```
 
-`published` is `visibility == PUBLIC`. The webapp redirects to `/datasets/{dataset_id}` when `published`, else shows "the embargo has ended and the dataset has not been published yet".
+Published means `visibility == PUBLIC`. Until then the link keeps serving the same redacted page, with a notice that the embargo has ended (`embargo_ended_at` is the dataset's `embargo_until`). Once published, the webapp redirects to `/datasets/{dataset_id}`; the anonymity ends there, since the public page shows the authors. The link never dead-ends.
 
 Redaction (gatekeeper, one function `redact_metadata(data: dict) -> dict`): keys in the allowlist pass through unchanged; any other key has every string inside it (recursively, through lists and dicts) replaced by `"[redacted]"`, keeping list lengths and dict keys. Allowlist:
 
@@ -267,17 +277,22 @@ The dispatch route calls `embargo_notifications.queue_due(now)` then `email_serv
 Plan 03 builds on these exactly; the provider names are the `app/container.py` attributes.
 
 ```python
-# plan 02 — app/model/embargo.py
+# plan 02 — app/model/dataset_access.py (sharing and access; no embargo import)
+class PermissionLevel(str, enum.Enum): READ, WRITE
+class AccessLevel(str, enum.Enum): OWNER, WRITE, READ, TENANCY
 class DatasetAction(enum.Enum):
     READ_METADATA, READ_FILES, WRITE, DELETE, EXTEND_EMBARGO, MANAGE_EMBARGO
-class EmbargoEventType(str, enum.Enum):
+class AccessEventType(str, enum.Enum):
     CREATED, EXTENDED, ENDED_EARLY, EXPIRED, METADATA_MODE_CHANGED, PERMISSION_GRANTED,
-    PERMISSION_REVOKED, INVITATION_CREATED, INVITATION_REVOKED, REVIEW_LINK_CREATED, REVIEW_LINK_REVOKED
-@dataclass class Embargo: until, active, metadata_visible, note=None
+    PERMISSION_REVOKED, INVITATION_CREATED, INVITATION_REVOKED, ANONYMOUS_LINK_CREATED, ANONYMOUS_LINK_REVOKED
 @dataclass class DatasetAccess: level, can_edit, can_share, can_manage_embargo, can_extend_embargo, can_delete
 @dataclass class DatasetPermission: dataset_id, user_id, level: PermissionLevel, granted_by=None, created_at=None
 SHARED_ROLE = "datasets_shared"
 def utcnow() -> datetime
+
+# plan 02 — app/model/embargo.py (embargo only)
+MAX_EMBARGO_PERIOD, REMINDER_OFFSETS_DAYS
+@dataclass class Embargo: until, active, metadata_visible, note=None
 def embargo_active(until: datetime | None, now: datetime) -> bool
 
 # plan 02 — app/exception/forbidden.py: ForbiddenException -> 403 {"detail": "forbidden"}
@@ -289,14 +304,14 @@ class PermissionRepository:
     def delete(self, dataset_id, user_id) -> bool
     def list_for_dataset(self, dataset_id) -> list[DatasetPermissionDBModel]
 
-# plan 02 — app/repository/embargo_event.py                   provider: embargo_event_repository
-class EmbargoEventRepository:
+# plan 02 — app/repository/access_event.py                   provider: access_event_repository
+class AccessEventRepository:
     def append(self, dataset_id, event_type: str, changed_by, old_value, new_value, note) -> None
-    def list_for_dataset(self, dataset_id) -> list[DatasetEmbargoEvent]
+    def list_for_dataset(self, dataset_id) -> list[DatasetAccessEvent]
 
-# plan 02 — app/service/embargo_audit.py                      provider: embargo_audit
-class EmbargoAudit:   # the only writer of dataset_embargo_events outside tests; also counts datamap_embargo_events_total
-    def record(self, dataset_id, event_type: EmbargoEventType, changed_by: UUID | None,
+# plan 02 — app/service/dataset_access_audit.py                      provider: dataset_access_audit
+class DatasetAccessAudit:   # the only writer of dataset_access_events outside tests; also counts datamap_dataset_access_events_total
+    def record(self, dataset_id, event_type: AccessEventType, changed_by: UUID | None,
                old_value: dict | None = None, new_value: dict | None = None, note: str | None = None) -> None
 
 # plan 02 — app/service/dataset_access.py                     provider: dataset_access_service
@@ -333,11 +348,11 @@ EmbargoService.set_embargo / extend / end / set_mode / status
 EmailService.enqueue(...) / dispatch_due(limit=50) -> DispatchResult(queued, sent, failed, skipped, retried)
 
 # plan 03                                                       providers: dataset_invitation_repository,
-#   dataset_review_link_repository, share_service, review_link_service,
+#   dataset_anonymous_link_repository, share_service, anonymous_link_service,
 #   embargo_notification_repository, embargo_notification_service
 ```
 
-**One mechanism announces the end of an embargo.** Nothing is sent when an embargo ends: the owner's early end and the manual DOI both set `embargo_until` to now through `EmbargoTermination.end`, and a natural expiry needs no write at all. Plan 03's dispatch pass (`EmbargoNotificationService.queue_due`) finds every enabled dataset whose `embargo_until` has passed with no `expired` event since, records `expired` through `EmbargoAudit` (`changed_by` null) and queues the *Embargo ended* messages, reading the latest `ended_early` event to say whether and why it ended early.
+**One mechanism announces the end of an embargo.** Nothing is sent when an embargo ends: the owner's early end and the manual DOI both set `embargo_until` to now through `EmbargoTermination.end`, and a natural expiry needs no write at all. Plan 03's dispatch pass (`EmbargoNotificationService.queue_due`) finds every enabled dataset whose `embargo_until` has passed with no `expired` event since, records `expired` through `DatasetAccessAudit` (`changed_by` null) and queues the *Embargo ended* messages, reading the latest `ended_early` event to say whether and why it ended early.
 
 ## Metrics (RFC 005 names)
 
@@ -345,11 +360,11 @@ EmailService.enqueue(...) / dispatch_due(limit=50) -> DispatchResult(queued, sen
 |---|---|---|---|
 | `datamap_emails_total` | counter | `template` (`notification`, `dataset_invitation`, `embargo_reminder`, `embargo_ended`), `outcome` (`sent`, `retried`, `failed`, `skipped`) | 01 |
 | `datamap_email_pending` | gauge | — | 01 |
-| `datamap_review_link_views_total` | counter | `tenancy`, `outcome` (`shown`, `redirected`, `not_found`) | 03 |
-| `datamap_review_links_created_total` | counter | `tenancy` | 03 |
-| `datamap_embargo_events_total` | counter | `event` (the `dataset_embargo_events.event_type` values) | 02 |
+| `datamap_anonymous_link_views_total` | counter | `tenancy`, `outcome` (`shown`, `shown_after_embargo`, `redirected`, `not_found`) | 03 |
+| `datamap_anonymous_links_created_total` | counter | `tenancy` | 03 |
+| `datamap_dataset_access_events_total` | counter | `event` (the `dataset_access_events.event_type` values) | 02 |
 
-Webapp telemetry: add pages `/review/[token]`, `/doi/datasets/[datasetId]/versions/[versionName]`, `/invitations/[token]`, `/app/datasets/shared` to `PAGES`; add UI events `embargo_set`, `embargo_extended`, `dataset_shared`, `review_link_created` to `UI_EVENTS`.
+Webapp telemetry: add pages `/anonymous/[token]`, `/doi/datasets/[datasetId]/versions/[versionName]`, `/invitations/[token]`, `/app/datasets/shared` to `PAGES`; add UI events `embargo_set`, `embargo_extended`, `dataset_shared`, `anonymous_link_created` to `UI_EVENTS`.
 
 ## Casbin seed additions (plan 02)
 
@@ -371,7 +386,7 @@ Production: the same three rows are inserted by hand, as the README describes fo
 | `/app/datasets/[datasetId]` (existing) | logged in, tenancy not required | adds embargo section, share dialog, badges from `embargo`/`access` |
 | `/app/datasets/new` (existing) | logged in | embargo choice in the form; sent with `PUT /datasets/{id}/embargo` after the dataset update |
 | DOI form (existing, `DatasetCitation.tsx`) | logged in | manual mode on an embargoed dataset → confirmation dialog, then `end_embargo: true`; manual mode on a dataset without embargo → notice that it can no longer be embargoed, confirmed before sending |
-| `/review/[token]` | public | `GET /review/{token}` server-side |
+| `/anonymous/[token]` | public | `GET /anonymous/{token}` server-side |
 | `/doi/datasets/[datasetId]/versions/[versionName]` | public | `GET /datasets/{id}/embargo-status` server-side; redirects to `/app/datasets/{id}/versions/{v}` when not embargoed |
 | `/invitations/[token]` | logged in (redirect to login with callback) | `POST /invitations/accept`, then redirect to the dataset |
 

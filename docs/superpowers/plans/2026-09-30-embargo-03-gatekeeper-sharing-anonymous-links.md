@@ -1,10 +1,10 @@
-# Embargo 03 — Gatekeeper: Sharing, Invitations, Reviewer Links and Embargo Notifications
+# Embargo 03 — Gatekeeper: Sharing, Invitations, Anonymous Links and Embargo Notifications
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let an author share a dataset with named people (tenancy search, email or ORCID), accept single-use invitations, give a venue an anonymous metadata-only reviewer link with usage counts, and email everyone with access before and when an embargo ends.
+**Goal:** Let an author share a dataset with named people (tenancy search, email or ORCID), accept single-use invitations, give a venue a metadata-only anonymous link with usage counts, and email everyone with access before and when an embargo ends.
 
-**Architecture:** Three new tables (`dataset_invitations`, `dataset_review_links`, `dataset_review_link_views`) behind three repositories. `ShareService` owns grants, invitations and acceptance; `ReviewLinkService` owns reviewer links and the redacted review page; `EmbargoNotificationService` decides which reminder and end-of-embargo messages are due and hands them to plan 01's `EmailService`. Every per-dataset decision goes through plan 02's `DatasetService.fetch_authorized`, which applies `DatasetAccessService`; every permission write goes through plan 02's `PermissionService` (which also grants the `datasets_shared` role and records the audit row); every other audit row goes through plan 02's `EmbargoAudit`. This plan never re-implements the access rule.
+**Architecture:** Sharing is a dataset feature of its own: `ShareService` and its routes work on any dataset, embargoed or not, and never check the embargo. Only `AnonymousLinkService` and the notifications depend on it. Three new tables (`dataset_invitations`, `dataset_anonymous_links`, `dataset_anonymous_link_views`) behind three repositories. `ShareService` owns grants, invitations and acceptance; `AnonymousLinkService` owns anonymous links and the redacted anonymous page; `EmbargoNotificationService` decides which reminder and end-of-embargo messages are due and hands them to plan 01's `EmailService`. Every per-dataset decision goes through plan 02's `DatasetService.fetch_authorized`, which applies `DatasetAccessService`; every permission write goes through plan 02's `PermissionService` (which also grants the `datasets_shared` role and records the audit row); every other audit row goes through plan 02's `DatasetAccessAudit`. This plan never re-implements the access rule.
 
 **Tech Stack:** Python 3.10 (production image `python:3.10.14-alpine`), FastAPI 0.111, SQLAlchemy 1.4, Alembic, dependency-injector, Casbin, Jinja2 (pinned by plan 01), prometheus-client, pytest + `unittest.mock`, black-box integration tests against the container on `localhost:9094`, Mailpit (added by plan 01).
 
@@ -16,12 +16,12 @@
 - A caller who may not see a dataset gets **404** on every route; a caller who sees it but lacks the right gets **403** (plan 02's `ForbiddenException`).
 - Error codes are exactly: `share_target_required`, `share_target_ambiguous`, `invalid_email`, `invalid_orcid`, `already_has_access`, `cannot_share_with_owner`, `invalid_level`, `unknown_user`, `embargo_not_active` (400, via `BadRequestException(errors=[ErrorDetails(code=...)])`); `invitation_already_accepted` (409, via `ConflictException`).
 - Tokens: `secrets.token_urlsafe(32)`, stored as `hashlib.sha256(token.encode()).hexdigest()`. A token is returned once, in the response that creates it, and never logged.
-- Links: `{PUBLIC_BASE_URL}/invitations/{token}` and `{PUBLIC_BASE_URL}/review/{token}`.
+- Links: `{PUBLIC_BASE_URL}/invitations/{token}` and `{PUBLIC_BASE_URL}/anonymous/{token}`.
 - Redaction allowlist is exactly `SAFE_METADATA_KEYS` from the contracts; everything else is redacted with `"[redacted]"` keeping shape.
-- Reviewer views store no IP, user agent or cookie.
+- Anonymous-link views store no IP, user agent or cookie.
 - Email is queued **after** the write it announces has committed; a failure to queue is logged and never undoes the write.
-- Reminders: offsets `(15, 10, 5, 1)` days, to the owner (if enabled) and every enabled permission holder, `dedup_key = embargo_reminder:<dataset_id>:<embargo_until_iso>:<offset>:<user_id>`; an offset whose moment had already passed when the current `embargo_until` was set is never sent; when several are due at once only the nearest one is sent. End notice: `dedup_key = embargo_ended:<dataset_id>:<embargo_until_iso>:<user_id>`, plus one `expired` row in `dataset_embargo_events`.
-- Metrics: `datamap_review_link_views_total{tenancy,outcome}` (`shown`, `redirected`, `not_found`), `datamap_review_links_created_total{tenancy}`. `dataset_id`/`link_id` are never labels.
+- Reminders: offsets `(15, 10, 5, 1)` days, to the owner (if enabled) and every enabled permission holder, `dedup_key = embargo_reminder:<dataset_id>:<embargo_until_iso>:<offset>:<user_id>`; an offset whose moment had already passed when the current `embargo_until` was set is never sent; when several are due at once only the nearest one is sent. End notice: `dedup_key = embargo_ended:<dataset_id>:<embargo_until_iso>:<user_id>`, plus one `expired` row in `dataset_access_events`.
+- Metrics: `datamap_anonymous_link_views_total{tenancy,outcome}` (`shown`, `shown_after_embargo`, `redirected`, `not_found`), `datamap_anonymous_links_created_total{tenancy}`. `dataset_id`/`link_id` are never labels.
 - Python 3.10 in production: no syntax newer than 3.10.
 - Placeholder addresses (`@fake.mail.com`) are passed to `EmailService.enqueue`, which records them as `skipped`; only a person with no email at all is left out.
 - When an embargo ended early, the *Embargo ended* message says so, and says why when it was a manual DOI.
@@ -33,19 +33,25 @@
 These names are what plans 01 and 02 must ship. If either plan names them differently, change this plan's imports, not the other plan.
 
 ```python
-# plan 02 — app/model/embargo.py
+# plan 02 — app/model/dataset_access.py (sharing and access; independent of the embargo)
 class PermissionLevel(str, enum.Enum): READ = "read"; WRITE = "write"
 class AccessLevel(str, enum.Enum): OWNER, WRITE, READ, TENANCY
 class DatasetAction(enum.Enum): READ_METADATA, READ_FILES, WRITE, DELETE, EXTEND_EMBARGO, MANAGE_EMBARGO
-class EmbargoEventType(str, enum.Enum): CREATED, EXTENDED, ENDED_EARLY, EXPIRED, METADATA_MODE_CHANGED,
+class AccessEventType(str, enum.Enum): CREATED, EXTENDED, ENDED_EARLY, EXPIRED, METADATA_MODE_CHANGED,
     PERMISSION_GRANTED, PERMISSION_REVOKED, INVITATION_CREATED, INVITATION_REVOKED,
-    REVIEW_LINK_CREATED, REVIEW_LINK_REVOKED
+    ANONYMOUS_LINK_CREATED, ANONYMOUS_LINK_REVOKED
 @dataclass class DatasetPermission: dataset_id, user_id, level: PermissionLevel, granted_by, created_at
-REDACTED = "[redacted]"; REMINDER_OFFSETS_DAYS = (15, 10, 5, 1); SHARED_ROLE = "datasets_shared"
+SHARED_ROLE = "datasets_shared"
 
-# plan 02 — app/model/db/embargo.py
+# plan 02 — app/model/embargo.py (embargo only)
+REMINDER_OFFSETS_DAYS = (15, 10, 5, 1)
+
+# this plan — app/service/redaction.py (anonymous links)
+REDACTED = "[redacted]"
+
+# plan 02 — app/model/db/dataset_access.py
 class DatasetPermission(Base):        # dataset_permissions: dataset_id, user_id, level (str), granted_by, created_at
-class DatasetEmbargoEvent(Base):      # dataset_embargo_events: id, dataset_id, event_type, old_value, new_value, changed_by, note, occurred_at
+class DatasetAccessEvent(Base):      # dataset_access_events: id, dataset_id, event_type, old_value, new_value, changed_by, note, occurred_at
 # plan 02 — app/model/db/dataset.py: Dataset.embargo_until, Dataset.embargo_metadata_visible, Dataset.embargo_note
 
 # plan 02 — app/repository/permission.py (reads only here; writes go through PermissionService)
@@ -61,9 +67,9 @@ class PermissionService:
     def revoke(self, dataset_id: UUID, user_id: UUID, revoked_by: UUID | None) -> bool   # False when there was none
     def list_for_dataset(self, dataset_id: UUID) -> list[DatasetPermission]
 
-# plan 02 — app/service/embargo_audit.py
-class EmbargoAudit:
-    def record(self, dataset_id: UUID, event_type: EmbargoEventType, changed_by: UUID | None,
+# plan 02 — app/service/dataset_access_audit.py
+class DatasetAccessAudit:
+    def record(self, dataset_id: UUID, event_type: AccessEventType, changed_by: UUID | None,
                old_value: dict | None = None, new_value: dict | None = None, note: str | None = None) -> None
 
 # plan 02 — app/service/dataset.py
@@ -79,7 +85,7 @@ DatasetService.fetch_authorized(dataset_id: UUID, user_id: UUID, tenancies: list
 #           plan's dispatch pass, which also covers an embargo that simply runs out.
 
 # plan 02 — container providers: dataset_service, dataset_repository, permission_repository, permission_service,
-#           embargo_audit, user_repository, user_service
+#           dataset_access_audit, user_repository, user_service
 
 # plan 01 — app/service/email.py
 class EmailService:
@@ -107,32 +113,32 @@ class EmailService:
 
 | File | Responsibility |
 |---|---|
-| `migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_review_links.py` | the three tables |
+| `migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_anonymous_links.py` | the three tables |
 | `migrations/env.py` | import the new model module |
-| `app/model/db/sharing.py` | `DatasetInvitation`, `DatasetReviewLink`, `DatasetReviewLinkView` |
+| `app/model/db/sharing.py` | `DatasetInvitation`, `DatasetAnonymousLink`, `DatasetAnonymousLinkView` |
 | `app/model/sharing.py` | domain dataclasses returned by services |
 | `app/repository/dataset_invitation.py` | invitation persistence, atomic single-use accept |
-| `app/repository/dataset_review_link.py` | link persistence, view recording, view aggregates |
+| `app/repository/dataset_anonymous_link.py` | link persistence, view recording, view aggregates |
 | `app/repository/embargo_notification.py` | the two queries the notification pass needs |
 | `app/repository/user.py` | `fetch_by_email_insensitive`, `search_share_candidates` |
 | `app/service/share_identity.py` | email/ORCID normalisation and ORCID checksum |
 | `app/service/share_token.py` | token generation and hashing |
 | `app/service/redaction.py` | `SAFE_METADATA_KEYS`, `redact_metadata` |
 | `app/service/share.py` | `ShareService` |
-| `app/service/review_link.py` | `ReviewLinkService` |
+| `app/service/anonymous_link.py` | `AnonymousLinkService` |
 | `app/service/notification.py` | `EmbargoNotificationService` |
-| `app/metrics.py` | two reviewer-link counters |
+| `app/metrics.py` | two anonymous link counters |
 | `app/resources/email_templates/{dataset_invitation,embargo_reminder,embargo_ended}.{html,txt}`, `app/service/email_template.py` | message content in the existing identity; access granted uses the existing `notification` |
-| `app/controller/v1/dataset/share_resource.py` | Pydantic request/response models for share and review links |
+| `app/controller/v1/dataset/share_resource.py` | Pydantic request/response models for share and anonymous links |
 | `app/controller/v1/dataset/share.py` | share routes |
-| `app/controller/v1/dataset/review_link.py` | reviewer-link management routes |
+| `app/controller/v1/dataset/anonymous_link.py` | anonymous link management routes |
 | `app/controller/v1/invitation/invitation.py` | accept and claim (client-only) |
-| `app/controller/v1/review/review.py` | `GET /review/{token}` (client-only) |
+| `app/controller/v1/anonymous/anonymous.py` | `GET /anonymous/{token}` (client-only) |
 | `app/controller/v1/internal/notification.py` | call `queue_due` before `dispatch_due` |
 | `app/container.py`, `app/setup.py` | wiring and routers |
-| `infrastructure/grafana/dashboards/Business/platform-usage.json` | "Reviewer links" row and panel |
+| `infrastructure/grafana/dashboards/Business/platform-usage.json` | "Anonymous links" row and panel |
 | `tests/integration/utils/database.py` | `psql` helper to backdate an event in the test database |
-| `tests/integration/test_sharing_api.py`, `test_review_links_api.py`, `test_embargo_notifications.py` | integration tests |
+| `tests/integration/test_sharing_api.py`, `test_anonymous_links_api.py`, `test_embargo_notifications.py` | integration tests |
 
 ## Task order and parallelism
 
@@ -147,20 +153,20 @@ class EmailService:
 
 **Files:**
 - Create: `app/model/db/sharing.py`
-- Create: `migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_review_links.py`
+- Create: `migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_anonymous_links.py`
 - Modify: `migrations/env.py` (model imports block, lines 27-33)
 - Create: `app/repository/dataset_invitation.py`
-- Create: `app/repository/dataset_review_link.py`
+- Create: `app/repository/dataset_anonymous_link.py`
 - Test: `app/repository/sharing_models_test.py`
 
 **Interfaces:**
 - Consumes: `Base` from `app.database`; plan 02 revision `e5f6a7b8c9d0`.
 - Produces:
   - `DatasetInvitation(id, dataset_id, email, orcid, level, token_hash, invited_by, accepted_at, accepted_by, revoked_at, created_at)`
-  - `DatasetReviewLink(id, dataset_id, token_hash, label, revoked_at, created_by, created_at)`
-  - `DatasetReviewLinkView(id, link_id, outcome, viewed_at)`
+  - `DatasetAnonymousLink(id, dataset_id, token_hash, label, revoked_at, created_by, created_at)`
+  - `DatasetAnonymousLinkView(id, link_id, outcome, viewed_at)`
   - `DatasetInvitationRepository`: `create(invitation) -> DatasetInvitation`, `fetch(dataset_id, invitation_id) -> DatasetInvitation | None`, `fetch_by_token_hash(token_hash) -> DatasetInvitation | None`, `list_for_dataset(dataset_id) -> list[DatasetInvitation]`, `list_pending_for(email: str | None, orcid: str | None) -> list[DatasetInvitation]`, `find_pending(dataset_id, email, orcid) -> DatasetInvitation | None`, `mark_accepted(invitation_id, user_id, at) -> bool`, `revoke(invitation_id, at) -> bool`, `replace_token(invitation_id, token_hash) -> bool`
-  - `DatasetReviewLinkRepository`: `create(link) -> DatasetReviewLink`, `fetch(dataset_id, link_id) -> DatasetReviewLink | None`, `fetch_by_token_hash(token_hash) -> DatasetReviewLink | None`, `list_with_views(dataset_id) -> list[tuple[DatasetReviewLink, int, datetime | None, datetime | None]]`, `revoke(link_id, at) -> bool`, `record_view(link_id, outcome) -> None`
+  - `DatasetAnonymousLinkRepository`: `create(link) -> DatasetAnonymousLink`, `fetch(dataset_id, link_id) -> DatasetAnonymousLink | None`, `fetch_by_token_hash(token_hash) -> DatasetAnonymousLink | None`, `list_with_views(dataset_id) -> list[tuple[DatasetAnonymousLink, int, datetime | None, datetime | None]]`, `revoke(link_id, at) -> bool`, `record_view(link_id, outcome) -> None`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -170,8 +176,8 @@ import unittest
 
 from app.model.db.sharing import (
     DatasetInvitation,
-    DatasetReviewLink,
-    DatasetReviewLinkView,
+    DatasetAnonymousLink,
+    DatasetAnonymousLinkView,
 )
 
 
@@ -185,16 +191,16 @@ class TestSharingTables(unittest.TestCase):
             },
         )
 
-    def test_review_link_tables_record_no_reviewer_identity(self):
+    def test_anonymous_link_tables_record_no_reviewer_identity(self):
         self.assertEqual(
-            set(DatasetReviewLinkView.__table__.columns.keys()),
+            set(DatasetAnonymousLinkView.__table__.columns.keys()),
             {"id", "link_id", "outcome", "viewed_at"},
         )
-        self.assertNotIn("expires_at", DatasetReviewLink.__table__.columns.keys())
+        self.assertNotIn("expires_at", DatasetAnonymousLink.__table__.columns.keys())
 
     def test_tokens_are_unique(self):
         self.assertTrue(DatasetInvitation.__table__.c.token_hash.unique)
-        self.assertTrue(DatasetReviewLink.__table__.c.token_hash.unique)
+        self.assertTrue(DatasetAnonymousLink.__table__.c.token_hash.unique)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -252,8 +258,8 @@ class DatasetInvitation(Base):
     )
 
 
-class DatasetReviewLink(Base):
-    __tablename__ = "dataset_review_links"
+class DatasetAnonymousLink(Base):
+    __tablename__ = "dataset_anonymous_links"
     id = Column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -268,22 +274,22 @@ class DatasetReviewLink(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    __table_args__ = (Index("idx_dataset_review_links_dataset", "dataset_id"),)
+    __table_args__ = (Index("idx_dataset_anonymous_links_dataset", "dataset_id"),)
 
 
-class DatasetReviewLinkView(Base):
-    __tablename__ = "dataset_review_link_views"
+class DatasetAnonymousLinkView(Base):
+    __tablename__ = "dataset_anonymous_link_views"
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     link_id = Column(
-        UUID(as_uuid=True), ForeignKey("dataset_review_links.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("dataset_anonymous_links.id"), nullable=False
     )
-    outcome = Column(String(16), nullable=False)
+    outcome = Column(String(32), nullable=False)
     viewed_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     __table_args__ = (
-        Index("idx_dataset_review_link_views_link", "link_id", "viewed_at"),
+        Index("idx_dataset_anonymous_link_views_link", "link_id", "viewed_at"),
     )
 ```
 
@@ -297,8 +303,8 @@ Expected: 3 passed
 The `lower(email)` index is an expression index, which autogenerate skips; it lives only in the migration.
 
 ```python
-# migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_review_links.py
-"""Add dataset invitations, reviewer links and their views
+# migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_anonymous_links.py
+"""Add dataset invitations, anonymous links and their views
 
 Revision ID: f6a7b8c9d0e1
 Revises: e5f6a7b8c9d0
@@ -371,7 +377,7 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "dataset_review_links",
+        "dataset_anonymous_links",
         sa.Column(
             "id",
             postgresql.UUID(as_uuid=True),
@@ -401,19 +407,19 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "idx_dataset_review_links_dataset", "dataset_review_links", ["dataset_id"]
+        "idx_dataset_anonymous_links_dataset", "dataset_anonymous_links", ["dataset_id"]
     )
 
     op.create_table(
-        "dataset_review_link_views",
+        "dataset_anonymous_link_views",
         sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
         sa.Column(
             "link_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("dataset_review_links.id"),
+            sa.ForeignKey("dataset_anonymous_links.id"),
             nullable=False,
         ),
-        sa.Column("outcome", sa.String(16), nullable=False),
+        sa.Column("outcome", sa.String(32), nullable=False),
         sa.Column(
             "viewed_at",
             sa.DateTime(timezone=True),
@@ -422,19 +428,19 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "idx_dataset_review_link_views_link",
-        "dataset_review_link_views",
+        "idx_dataset_anonymous_link_views_link",
+        "dataset_anonymous_link_views",
         ["link_id", "viewed_at"],
     )
 
 
 def downgrade() -> None:
     op.drop_index(
-        "idx_dataset_review_link_views_link", table_name="dataset_review_link_views"
+        "idx_dataset_anonymous_link_views_link", table_name="dataset_anonymous_link_views"
     )
-    op.drop_table("dataset_review_link_views")
-    op.drop_index("idx_dataset_review_links_dataset", table_name="dataset_review_links")
-    op.drop_table("dataset_review_links")
+    op.drop_table("dataset_anonymous_link_views")
+    op.drop_index("idx_dataset_anonymous_links_dataset", table_name="dataset_anonymous_links")
+    op.drop_table("dataset_anonymous_links")
     op.execute("DROP INDEX IF EXISTS idx_dataset_invitations_email")
     op.drop_index("idx_dataset_invitations_orcid", table_name="dataset_invitations")
     op.drop_index("idx_dataset_invitations_dataset", table_name="dataset_invitations")
@@ -579,7 +585,7 @@ class DatasetInvitationRepository:
 ```
 
 ```python
-# app/repository/dataset_review_link.py
+# app/repository/dataset_anonymous_link.py
 from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Callable
@@ -588,56 +594,56 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.model.db.sharing import DatasetReviewLink, DatasetReviewLinkView
+from app.model.db.sharing import DatasetAnonymousLink, DatasetAnonymousLinkView
 
 
-class DatasetReviewLinkRepository:
+class DatasetAnonymousLinkRepository:
     def __init__(
         self, session_factory: Callable[..., AbstractContextManager[Session]]
     ) -> None:
         self._session_factory = session_factory
 
-    def create(self, link: DatasetReviewLink) -> DatasetReviewLink:
+    def create(self, link: DatasetAnonymousLink) -> DatasetAnonymousLink:
         with self._session_factory() as session:
             session.add(link)
             session.commit()
             session.refresh(link)
             return link
 
-    def fetch(self, dataset_id: UUID, link_id: UUID) -> DatasetReviewLink | None:
+    def fetch(self, dataset_id: UUID, link_id: UUID) -> DatasetAnonymousLink | None:
         with self._session_factory() as session:
             return (
-                session.query(DatasetReviewLink)
+                session.query(DatasetAnonymousLink)
                 .filter_by(id=link_id, dataset_id=dataset_id)
                 .first()
             )
 
-    def fetch_by_token_hash(self, token_hash: str) -> DatasetReviewLink | None:
+    def fetch_by_token_hash(self, token_hash: str) -> DatasetAnonymousLink | None:
         with self._session_factory() as session:
             return (
-                session.query(DatasetReviewLink)
+                session.query(DatasetAnonymousLink)
                 .filter_by(token_hash=token_hash)
                 .first()
             )
 
     def list_with_views(
         self, dataset_id: UUID
-    ) -> list[tuple[DatasetReviewLink, int, datetime | None, datetime | None]]:
+    ) -> list[tuple[DatasetAnonymousLink, int, datetime | None, datetime | None]]:
         with self._session_factory() as session:
             rows = (
                 session.query(
-                    DatasetReviewLink,
-                    func.count(DatasetReviewLinkView.id),
-                    func.min(DatasetReviewLinkView.viewed_at),
-                    func.max(DatasetReviewLinkView.viewed_at),
+                    DatasetAnonymousLink,
+                    func.count(DatasetAnonymousLinkView.id),
+                    func.min(DatasetAnonymousLinkView.viewed_at),
+                    func.max(DatasetAnonymousLinkView.viewed_at),
                 )
                 .outerjoin(
-                    DatasetReviewLinkView,
-                    DatasetReviewLinkView.link_id == DatasetReviewLink.id,
+                    DatasetAnonymousLinkView,
+                    DatasetAnonymousLinkView.link_id == DatasetAnonymousLink.id,
                 )
-                .filter(DatasetReviewLink.dataset_id == dataset_id)
-                .group_by(DatasetReviewLink.id)
-                .order_by(DatasetReviewLink.created_at.desc())
+                .filter(DatasetAnonymousLink.dataset_id == dataset_id)
+                .group_by(DatasetAnonymousLink.id)
+                .order_by(DatasetAnonymousLink.created_at.desc())
                 .all()
             )
             return [(link, count, first, last) for link, count, first, last in rows]
@@ -645,10 +651,10 @@ class DatasetReviewLinkRepository:
     def revoke(self, link_id: UUID, at: datetime) -> bool:
         with self._session_factory() as session:
             updated = (
-                session.query(DatasetReviewLink)
+                session.query(DatasetAnonymousLink)
                 .filter(
-                    DatasetReviewLink.id == link_id,
-                    DatasetReviewLink.revoked_at.is_(None),
+                    DatasetAnonymousLink.id == link_id,
+                    DatasetAnonymousLink.revoked_at.is_(None),
                 )
                 .update({"revoked_at": at}, synchronize_session=False)
             )
@@ -657,20 +663,20 @@ class DatasetReviewLinkRepository:
 
     def record_view(self, link_id: UUID, outcome: str) -> None:
         with self._session_factory() as session:
-            session.add(DatasetReviewLinkView(link_id=link_id, outcome=outcome))
+            session.add(DatasetAnonymousLinkView(link_id=link_id, outcome=outcome))
             session.commit()
 ```
 
 - [ ] **Step 7: Verify the migration chain**
 
-Run: `grep -n "down_revision" migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_review_links.py && grep -rn "revision: str = \"e5f6a7b8c9d0\"" migrations/versions/`
+Run: `grep -n "down_revision" migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_anonymous_links.py && grep -rn "revision: str = \"e5f6a7b8c9d0\"" migrations/versions/`
 Expected: the first line shows `"e5f6a7b8c9d0"`, the second finds plan 02's migration. If plan 02's head has another id, use it.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add app/model/db/sharing.py app/repository/dataset_invitation.py app/repository/dataset_review_link.py app/repository/sharing_models_test.py migrations/env.py migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_review_links.py
-git commit -m "feat: tables for dataset invitations and reviewer links"
+git add app/model/db/sharing.py app/repository/dataset_invitation.py app/repository/dataset_anonymous_link.py app/repository/sharing_models_test.py migrations/env.py migrations/versions/2026_09_30_1300-f6a7b8c9d0e1_add_sharing_and_anonymous_links.py
+git commit -m "feat: tables for dataset invitations and anonymous links"
 ```
 
 ---
@@ -682,7 +688,7 @@ git commit -m "feat: tables for dataset invitations and reviewer links"
 - Test: `app/service/share_identity_test.py`, `app/service/share_token_test.py`, `app/service/redaction_test.py`
 
 **Interfaces:**
-- Consumes: `BadRequestException`, `ErrorDetails` (`app/exception/bad_request.py`); `REDACTED` (plan 02).
+- Consumes: `BadRequestException`, `ErrorDetails` (`app/exception/bad_request.py`).
 - Produces: `normalise_email(value: str) -> str`, `normalise_orcid(value: str) -> str`, `orcid_checksum_ok(value: str) -> bool`; `new_token() -> str`, `hash_token(token: str) -> str`; `SAFE_METADATA_KEYS: frozenset[str]`, `redact_metadata(data: dict | None) -> dict`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -870,7 +876,7 @@ def hash_token(token: str) -> str:
 # app/service/redaction.py
 from typing import Any
 
-from app.model.embargo import REDACTED
+REDACTED = "[redacted]"
 
 SAFE_METADATA_KEYS = frozenset(
     {
@@ -1041,7 +1047,7 @@ git commit -m "feat: find share candidates within a tenancy, and users by email 
 - Test: `app/service/share_test.py`
 
 **Interfaces:**
-- Consumes: Tasks 1–3; plan 02 `DatasetService.fetch_authorized`, `DatasetAction`, `PermissionRepository` (reads), `PermissionService.grant/revoke`, `EmbargoAudit.record`, `EmbargoEventType`, `PermissionLevel`; `DatasetRepository.fetch`; plan 01 `EmailService.enqueue`.
+- Consumes: Tasks 1–3; plan 02 `DatasetService.fetch_authorized`, `DatasetAction`, `PermissionRepository` (reads), `PermissionService.grant/revoke`, `DatasetAccessAudit.record`, `AccessEventType`, `PermissionLevel`; `DatasetRepository.fetch`; plan 01 `EmailService.enqueue`.
 - Produces (used by Tasks 5, 7):
 
 ```python
@@ -1054,11 +1060,11 @@ class PermissionView: user: ShareUser; level: str; granted_at: datetime; granted
 class InvitationView: id: UUID; email: str | None; orcid: str | None; level: str; created_at: datetime;
                       accepted_at: datetime | None; accepted_by: ShareUser | None; revoked_at: datetime | None
 @dataclass
-class ReviewLinkViews: count: int; first_at: datetime | None; last_at: datetime | None
+class AnonymousLinkViews: count: int; first_at: datetime | None; last_at: datetime | None
 @dataclass
-class ReviewLinkView: id: UUID; label: str; created_at: datetime; revoked_at: datetime | None; views: ReviewLinkViews
+class AnonymousLinkView: id: UUID; label: str; created_at: datetime; revoked_at: datetime | None; views: AnonymousLinkViews
 @dataclass
-class ShareState: owner: ShareUser | None; permissions: list[PermissionView]; invitations: list[InvitationView]; review_links: list[ReviewLinkView]
+class ShareState: owner: ShareUser | None; permissions: list[PermissionView]; invitations: list[InvitationView]; anonymous_links: list[AnonymousLinkView]
 @dataclass
 class GrantRequest: level: str; user_id: UUID | None = None; email: str | None = None; orcid: str | None = None
 @dataclass
@@ -1116,19 +1122,19 @@ class InvitationView:
 
 
 @dataclass
-class ReviewLinkViews:
+class AnonymousLinkViews:
     count: int = 0
     first_at: datetime | None = None
     last_at: datetime | None = None
 
 
 @dataclass
-class ReviewLinkView:
+class AnonymousLinkView:
     id: UUID
     label: str
     created_at: datetime
     revoked_at: datetime | None = None
-    views: ReviewLinkViews = field(default_factory=ReviewLinkViews)
+    views: AnonymousLinkViews = field(default_factory=AnonymousLinkViews)
 
 
 @dataclass
@@ -1136,7 +1142,7 @@ class ShareState:
     owner: ShareUser | None
     permissions: list[PermissionView] = field(default_factory=list)
     invitations: list[InvitationView] = field(default_factory=list)
-    review_links: list[ReviewLinkView] = field(default_factory=list)
+    anonymous_links: list[AnonymousLinkView] = field(default_factory=list)
 
 
 @dataclass
@@ -1162,7 +1168,7 @@ class AcceptResult:
 
 
 @dataclass
-class ReviewVersion:
+class AnonymousVersion:
     name: str
     created_at: datetime
     file_count: int
@@ -1170,14 +1176,14 @@ class ReviewVersion:
 
 
 @dataclass
-class ReviewPage:
-    state: str
+class AnonymousPage:
+    state: str  # active | ended | published
     dataset_id: UUID
     embargo_until: datetime | None = None
+    embargo_ended_at: datetime | None = None
     name: str | None = None
     data: dict = field(default_factory=dict)
-    versions: list[ReviewVersion] = field(default_factory=list)
-    published: bool = False
+    versions: list[AnonymousVersion] = field(default_factory=list)
 ```
 
 - [ ] **Step 2: Write the failing tests**
@@ -1192,16 +1198,21 @@ from uuid import uuid4
 
 from app.exception.bad_request import BadRequestException
 from app.exception.not_found import NotFoundException
-from app.model.embargo import AccessLevel, DatasetAction, EmbargoEventType, PermissionLevel
+from app.model.dataset_access import (
+    AccessEventType,
+    AccessLevel,
+    DatasetAction,
+    PermissionLevel,
+)
 from app.model.sharing import GrantRequest
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_invitation import DatasetInvitationRepository
-from app.repository.dataset_review_link import DatasetReviewLinkRepository
+from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 from app.service.dataset import DatasetService
 from app.service.email import EmailService
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.permission import PermissionService
 from app.service.share import ShareService
 from app.service.share_token import hash_token
@@ -1223,10 +1234,10 @@ class ShareServiceTestCase(unittest.TestCase):
         self.permissions = Mock(spec=PermissionRepository)
         self.permission_service = Mock(spec=PermissionService)
         self.invitations = Mock(spec=DatasetInvitationRepository)
-        self.review_links = Mock(spec=DatasetReviewLinkRepository)
+        self.anonymous_links = Mock(spec=DatasetAnonymousLinkRepository)
         self.users = Mock(spec=UserRepository)
         self.user_service = Mock(spec=UserService)
-        self.audit = Mock(spec=EmbargoAudit)
+        self.audit = Mock(spec=DatasetAccessAudit)
         self.email = Mock(spec=EmailService)
         self.dataset = SimpleNamespace(
             id=uuid4(), name="Ozone at ATTO", owner_id=OWNER, tenancy="datamap/production/data-amazon"
@@ -1249,7 +1260,7 @@ class ShareServiceTestCase(unittest.TestCase):
             permission_repository=self.permissions,
             permission_service=self.permission_service,
             invitation_repository=self.invitations,
-            review_link_repository=self.review_links,
+            anonymous_link_repository=self.anonymous_links,
             user_repository=self.users,
             user_service=self.user_service,
             audit=self.audit,
@@ -1389,7 +1400,7 @@ class TestInvitation(ShareServiceTestCase):
         self.assertEqual(enqueue["secret_fields"], frozenset({"link"}))
         self.assertEqual(enqueue["context"]["link"], result.link)
         self.assertEqual(
-            self.audit.record.call_args.kwargs["event_type"], EmbargoEventType.INVITATION_CREATED
+            self.audit.record.call_args.kwargs["event_type"], AccessEventType.INVITATION_CREATED
         )
 
     def test_an_orcid_invitation_sends_no_email(self):
@@ -1473,26 +1484,26 @@ from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.not_found import NotFoundException
 from app.logging_config import fields
 from app.model.db.sharing import DatasetInvitation
-from app.model.embargo import DatasetAction, EmbargoEventType, PermissionLevel
+from app.model.dataset_access import AccessEventType, DatasetAction, PermissionLevel
 from app.model.sharing import (
     GrantRequest,
     GrantResult,
     InvitationView,
     PermissionView,
-    ReviewLinkView,
-    ReviewLinkViews,
+    AnonymousLinkView,
+    AnonymousLinkViews,
     ShareState,
     ShareUser,
 )
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_invitation import DatasetInvitationRepository
-from app.repository.dataset_review_link import DatasetReviewLinkRepository
+from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 from app.service.dataset import DatasetService
 from app.service.email import EmailService
 from app.service.email_template import EmailTemplate
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.permission import PermissionService
 from app.service.share_identity import normalise_email, normalise_orcid
 from app.service.share_token import hash_token, new_token
@@ -1521,10 +1532,10 @@ class ShareService:
         permission_repository: PermissionRepository,
         permission_service: PermissionService,
         invitation_repository: DatasetInvitationRepository,
-        review_link_repository: DatasetReviewLinkRepository,
+        anonymous_link_repository: DatasetAnonymousLinkRepository,
         user_repository: UserRepository,
         user_service: UserService,
-        audit: EmbargoAudit,
+        audit: DatasetAccessAudit,
         email_service: EmailService,
         public_base_url: str,
         clock: Callable[[], datetime] = _utcnow,
@@ -1534,7 +1545,7 @@ class ShareService:
         self._permissions = permission_repository
         self._permission_service = permission_service
         self._invitations = invitation_repository
-        self._review_links = review_link_repository
+        self._anonymous_links = anonymous_link_repository
         self._users = user_repository
         self._user_service = user_service
         self._audit = audit
@@ -1625,15 +1636,15 @@ class ShareService:
                 self._invitation_view(invitation)
                 for invitation in self._invitations.list_for_dataset(dataset.id)
             ],
-            review_links=[
-                ReviewLinkView(
+            anonymous_links=[
+                AnonymousLinkView(
                     id=link.id,
                     label=link.label,
                     created_at=link.created_at,
                     revoked_at=link.revoked_at,
-                    views=ReviewLinkViews(count=count, first_at=first, last_at=last),
+                    views=AnonymousLinkViews(count=count, first_at=first, last_at=last),
                 )
-                for link, count, first, last in self._review_links.list_with_views(
+                for link, count, first, last in self._anonymous_links.list_with_views(
                     dataset.id
                 )
             ],
@@ -1727,7 +1738,7 @@ class ShareService:
         link = self.invitation_link(token)
         self._audit.record(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.INVITATION_CREATED,
+            event_type=AccessEventType.INVITATION_CREATED,
             changed_by=user_id,
             new_value={"invitation_id": str(invitation.id), "level": level.value},
         )
@@ -1780,7 +1791,7 @@ class ShareService:
         self._invitations.revoke(invitation_id, self._clock())
         self._audit.record(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.INVITATION_REVOKED,
+            event_type=AccessEventType.INVITATION_REVOKED,
             changed_by=user_id,
             old_value={"invitation_id": str(invitation_id)},
         )
@@ -1833,7 +1844,7 @@ from uuid import uuid4
 
 from app.exception.conflict import ConflictException
 from app.exception.not_found import NotFoundException
-from app.model.embargo import PermissionLevel
+from app.model.dataset_access import PermissionLevel
 from app.model.user import User, UserProvider
 from app.service.share_token import hash_token
 from app.service.share_test import NOW, OWNER, ShareServiceTestCase
@@ -2027,45 +2038,45 @@ git commit -m "feat: accept an invitation once, and claim pending ones on login"
 
 ---
 
-### Task 6: ReviewLinkService and its metrics
+### Task 6: AnonymousLinkService and its metrics
 
 **Files:**
-- Create: `app/service/review_link.py`
+- Create: `app/service/anonymous_link.py`
 - Modify: `app/metrics.py` (two counters in `Metrics.__init__`, two methods)
-- Test: `app/service/review_link_test.py`, `app/metrics_test.py` (add a class)
+- Test: `app/service/anonymous_link_test.py`, `app/metrics_test.py` (add a class)
 
 **Interfaces:**
-- Consumes: Tasks 1, 2, 4 (`ReviewPage`, `ReviewVersion`, `ReviewLinkView`); plan 02 `DatasetService.fetch_authorized`, `DatasetAction`, `EmbargoAudit.record`, `EmbargoEventType`; `DatasetRepository.fetch(dataset_id, restrict_by_tenancy=False)`; `VisibilityStatus`.
-- Produces: `ReviewLinkService.create(dataset_id, user_id, label) -> tuple[ReviewLinkView, str]`, `ReviewLinkService.revoke(dataset_id, user_id, link_id) -> None`, `ReviewLinkService.view(token: str) -> ReviewPage`; `metrics.review_link_viewed(tenancy: str | None, outcome: str)`, `metrics.review_link_created(tenancy: str | None)`.
+- Consumes: Tasks 1, 2, 4 (`AnonymousPage`, `AnonymousVersion`, `AnonymousLinkView`); plan 02 `DatasetService.fetch_authorized`, `DatasetAction`, `DatasetAccessAudit.record`, `AccessEventType`; `DatasetRepository.fetch(dataset_id, restrict_by_tenancy=False)`; `VisibilityStatus`.
+- Produces: `AnonymousLinkService.create(dataset_id, user_id, label) -> tuple[AnonymousLinkView, str]`, `AnonymousLinkService.revoke(dataset_id, user_id, link_id) -> None`, `AnonymousLinkService.view(token: str) -> AnonymousPage`; `metrics.anonymous_link_viewed(tenancy: str | None, outcome: str)`, `metrics.anonymous_link_created(tenancy: str | None)`.
 
 - [ ] **Step 1: Write the failing metrics test**
 
 Append to `app/metrics_test.py`:
 
 ```python
-class TestReviewLinks(MetricsTestCase):
+class TestAnonymousLinks(MetricsTestCase):
     def test_views_are_counted_by_outcome_and_tenancy(self):
-        self.metrics.review_link_viewed("datamap/production/data-amazon", "shown")
-        self.metrics.review_link_viewed(None, "not_found")
+        self.metrics.anonymous_link_viewed("datamap/production/data-amazon", "shown")
+        self.metrics.anonymous_link_viewed(None, "not_found")
 
         self.assertEqual(
             self.value(
-                "datamap_review_link_views_total",
+                "datamap_anonymous_link_views_total",
                 tenancy="datamap/production/data-amazon",
                 outcome="shown",
             ),
             1.0,
         )
         self.assertEqual(
-            self.value("datamap_review_link_views_total", tenancy="none", outcome="not_found"),
+            self.value("datamap_anonymous_link_views_total", tenancy="none", outcome="not_found"),
             1.0,
         )
 
     def test_created_links_are_counted_by_tenancy(self):
-        self.metrics.review_link_created("datamap/production/data-amazon")
+        self.metrics.anonymous_link_created("datamap/production/data-amazon")
         self.assertEqual(
             self.value(
-                "datamap_review_links_created_total",
+                "datamap_anonymous_links_created_total",
                 tenancy="datamap/production/data-amazon",
             ),
             1.0,
@@ -2074,23 +2085,23 @@ class TestReviewLinks(MetricsTestCase):
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `pytest app/metrics_test.py::TestReviewLinks -v`
-Expected: FAIL with `AttributeError: 'Metrics' object has no attribute 'review_link_viewed'`
+Run: `pytest app/metrics_test.py::TestAnonymousLinks -v`
+Expected: FAIL with `AttributeError: 'Metrics' object has no attribute 'anonymous_link_viewed'`
 
 - [ ] **Step 3: Add the counters**
 
 In `Metrics.__init__` of `app/metrics.py`, after `self._snapshots`:
 
 ```python
-        self._review_link_views = Counter(
-            "datamap_review_link_views_total",
-            "Reviewer link pages served",
+        self._anonymous_link_views = Counter(
+            "datamap_anonymous_link_views_total",
+            "Anonymous link pages served",
             ["tenancy", "outcome"],
             registry=self.registry,
         )
-        self._review_links_created = Counter(
-            "datamap_review_links_created_total",
-            "Reviewer links created",
+        self._anonymous_links_created = Counter(
+            "datamap_anonymous_links_created_total",
+            "Anonymous links created",
             ["tenancy"],
             registry=self.registry,
         )
@@ -2099,19 +2110,19 @@ In `Metrics.__init__` of `app/metrics.py`, after `self._snapshots`:
 After `snapshot_published`:
 
 ```python
-    def review_link_viewed(self, tenancy: str | None, outcome: str) -> None:
-        self._review_link_views.labels(tenancy=tenancy or "none", outcome=outcome).inc()
+    def anonymous_link_viewed(self, tenancy: str | None, outcome: str) -> None:
+        self._anonymous_link_views.labels(tenancy=tenancy or "none", outcome=outcome).inc()
 
-    def review_link_created(self, tenancy: str | None) -> None:
-        self._review_links_created.labels(tenancy=tenancy or "none").inc()
+    def anonymous_link_created(self, tenancy: str | None) -> None:
+        self._anonymous_links_created.labels(tenancy=tenancy or "none").inc()
 ```
 
-Run: `pytest app/metrics_test.py::TestReviewLinks -v` — Expected: 2 passed
+Run: `pytest app/metrics_test.py::TestAnonymousLinks -v` — Expected: 2 passed
 
 - [ ] **Step 4: Write the failing service tests**
 
 ```python
-# app/service/review_link_test.py
+# app/service/anonymous_link_test.py
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -2123,12 +2134,12 @@ from prometheus_client import REGISTRY
 from app.exception.bad_request import BadRequestException
 from app.exception.not_found import NotFoundException
 from app.model.dataset import VisibilityStatus
-from app.model.embargo import AccessLevel, DatasetAction, EmbargoEventType
+from app.model.dataset_access import AccessEventType, AccessLevel, DatasetAction
 from app.repository.dataset import DatasetRepository
-from app.repository.dataset_review_link import DatasetReviewLinkRepository
+from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.service.dataset import DatasetService
-from app.service.embargo_audit import EmbargoAudit
-from app.service.review_link import ReviewLinkService
+from app.service.dataset_access_audit import DatasetAccessAudit
+from app.service.anonymous_link import AnonymousLinkService
 from app.service.share_token import hash_token
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -2155,21 +2166,21 @@ def dataset(until=NOW + timedelta(days=30), visibility=VisibilityStatus.PRIVATE)
     )
 
 
-class ReviewLinkTestCase(unittest.TestCase):
+class AnonymousLinkTestCase(unittest.TestCase):
     def setUp(self):
         self.dataset_service = Mock(spec=DatasetService)
-        self.links = Mock(spec=DatasetReviewLinkRepository)
+        self.links = Mock(spec=DatasetAnonymousLinkRepository)
         self.datasets = Mock(spec=DatasetRepository)
-        self.audit = Mock(spec=EmbargoAudit)
+        self.audit = Mock(spec=DatasetAccessAudit)
         self.dataset = dataset()
         self.dataset_service.fetch_authorized.return_value = (self.dataset, [], AccessLevel.OWNER)
         self.datasets.fetch.return_value = self.dataset
         self.links.create.side_effect = lambda link: SimpleNamespace(
             id=uuid4(), label=link.label, created_at=NOW, revoked_at=None, token_hash=link.token_hash
         )
-        self.service = ReviewLinkService(
+        self.service = AnonymousLinkService(
             dataset_service=self.dataset_service,
-            review_link_repository=self.links,
+            anonymous_link_repository=self.links,
             dataset_repository=self.datasets,
             audit=self.audit,
             public_base_url="https://datamap.pcs.usp.br/",
@@ -2177,23 +2188,23 @@ class ReviewLinkTestCase(unittest.TestCase):
         )
 
 
-class TestCreate(ReviewLinkTestCase):
+class TestCreate(AnonymousLinkTestCase):
     def test_a_link_is_created_while_the_embargo_lasts(self):
-        before = _sample("datamap_review_links_created_total", tenancy=TENANCY)
+        before = _sample("datamap_anonymous_links_created_total", tenancy=TENANCY)
 
         view, link = self.service.create(self.dataset.id, uuid4(), "JGR, round 1")
 
         self.assertEqual(
             self.dataset_service.fetch_authorized.call_args.kwargs["action"], DatasetAction.WRITE
         )
-        self.assertTrue(link.startswith("https://datamap.pcs.usp.br/review/"))
+        self.assertTrue(link.startswith("https://datamap.pcs.usp.br/anonymous/"))
         token = link.rsplit("/", 1)[1]
         self.assertEqual(self.links.create.call_args.args[0].token_hash, hash_token(token))
         self.assertEqual(view.label, "JGR, round 1")
         self.assertEqual(
-            self.audit.record.call_args.kwargs["event_type"], EmbargoEventType.REVIEW_LINK_CREATED
+            self.audit.record.call_args.kwargs["event_type"], AccessEventType.ANONYMOUS_LINK_CREATED
         )
-        self.assertEqual(_sample("datamap_review_links_created_total", tenancy=TENANCY) - before, 1.0)
+        self.assertEqual(_sample("datamap_anonymous_links_created_total", tenancy=TENANCY) - before, 1.0)
 
     def test_no_link_without_an_active_embargo(self):
         self.dataset_service.fetch_authorized.return_value = (
@@ -2206,14 +2217,14 @@ class TestCreate(ReviewLinkTestCase):
         self.assertEqual(caught.exception.errors[0].code, "embargo_not_active")
 
 
-class TestView(ReviewLinkTestCase):
+class TestView(AnonymousLinkTestCase):
     def setUp(self):
         super().setUp()
         self.link = SimpleNamespace(id=uuid4(), dataset_id=self.dataset.id, revoked_at=None)
         self.links.fetch_by_token_hash.return_value = self.link
 
     def test_an_active_embargo_shows_redacted_metadata_and_counts_only(self):
-        before = _sample("datamap_review_link_views_total", tenancy=TENANCY, outcome="shown")
+        before = _sample("datamap_anonymous_link_views_total", tenancy=TENANCY, outcome="shown")
 
         page = self.service.view("tok")
 
@@ -2226,29 +2237,53 @@ class TestView(ReviewLinkTestCase):
         self.assertEqual(page.versions[0].total_size_bytes, 42)
         self.links.record_view.assert_called_once_with(self.link.id, "shown")
         self.assertEqual(
-            _sample("datamap_review_link_views_total", tenancy=TENANCY, outcome="shown") - before, 1.0
+            _sample("datamap_anonymous_link_views_total", tenancy=TENANCY, outcome="shown") - before, 1.0
         )
 
-    def test_an_ended_embargo_reports_whether_the_dataset_was_published(self):
+    def test_after_the_embargo_an_unpublished_dataset_stays_anonymised(self):
+        ended_at = NOW - timedelta(days=1)
+        self.datasets.fetch.return_value = dataset(until=ended_at)
+        before = _sample(
+            "datamap_anonymous_link_views_total", tenancy=TENANCY, outcome="shown_after_embargo"
+        )
+
+        page = self.service.view("tok")
+
+        self.assertEqual(page.state, "ended")
+        self.assertEqual(page.embargo_ended_at, ended_at)
+        self.assertEqual(page.data["authors"], [{"name": "[redacted]"}])
+        self.assertEqual(page.versions[0].file_count, 2)
+        self.links.record_view.assert_called_once_with(self.link.id, "shown_after_embargo")
+        self.assertEqual(
+            _sample(
+                "datamap_anonymous_link_views_total",
+                tenancy=TENANCY,
+                outcome="shown_after_embargo",
+            )
+            - before,
+            1.0,
+        )
+
+    def test_once_published_the_link_points_to_the_public_page(self):
         self.datasets.fetch.return_value = dataset(
             until=NOW - timedelta(days=1), visibility=VisibilityStatus.PUBLIC
         )
 
         page = self.service.view("tok")
 
-        self.assertEqual(page.state, "ended")
-        self.assertTrue(page.published)
+        self.assertEqual(page.state, "published")
+        self.assertEqual(page.dataset_id, self.dataset.id)
         self.assertEqual(page.data, {})
         self.links.record_view.assert_called_once_with(self.link.id, "redirected")
 
     def test_a_revoked_link_is_not_found(self):
         self.link.revoked_at = NOW
-        before = _sample("datamap_review_link_views_total", tenancy="none", outcome="not_found")
+        before = _sample("datamap_anonymous_link_views_total", tenancy="none", outcome="not_found")
         with self.assertRaises(NotFoundException):
             self.service.view("tok")
         self.links.record_view.assert_not_called()
         self.assertEqual(
-            _sample("datamap_review_link_views_total", tenancy="none", outcome="not_found") - before, 1.0
+            _sample("datamap_anonymous_link_views_total", tenancy="none", outcome="not_found") - before, 1.0
         )
 
     def test_an_unknown_token_is_not_found(self):
@@ -2257,7 +2292,7 @@ class TestView(ReviewLinkTestCase):
             self.service.view("tok")
 
 
-class TestRevoke(ReviewLinkTestCase):
+class TestRevoke(AnonymousLinkTestCase):
     def test_revoking_records_the_event(self):
         link_id = uuid4()
         self.links.fetch.return_value = SimpleNamespace(id=link_id, revoked_at=None)
@@ -2266,7 +2301,7 @@ class TestRevoke(ReviewLinkTestCase):
 
         self.links.revoke.assert_called_once_with(link_id, NOW)
         self.assertEqual(
-            self.audit.record.call_args.kwargs["event_type"], EmbargoEventType.REVIEW_LINK_REVOKED
+            self.audit.record.call_args.kwargs["event_type"], AccessEventType.ANONYMOUS_LINK_REVOKED
         )
 
     def test_revoking_an_unknown_link_is_not_found(self):
@@ -2277,13 +2312,13 @@ class TestRevoke(ReviewLinkTestCase):
 
 - [ ] **Step 5: Run them to verify they fail**
 
-Run: `pytest app/service/review_link_test.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'app.service.review_link'`
+Run: `pytest app/service/anonymous_link_test.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'app.service.anonymous_link'`
 
 - [ ] **Step 6: Write the implementation**
 
 ```python
-# app/service/review_link.py
+# app/service/anonymous_link.py
 from datetime import datetime, timezone
 from typing import Callable
 from uuid import UUID
@@ -2292,13 +2327,13 @@ from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.not_found import NotFoundException
 from app.metrics import metrics
 from app.model.dataset import VisibilityStatus
-from app.model.db.sharing import DatasetReviewLink
-from app.model.sharing import ReviewLinkView, ReviewPage, ReviewVersion
-from app.model.embargo import DatasetAction, EmbargoEventType
+from app.model.db.sharing import DatasetAnonymousLink
+from app.model.sharing import AnonymousLinkView, AnonymousPage, AnonymousVersion
+from app.model.dataset_access import AccessEventType, DatasetAction
 from app.repository.dataset import DatasetRepository
-from app.repository.dataset_review_link import DatasetReviewLinkRepository
+from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.service.dataset import DatasetService
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.redaction import redact_metadata
 from app.service.share_token import hash_token, new_token
 
@@ -2307,18 +2342,18 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class ReviewLinkService:
+class AnonymousLinkService:
     def __init__(
         self,
         dataset_service: DatasetService,
-        review_link_repository: DatasetReviewLinkRepository,
+        anonymous_link_repository: DatasetAnonymousLinkRepository,
         dataset_repository: DatasetRepository,
-        audit: EmbargoAudit,
+        audit: DatasetAccessAudit,
         public_base_url: str,
         clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         self._dataset_service = dataset_service
-        self._links = review_link_repository
+        self._links = anonymous_link_repository
         self._datasets = dataset_repository
         self._audit = audit
         self._base_url = public_base_url.rstrip("/")
@@ -2336,14 +2371,14 @@ class ReviewLinkService:
         )
         return dataset
 
-    def create(self, dataset_id: UUID, user_id: UUID, label: str) -> tuple[ReviewLinkView, str]:
+    def create(self, dataset_id: UUID, user_id: UUID, label: str) -> tuple[AnonymousLinkView, str]:
         dataset = self._authorized(dataset_id, user_id)
         if not self._embargo_active(dataset):
             raise BadRequestException(errors=[ErrorDetails(code="embargo_not_active")])
 
         token = new_token()
         link = self._links.create(
-            DatasetReviewLink(
+            DatasetAnonymousLink(
                 dataset_id=dataset.id,
                 token_hash=hash_token(token),
                 label=label.strip(),
@@ -2352,15 +2387,15 @@ class ReviewLinkService:
         )
         self._audit.record(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.REVIEW_LINK_CREATED,
+            event_type=AccessEventType.ANONYMOUS_LINK_CREATED,
             changed_by=user_id,
             new_value={"link_id": str(link.id), "label": link.label},
         )
-        metrics.review_link_created(dataset.tenancy)
-        view = ReviewLinkView(
+        metrics.anonymous_link_created(dataset.tenancy)
+        view = AnonymousLinkView(
             id=link.id, label=link.label, created_at=link.created_at, revoked_at=None
         )
-        return view, f"{self._base_url}/review/{token}"
+        return view, f"{self._base_url}/anonymous/{token}"
 
     def revoke(self, dataset_id: UUID, user_id: UUID, link_id: UUID) -> None:
         dataset = self._authorized(dataset_id, user_id)
@@ -2370,12 +2405,12 @@ class ReviewLinkService:
         self._links.revoke(link_id, self._clock())
         self._audit.record(
             dataset_id=dataset.id,
-            event_type=EmbargoEventType.REVIEW_LINK_REVOKED,
+            event_type=AccessEventType.ANONYMOUS_LINK_REVOKED,
             changed_by=user_id,
             old_value={"link_id": str(link_id)},
         )
 
-    def view(self, token: str) -> ReviewPage:
+    def view(self, token: str) -> AnonymousPage:
         link = self._links.fetch_by_token_hash(hash_token(token))
         dataset = None
         if link is not None and link.revoked_at is None:
@@ -2383,28 +2418,29 @@ class ReviewLinkService:
                 dataset_id=link.dataset_id, restrict_by_tenancy=False
             )
         if dataset is None:
-            metrics.review_link_viewed(None, "not_found")
-            raise NotFoundException("review_link_not_found")
+            metrics.anonymous_link_viewed(None, "not_found")
+            raise NotFoundException("anonymous_link_not_found")
 
-        if not self._embargo_active(dataset):
+        if self._embargo_active(dataset):
+            state, outcome = "active", "shown"
+        elif dataset.visibility == VisibilityStatus.PUBLIC:
             self._links.record_view(link.id, "redirected")
-            metrics.review_link_viewed(dataset.tenancy, "redirected")
-            return ReviewPage(
-                state="ended",
-                dataset_id=dataset.id,
-                published=dataset.visibility == VisibilityStatus.PUBLIC,
-            )
+            metrics.anonymous_link_viewed(dataset.tenancy, "redirected")
+            return AnonymousPage(state="published", dataset_id=dataset.id)
+        else:
+            state, outcome = "ended", "shown_after_embargo"
 
-        self._links.record_view(link.id, "shown")
-        metrics.review_link_viewed(dataset.tenancy, "shown")
-        return ReviewPage(
-            state="active",
+        self._links.record_view(link.id, outcome)
+        metrics.anonymous_link_viewed(dataset.tenancy, outcome)
+        return AnonymousPage(
+            state=state,
             dataset_id=dataset.id,
-            embargo_until=dataset.embargo_until,
+            embargo_until=dataset.embargo_until if state == "active" else None,
+            embargo_ended_at=dataset.embargo_until if state == "ended" else None,
             name=dataset.name,
             data=redact_metadata(dataset.data),
             versions=[
-                ReviewVersion(
+                AnonymousVersion(
                     name=version.name,
                     created_at=version.created_at,
                     file_count=len(version.files_in),
@@ -2416,18 +2452,20 @@ class ReviewLinkService:
         )
 ```
 
+Until the dataset is published the link keeps serving the anonymised page, with a notice that the embargo has ended, so a reviewer whose review outlasts the embargo never meets a dead end. Once published it points to the public page, where the authors are shown.
+
 The dataset name is shown: a title describes the data, not who produced it. If a reviewer flags a title as identifying, that is a decision for the RFC, not for this code.
 
 - [ ] **Step 7: Run tests to verify they pass**
 
-Run: `pytest app/service/review_link_test.py app/metrics_test.py -v`
+Run: `pytest app/service/anonymous_link_test.py app/metrics_test.py -v`
 Expected: all passed
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add app/service/review_link.py app/service/review_link_test.py app/metrics.py app/metrics_test.py
-git commit -m "feat: reviewer links that show redacted metadata and count their views"
+git add app/service/anonymous_link.py app/service/anonymous_link_test.py app/metrics.py app/metrics_test.py
+git commit -m "feat: anonymous links that show redacted metadata and count their views"
 ```
 
 ---
@@ -2437,15 +2475,15 @@ git commit -m "feat: reviewer links that show redacted metadata and count their 
 **Files:**
 - Create: `app/controller/v1/dataset/share_resource.py`
 - Create: `app/controller/v1/dataset/share.py`
-- Create: `app/controller/v1/dataset/review_link.py`
+- Create: `app/controller/v1/dataset/anonymous_link.py`
 - Create: `app/controller/v1/invitation/__init__.py` (empty), `app/controller/v1/invitation/invitation.py`
-- Create: `app/controller/v1/review/__init__.py` (empty), `app/controller/v1/review/review.py`
+- Create: `app/controller/v1/anonymous/__init__.py` (empty), `app/controller/v1/anonymous/anonymous.py`
 - Modify: `app/container.py` (imports, wiring list, providers), `app/setup.py` (imports, `setup_routes`)
 - Test: `app/controller/v1/dataset/share_resource_test.py`; `app/controller/routes_security_test.py` stays green unchanged
 
 **Interfaces:**
 - Consumes: Tasks 4–6; plan 02's `parse_user_header` usage pattern and `ForbiddenException` handler; plan 01's `PUBLIC_BASE_URL`.
-- Produces: the routes in the contracts' *Sharing* and *Reviewer links* sections, with exactly those JSON shapes.
+- Produces: the routes in the contracts' *Sharing* and *Anonymous links* sections, with exactly those JSON shapes.
 
 - [ ] **Step 1: Write the failing adapter test**
 
@@ -2457,13 +2495,13 @@ from uuid import uuid4
 
 from app.controller.v1.dataset.share_resource import (
     adapt_grant_result,
-    adapt_review_page,
+    adapt_anonymous_page,
 )
 from app.model.sharing import (
     GrantResult,
     InvitationView,
-    ReviewPage,
-    ReviewVersion,
+    AnonymousPage,
+    AnonymousVersion,
 )
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -2483,16 +2521,16 @@ class TestAdapters(unittest.TestCase):
         self.assertEqual(body["invitation"]["email"], "dora@ufam.edu.br")
         self.assertNotIn("permission", body)
 
-    def test_an_active_review_page_has_versions_with_file_summaries(self):
-        page = ReviewPage(
+    def test_an_active_anonymous_page_has_versions_with_file_summaries(self):
+        page = AnonymousPage(
             state="active",
             dataset_id=uuid4(),
             embargo_until=NOW,
             name="Ozone",
             data={"authors": [{"name": "[redacted]"}]},
-            versions=[ReviewVersion(name="1", created_at=NOW, file_count=2, total_size_bytes=42)],
+            versions=[AnonymousVersion(name="1", created_at=NOW, file_count=2, total_size_bytes=42)],
         )
-        body = adapt_review_page(page)
+        body = adapt_anonymous_page(page)
 
         self.assertEqual(body["state"], "active")
         self.assertEqual(body["dataset"]["name"], "Ozone")
@@ -2502,10 +2540,26 @@ class TestAdapters(unittest.TestCase):
         )
         self.assertNotIn("dataset_id", body)
 
-    def test_an_ended_review_page_says_only_where_to_go(self):
+    def test_an_ended_anonymous_page_keeps_the_redacted_dataset(self):
+        page = AnonymousPage(
+            state="ended",
+            dataset_id=uuid4(),
+            embargo_ended_at=NOW,
+            name="Ozone",
+            data={"authors": [{"name": "[redacted]"}]},
+            versions=[AnonymousVersion(name="1", created_at=NOW, file_count=2, total_size_bytes=42)],
+        )
+        body = adapt_anonymous_page(page)
+
+        self.assertEqual(body["state"], "ended")
+        self.assertEqual(body["embargo_ended_at"], NOW.isoformat())
+        self.assertEqual(body["dataset"]["data"], {"authors": [{"name": "[redacted]"}]})
+        self.assertNotIn("dataset_id", body)
+
+    def test_a_published_anonymous_page_says_only_where_to_go(self):
         dataset_id = uuid4()
-        body = adapt_review_page(ReviewPage(state="ended", dataset_id=dataset_id, published=True))
-        self.assertEqual(body, {"state": "ended", "dataset_id": str(dataset_id), "published": True})
+        body = adapt_anonymous_page(AnonymousPage(state="published", dataset_id=dataset_id))
+        self.assertEqual(body, {"state": "published", "dataset_id": str(dataset_id)})
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -2527,8 +2581,8 @@ from app.model.sharing import (
     GrantResult,
     InvitationView,
     PermissionView,
-    ReviewLinkView,
-    ReviewPage,
+    AnonymousLinkView,
+    AnonymousPage,
     ShareState,
     ShareUser,
 )
@@ -2558,18 +2612,18 @@ class InvitationResponse(BaseModel):
     revoked_at: datetime | None = None
 
 
-class ReviewLinkViewsResponse(BaseModel):
+class AnonymousLinkViewsResponse(BaseModel):
     count: int
     first_at: datetime | None = None
     last_at: datetime | None = None
 
 
-class ReviewLinkResponse(BaseModel):
+class AnonymousLinkResponse(BaseModel):
     id: UUID
     label: str
     created_at: datetime
     revoked_at: datetime | None = None
-    views: ReviewLinkViewsResponse
+    views: AnonymousLinkViewsResponse
     link: str | None = None
 
 
@@ -2577,7 +2631,7 @@ class ShareStateResponse(BaseModel):
     owner: ShareUserResponse | None
     permissions: list[PermissionResponse]
     invitations: list[InvitationResponse]
-    review_links: list[ReviewLinkResponse]
+    anonymous_links: list[AnonymousLinkResponse]
 
 
 class GrantRequestBody(BaseModel):
@@ -2602,7 +2656,7 @@ class LinkResponse(BaseModel):
     link: str
 
 
-class CreateReviewLinkBody(BaseModel):
+class CreateAnonymousLinkBody(BaseModel):
     label: str = Field(..., min_length=1, max_length=256)
 
 
@@ -2647,13 +2701,13 @@ def adapt_invitation(invitation: InvitationView) -> InvitationResponse:
     )
 
 
-def adapt_review_link(link: ReviewLinkView, url: str | None = None) -> ReviewLinkResponse:
-    return ReviewLinkResponse(
+def adapt_anonymous_link(link: AnonymousLinkView, url: str | None = None) -> AnonymousLinkResponse:
+    return AnonymousLinkResponse(
         id=link.id,
         label=link.label,
         created_at=link.created_at,
         revoked_at=link.revoked_at,
-        views=ReviewLinkViewsResponse(
+        views=AnonymousLinkViewsResponse(
             count=link.views.count,
             first_at=link.views.first_at,
             last_at=link.views.last_at,
@@ -2667,7 +2721,7 @@ def adapt_share_state(state: ShareState) -> ShareStateResponse:
         owner=adapt_user(state.owner),
         permissions=[adapt_permission(p) for p in state.permissions],
         invitations=[adapt_invitation(i) for i in state.invitations],
-        review_links=[adapt_review_link(link) for link in state.review_links],
+        anonymous_links=[adapt_anonymous_link(link) for link in state.anonymous_links],
     )
 
 
@@ -2680,16 +2734,14 @@ def adapt_grant_result(result: GrantResult) -> GrantResultResponse:
     )
 
 
-def adapt_review_page(page: ReviewPage) -> dict:
-    if page.state == "ended":
-        return {
-            "state": "ended",
-            "dataset_id": str(page.dataset_id),
-            "published": page.published,
-        }
+def adapt_anonymous_page(page: AnonymousPage) -> dict:
+    if page.state == "published":
+        return {"state": "published", "dataset_id": str(page.dataset_id)}
+    when = page.embargo_until if page.state == "active" else page.embargo_ended_at
+    key = "embargo_until" if page.state == "active" else "embargo_ended_at"
     return {
-        "state": "active",
-        "embargo_until": page.embargo_until.isoformat() if page.embargo_until else None,
+        "state": page.state,
+        key: when.isoformat() if when else None,
         "dataset": {
             "name": page.name,
             "data": page.data,
@@ -2843,7 +2895,7 @@ def regenerate_invitation_link(
 ```
 
 ```python
-# app/controller/v1/dataset/review_link.py
+# app/controller/v1/dataset/anonymous_link.py
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
@@ -2854,41 +2906,41 @@ from app.controller.interceptor.authentication import authenticate
 from app.controller.interceptor.authorization import authorize
 from app.controller.interceptor.user_parser import parse_user_header
 from app.controller.v1.dataset.share_resource import (
-    CreateReviewLinkBody,
-    ReviewLinkResponse,
-    adapt_review_link,
+    CreateAnonymousLinkBody,
+    AnonymousLinkResponse,
+    adapt_anonymous_link,
 )
-from app.service.review_link import ReviewLinkService
+from app.service.anonymous_link import AnonymousLinkService
 
 router = APIRouter(
     prefix="/datasets",
-    tags=["review-links"],
+    tags=["anonymous-links"],
     dependencies=[Depends(authenticate), Depends(authorize)],
     responses={404: {"description": "Not found"}},
 )
 
 
 @router.post(
-    "/{dataset_id}/review-links", status_code=201, response_model=ReviewLinkResponse
+    "/{dataset_id}/anonymous-links", status_code=201, response_model=AnonymousLinkResponse
 )
 @inject
-def create_review_link(
+def create_anonymous_link(
     dataset_id: UUID,
-    body: CreateReviewLinkBody,
+    body: CreateAnonymousLinkBody,
     user_id: UUID = Depends(parse_user_header),
-    service: ReviewLinkService = Depends(Provide[Container.review_link_service]),
-) -> ReviewLinkResponse:
+    service: AnonymousLinkService = Depends(Provide[Container.anonymous_link_service]),
+) -> AnonymousLinkResponse:
     view, url = service.create(dataset_id, user_id, body.label)
-    return adapt_review_link(view, url)
+    return adapt_anonymous_link(view, url)
 
 
-@router.delete("/{dataset_id}/review-links/{link_id}", status_code=204)
+@router.delete("/{dataset_id}/anonymous-links/{link_id}", status_code=204)
 @inject
-def revoke_review_link(
+def revoke_anonymous_link(
     dataset_id: UUID,
     link_id: UUID,
     user_id: UUID = Depends(parse_user_header),
-    service: ReviewLinkService = Depends(Provide[Container.review_link_service]),
+    service: AnonymousLinkService = Depends(Provide[Container.anonymous_link_service]),
 ) -> Response:
     service.revoke(dataset_id, user_id, link_id)
     return Response(status_code=204)
@@ -2940,25 +2992,25 @@ def claim_invitations(
 ```
 
 ```python
-# app/controller/v1/review/review.py
+# app/controller/v1/anonymous/anonymous.py
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends
 
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
-from app.controller.v1.dataset.share_resource import adapt_review_page
-from app.service.review_link import ReviewLinkService
+from app.controller.v1.dataset.share_resource import adapt_anonymous_page
+from app.service.anonymous_link import AnonymousLinkService
 
-router = APIRouter(prefix="/review", tags=["review"], dependencies=[Depends(authenticate)])
+router = APIRouter(prefix="/anonymous", tags=["anonymous"], dependencies=[Depends(authenticate)])
 
 
 @router.get("/{token}")
 @inject
-def review_page(
+def anonymous_page(
     token: str,
-    service: ReviewLinkService = Depends(Provide[Container.review_link_service]),
+    service: AnonymousLinkService = Depends(Provide[Container.anonymous_link_service]),
 ) -> dict:
-    return adapt_review_page(service.view(token))
+    return adapt_anonymous_page(service.view(token))
 ```
 
 - [ ] **Step 5: Wire the container and the app**
@@ -2967,10 +3019,10 @@ In `app/container.py` add imports:
 
 ```python
 from app.repository.dataset_invitation import DatasetInvitationRepository
-from app.repository.dataset_review_link import DatasetReviewLinkRepository
+from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.service.notification import EmbargoNotificationService
-from app.service.review_link import ReviewLinkService
+from app.service.anonymous_link import AnonymousLinkService
 from app.service.share import ShareService
 ```
 
@@ -2978,12 +3030,12 @@ Add to `wiring_config.modules`:
 
 ```python
             "app.controller.v1.dataset.share",
-            "app.controller.v1.dataset.review_link",
+            "app.controller.v1.dataset.anonymous_link",
             "app.controller.v1.invitation.invitation",
-            "app.controller.v1.review.review",
+            "app.controller.v1.anonymous.anonymous",
 ```
 
-Add providers after `embargo_service` (plan 02's `dataset_service`, `dataset_repository`, `permission_repository`, `permission_service`, `embargo_audit` and plan 01's `email_service` must already be declared above):
+Add providers after `embargo_service` (plan 02's `dataset_service`, `dataset_repository`, `permission_repository`, `permission_service`, `dataset_access_audit` and plan 01's `email_service` must already be declared above):
 
 ```python
     dataset_invitation_repository = providers.Factory(
@@ -2991,8 +3043,8 @@ Add providers after `embargo_service` (plan 02's `dataset_service`, `dataset_rep
         session_factory=db.provided.session,
     )
 
-    dataset_review_link_repository = providers.Factory(
-        DatasetReviewLinkRepository,
+    dataset_anonymous_link_repository = providers.Factory(
+        DatasetAnonymousLinkRepository,
         session_factory=db.provided.session,
     )
 
@@ -3003,20 +3055,20 @@ Add providers after `embargo_service` (plan 02's `dataset_service`, `dataset_rep
         permission_repository=permission_repository,
         permission_service=permission_service,
         invitation_repository=dataset_invitation_repository,
-        review_link_repository=dataset_review_link_repository,
+        anonymous_link_repository=dataset_anonymous_link_repository,
         user_repository=user_repository,
         user_service=user_service,
-        audit=embargo_audit,
+        audit=dataset_access_audit,
         email_service=email_service,
         public_base_url=config.PUBLIC_BASE_URL,
     )
 
-    review_link_service = providers.Factory(
-        ReviewLinkService,
+    anonymous_link_service = providers.Factory(
+        AnonymousLinkService,
         dataset_service=dataset_service,
-        review_link_repository=dataset_review_link_repository,
+        anonymous_link_repository=dataset_anonymous_link_repository,
         dataset_repository=dataset_repository,
-        audit=embargo_audit,
+        audit=dataset_access_audit,
         public_base_url=config.PUBLIC_BASE_URL,
     )
 ```
@@ -3027,18 +3079,18 @@ In `app/setup.py` add imports:
 
 ```python
 from app.controller.v1.dataset.share import router as share_router
-from app.controller.v1.dataset.review_link import router as review_link_router
+from app.controller.v1.dataset.anonymous_link import router as anonymous_link_router
 from app.controller.v1.invitation.invitation import router as invitation_router
-from app.controller.v1.review.review import router as review_router
+from app.controller.v1.anonymous.anonymous import router as anonymous_router
 ```
 
 In `setup_routes`, after `dataset_router`:
 
 ```python
     fastAPIApp.include_router(share_router, prefix="/v1")
-    fastAPIApp.include_router(review_link_router, prefix="/v1")
+    fastAPIApp.include_router(anonymous_link_router, prefix="/v1")
     fastAPIApp.include_router(invitation_router, prefix="/v1")
-    fastAPIApp.include_router(review_router, prefix="/v1")
+    fastAPIApp.include_router(anonymous_router, prefix="/v1")
 ```
 
 - [ ] **Step 6: Run the unit tests, including the route guard test**
@@ -3048,14 +3100,14 @@ Expected: all passed. Every new route has `authenticate`, so `PUBLIC_ROUTES` sta
 
 - [ ] **Step 7: Confirm the routes exist**
 
-Run: `python -c "from fastapi import FastAPI; from app import setup; a=FastAPI(); setup.setup_routes(a); print(sorted(r.path for r in a.routes if 'share' in r.path or 'review' in r.path or 'invitation' in r.path))"`
-Expected: the eleven paths of the contracts (`/v1/datasets/{dataset_id}/share`, `.../share/candidates`, `.../share/permissions/{target_user_id}`, `.../share/invitations/{invitation_id}`, `.../share/invitations/{invitation_id}/link`, `.../review-links`, `.../review-links/{link_id}`, `/v1/invitations/accept`, `/v1/users/{user_id}/invitations/claim`, `/v1/review/{token}`).
+Run: `python -c "from fastapi import FastAPI; from app import setup; a=FastAPI(); setup.setup_routes(a); print(sorted(r.path for r in a.routes if 'share' in r.path or 'anonymous' in r.path or 'invitation' in r.path))"`
+Expected: the eleven paths of the contracts (`/v1/datasets/{dataset_id}/share`, `.../share/candidates`, `.../share/permissions/{target_user_id}`, `.../share/invitations/{invitation_id}`, `.../share/invitations/{invitation_id}/link`, `.../anonymous-links`, `.../anonymous-links/{link_id}`, `/v1/invitations/accept`, `/v1/users/{user_id}/invitations/claim`, `/v1/anonymous/{token}`).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add app/controller/v1/dataset/share_resource.py app/controller/v1/dataset/share_resource_test.py app/controller/v1/dataset/share.py app/controller/v1/dataset/review_link.py app/controller/v1/invitation app/controller/v1/review app/container.py app/setup.py
-git commit -m "feat: routes to share datasets, accept invitations and read reviewer pages"
+git add app/controller/v1/dataset/share_resource.py app/controller/v1/dataset/share_resource_test.py app/controller/v1/dataset/share.py app/controller/v1/dataset/anonymous_link.py app/controller/v1/invitation app/controller/v1/anonymous app/container.py app/setup.py
+git commit -m "feat: routes to share datasets, accept invitations and read anonymous pages"
 ```
 
 ---
@@ -3423,9 +3475,9 @@ git commit -m "feat: email templates for invitations and the end of an embargo"
 - Test: `app/service/notification_test.py`
 
 **Interfaces:**
-- Consumes: plan 02 `DatasetEmbargoEvent`, `PermissionRepository.list_for_dataset`, `EmbargoAudit.record`, `EmbargoEventType`, `REMINDER_OFFSETS_DAYS`, and its early-termination path (the owner's `POST /datasets/{id}/embargo/end` and the manual DOI with `end_embargo: true`, both setting `embargo_until` to the moment it ended and appending `ended_early`, the DOI one with note `"manual DOI"`); plan 01 `EmailService.enqueue`, `EmailService.dispatch_due`; `UserRepository.fetch_by_id`.
+- Consumes: plan 02 `DatasetAccessEvent`, `PermissionRepository.list_for_dataset`, `DatasetAccessAudit.record`, `AccessEventType`, `REMINDER_OFFSETS_DAYS`, and its early-termination path (the owner's `POST /datasets/{id}/embargo/end` and the manual DOI with `end_embargo: true`, both setting `embargo_until` to the moment it ended and appending `ended_early`, the DOI one with note `"manual DOI"`); plan 01 `EmailService.enqueue`, `EmailService.dispatch_due`; `UserRepository.fetch_by_id`.
 - Produces:
-  - `EmbargoNotificationRepository.datasets_with_reminders_due(now, horizon) -> list[Dataset]`, `.datasets_expired_unannounced(now) -> list[Dataset]`, `.embargo_set_at(dataset_id, until) -> datetime | None`, `.ending_event(dataset_id) -> DatasetEmbargoEvent | None` (the `ended_early` event when it is the latest of created/extended/ended_early)
+  - `EmbargoNotificationRepository.datasets_with_reminders_due(now, horizon) -> list[Dataset]`, `.datasets_expired_unannounced(now) -> list[Dataset]`, `.embargo_set_at(dataset_id, until) -> datetime | None`, `.ending_event(dataset_id) -> DatasetAccessEvent | None` (the `ended_early` event when it is the latest of created/extended/ended_early)
   - `EmbargoNotificationService.queue_due(now: datetime) -> int`
   - module function `due_offset(until, set_at, now, offsets) -> int | None`
 
@@ -3439,12 +3491,12 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 
-from app.model.embargo import EmbargoEventType
+from app.model.dataset_access import AccessEventType
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 from app.service.email import EmailService
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.notification import EmbargoNotificationService, due_offset
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -3472,7 +3524,7 @@ class TestQueueDue(unittest.TestCase):
         self.repository = Mock(spec=EmbargoNotificationRepository)
         self.permissions = Mock(spec=PermissionRepository)
         self.users = Mock(spec=UserRepository)
-        self.audit = Mock(spec=EmbargoAudit)
+        self.audit = Mock(spec=DatasetAccessAudit)
         self.email = Mock(spec=EmailService)
         self.email.enqueue.return_value = uuid4()
         self.owner = SimpleNamespace(id=uuid4(), name="Ana", email="ana@usp.br", is_enabled=True)
@@ -3559,7 +3611,7 @@ class TestQueueDue(unittest.TestCase):
             },
         )
         self.audit.record.assert_called_once()
-        self.assertEqual(self.audit.record.call_args.kwargs["event_type"], EmbargoEventType.EXPIRED)
+        self.assertEqual(self.audit.record.call_args.kwargs["event_type"], AccessEventType.EXPIRED)
         self.assertIsNone(self.audit.record.call_args.kwargs["changed_by"])
         self.assertFalse(calls[0]["context"]["ended_early"])
 
@@ -3599,7 +3651,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import true
 
 from app.model.db.dataset import Dataset
-from app.model.db.embargo import DatasetEmbargoEvent
+from app.model.db.dataset_access import DatasetAccessEvent
 
 
 class EmbargoNotificationRepository:
@@ -3624,9 +3676,9 @@ class EmbargoNotificationRepository:
     def datasets_expired_unannounced(self, now: datetime) -> list[Dataset]:
         announced = exists().where(
             and_(
-                DatasetEmbargoEvent.dataset_id == Dataset.id,
-                DatasetEmbargoEvent.event_type == "expired",
-                DatasetEmbargoEvent.occurred_at >= Dataset.embargo_until,
+                DatasetAccessEvent.dataset_id == Dataset.id,
+                DatasetAccessEvent.event_type == "expired",
+                DatasetAccessEvent.occurred_at >= Dataset.embargo_until,
             )
         )
         with self._session_factory() as session:
@@ -3641,17 +3693,17 @@ class EmbargoNotificationRepository:
                 .all()
             )
 
-    def ending_event(self, dataset_id: UUID) -> DatasetEmbargoEvent | None:
+    def ending_event(self, dataset_id: UUID) -> DatasetAccessEvent | None:
         with self._session_factory() as session:
             event = (
-                session.query(DatasetEmbargoEvent)
+                session.query(DatasetAccessEvent)
                 .filter(
-                    DatasetEmbargoEvent.dataset_id == dataset_id,
-                    DatasetEmbargoEvent.event_type.in_(
+                    DatasetAccessEvent.dataset_id == dataset_id,
+                    DatasetAccessEvent.event_type.in_(
                         ("created", "extended", "ended_early")
                     ),
                 )
-                .order_by(DatasetEmbargoEvent.occurred_at.desc())
+                .order_by(DatasetAccessEvent.occurred_at.desc())
                 .first()
             )
             if event is None or event.event_type != "ended_early":
@@ -3661,12 +3713,12 @@ class EmbargoNotificationRepository:
     def embargo_set_at(self, dataset_id: UUID, until: datetime) -> datetime | None:
         with self._session_factory() as session:
             event = (
-                session.query(DatasetEmbargoEvent)
+                session.query(DatasetAccessEvent)
                 .filter(
-                    DatasetEmbargoEvent.dataset_id == dataset_id,
-                    DatasetEmbargoEvent.event_type.in_(("created", "extended")),
+                    DatasetAccessEvent.dataset_id == dataset_id,
+                    DatasetAccessEvent.event_type.in_(("created", "extended")),
                 )
-                .order_by(DatasetEmbargoEvent.occurred_at.desc())
+                .order_by(DatasetAccessEvent.occurred_at.desc())
                 .first()
             )
             return event.occurred_at if event is not None else None
@@ -3681,12 +3733,13 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from app.logging_config import fields
-from app.model.embargo import REMINDER_OFFSETS_DAYS, EmbargoEventType
+from app.model.dataset_access import AccessEventType
+from app.model.embargo import REMINDER_OFFSETS_DAYS
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 from app.service.email import EmailService
-from app.service.embargo_audit import EmbargoAudit
+from app.service.dataset_access_audit import DatasetAccessAudit
 
 MANUAL_DOI_NOTE = "manual DOI"
 
@@ -3709,7 +3762,7 @@ class EmbargoNotificationService:
         notification_repository: EmbargoNotificationRepository,
         permission_repository: PermissionRepository,
         user_repository: UserRepository,
-        audit: EmbargoAudit,
+        audit: DatasetAccessAudit,
         email_service: EmailService,
         public_base_url: str,
     ) -> None:
@@ -3734,7 +3787,7 @@ class EmbargoNotificationService:
             queued += self._queue_for_people(dataset, "embargo_ended", None, ending)
             self._audit.record(
                 dataset_id=dataset.id,
-                event_type=EmbargoEventType.EXPIRED,
+                event_type=AccessEventType.EXPIRED,
                 changed_by=None,
                 new_value={"embargo_until": dataset.embargo_until.isoformat()},
             )
@@ -3829,7 +3882,7 @@ In `app/container.py` (imports already added in Task 7):
         notification_repository=embargo_notification_repository,
         permission_repository=permission_repository,
         user_repository=user_repository,
-        audit=embargo_audit,
+        audit=dataset_access_audit,
         email_service=email_service,
         public_base_url=config.PUBLIC_BASE_URL,
     )
@@ -3894,7 +3947,7 @@ Append these two objects to the end of the `panels` array (after panel id 40; id
 ```json
 {
   "type": "row",
-  "title": "Reviewer links",
+  "title": "Anonymous links",
   "collapsed": false,
   "panels": [],
   "id": 41,
@@ -3902,14 +3955,14 @@ Append these two objects to the end of the `panels` array (after panel id 40; id
 },
 {
   "type": "timeseries",
-  "title": "Reviewer link views",
-  "description": "Pages served to reviewer links. A steady not_found rate is someone guessing tokens.",
+  "title": "Anonymous link views",
+  "description": "Pages served to anonymous links. A steady not_found rate is someone guessing tokens.",
   "datasource": {"type": "prometheus", "uid": "prometheus"},
   "targets": [
     {
       "refId": "A",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "sum by (outcome) (increase(datamap_review_link_views_total[$__interval]))",
+      "expr": "sum by (outcome) (increase(datamap_anonymous_link_views_total[$__interval]))",
       "legendFormat": "{{outcome}}",
       "range": true,
       "instant": false
@@ -3917,7 +3970,7 @@ Append these two objects to the end of the `panels` array (after panel id 40; id
     {
       "refId": "B",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "sum(increase(datamap_review_links_created_total[$__interval]))",
+      "expr": "sum(increase(datamap_anonymous_links_created_total[$__interval]))",
       "legendFormat": "links created",
       "range": true,
       "instant": false
@@ -3956,7 +4009,7 @@ Expected: all passed (both metrics are declared in `app/metrics.py` by Task 6)
 
 ```bash
 git add infrastructure/grafana/dashboards/Business/platform-usage.json
-git commit -m "feat: reviewer link views on the platform usage dashboard"
+git commit -m "feat: anonymous link views on the platform usage dashboard"
 ```
 
 ---
@@ -3966,7 +4019,7 @@ git commit -m "feat: reviewer link views on the platform usage dashboard"
 **Files:**
 - Create: `tests/integration/utils/database.py`
 - Create: `tests/integration/test_sharing_api.py`
-- Create: `tests/integration/test_review_links_api.py`
+- Create: `tests/integration/test_anonymous_links_api.py`
 - Create: `tests/integration/test_embargo_notifications.py`
 
 **Interfaces:**
@@ -4179,10 +4232,10 @@ class TestInvitations:
 
 The ORCID test reuses one fixed ORCID; the `providers` table may already hold it from an earlier run of the same database. Run against `integration-test-full`, which starts from an empty database, or pick the ORCID per run with a valid checksum computed by `app.service.share_identity.orcid_checksum_ok`.
 
-- [ ] **Step 3: Reviewer link tests**
+- [ ] **Step 3: Anonymous link tests**
 
 ```python
-# tests/integration/test_review_links_api.py
+# tests/integration/test_anonymous_links_api.py
 from tests.integration.test_sharing_api import embargoed_dataset  # noqa: F401
 from tests.integration.utils.assertions import assert_status_code
 from tests.integration.utils.database import execute
@@ -4194,20 +4247,20 @@ def client_only(valid_headers) -> dict:
 
 def create_link(http_client, valid_headers, dataset_id) -> dict:
     response = http_client.post(
-        f"/datasets/{dataset_id}/review-links", json={"label": "JGR, round 1"}, headers=valid_headers
+        f"/datasets/{dataset_id}/anonymous-links", json={"label": "JGR, round 1"}, headers=valid_headers
     )
     assert_status_code(response, 201)
     return response.json()
 
 
-class TestReviewLinks:
+class TestAnonymousLinks:
     def test_the_page_redacts_authorship_and_lists_no_files(
         self, http_client, valid_headers, embargoed_dataset
     ):
         link = create_link(http_client, valid_headers, embargoed_dataset["id"])
         token = link["link"].rsplit("/", 1)[1]
 
-        page = http_client.get(f"/review/{token}", headers=client_only(valid_headers))
+        page = http_client.get(f"/anonymous/{token}", headers=client_only(valid_headers))
 
         assert_status_code(page, 200)
         body = page.json()
@@ -4218,21 +4271,21 @@ class TestReviewLinks:
         assert "files_in" not in str(body)
 
         state = http_client.get(f"/datasets/{embargoed_dataset['id']}/share", headers=valid_headers)
-        assert state.json()["review_links"][0]["views"]["count"] == 1
+        assert state.json()["anonymous_links"][0]["views"]["count"] == 1
 
     def test_a_revoked_link_is_not_found(self, http_client, valid_headers, embargoed_dataset):
         link = create_link(http_client, valid_headers, embargoed_dataset["id"])
         token = link["link"].rsplit("/", 1)[1]
 
         revoke = http_client.delete(
-            f"/datasets/{embargoed_dataset['id']}/review-links/{link['id']}", headers=valid_headers
+            f"/datasets/{embargoed_dataset['id']}/anonymous-links/{link['id']}", headers=valid_headers
         )
         assert_status_code(revoke, 204)
 
-        page = http_client.get(f"/review/{token}", headers=client_only(valid_headers))
+        page = http_client.get(f"/anonymous/{token}", headers=client_only(valid_headers))
         assert_status_code(page, 404)
 
-    def test_after_the_embargo_the_page_points_to_the_dataset(
+    def test_after_the_embargo_an_unpublished_dataset_stays_anonymised(
         self, http_client, valid_headers, embargoed_dataset
     ):
         link = create_link(http_client, valid_headers, embargoed_dataset["id"])
@@ -4240,26 +4293,32 @@ class TestReviewLinks:
         end = http_client.post(f"/datasets/{embargoed_dataset['id']}/embargo/end", headers=valid_headers)
         assert_status_code(end, 200)
 
-        page = http_client.get(f"/review/{token}", headers=client_only(valid_headers))
+        page = http_client.get(f"/anonymous/{token}", headers=client_only(valid_headers))
 
         assert_status_code(page, 200)
-        assert page.json() == {"state": "ended", "dataset_id": embargoed_dataset["id"], "published": False}
+        body = page.json()
+        assert body["state"] == "ended"
+        assert body["embargo_ended_at"]
+        assert "dataset_id" not in body
+        assert body["dataset"]["data"]["description"] == "Dataset created for integration testing"
+        state = http_client.get(f"/datasets/{embargoed_dataset['id']}/share", headers=valid_headers)
+        assert state.json()["anonymous_links"][0]["views"]["count"] == 1
 
     def test_no_link_without_an_embargo(self, http_client, valid_headers, dataset_fixture):
         dataset = dataset_fixture.create_test_dataset()
         response = http_client.post(
-            f"/datasets/{dataset['id']}/review-links", json={"label": "x"}, headers=valid_headers
+            f"/datasets/{dataset['id']}/anonymous-links", json={"label": "x"}, headers=valid_headers
         )
         assert_status_code(response, 400)
         assert response.json()["errors"][0]["code"] == "embargo_not_active"
 
     def test_the_page_needs_client_credentials(self, http_client, no_auth_headers):
-        assert_status_code(http_client.get("/review/anything", headers=no_auth_headers), 401)
+        assert_status_code(http_client.get("/anonymous/anything", headers=no_auth_headers), 401)
 
     def test_views_record_no_reviewer_identity(self):
         columns = execute(
             "SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.columns "
-            "WHERE table_name = 'dataset_review_link_views'"
+            "WHERE table_name = 'dataset_anonymous_link_views'"
         )
         assert columns == "id,link_id,outcome,viewed_at"
 ```
@@ -4307,7 +4366,7 @@ class TestEmbargoNotifications:
             headers=valid_headers,
         )
         execute(
-            "UPDATE dataset_embargo_events SET occurred_at = occurred_at - interval '30 days' "
+            "UPDATE dataset_access_events SET occurred_at = occurred_at - interval '30 days' "
             f"WHERE dataset_id = '{dataset['id']}' AND event_type = 'created'"
         )
 
@@ -4350,7 +4409,7 @@ class TestEmbargoNotifications:
         assert token not in str(detail["context"])
 
         expired = execute(
-            f"SELECT count(*) FROM dataset_embargo_events WHERE dataset_id = '{dataset['id']}' AND event_type = 'expired'"
+            f"SELECT count(*) FROM dataset_access_events WHERE dataset_id = '{dataset['id']}' AND event_type = 'expired'"
         )
         assert expired == "1"
 
@@ -4401,8 +4460,8 @@ Expected: the three new files pass; no previously passing test fails. If the fir
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tests/integration/utils/database.py tests/integration/test_sharing_api.py tests/integration/test_review_links_api.py tests/integration/test_embargo_notifications.py
-git commit -m "test: sharing, invitations, reviewer links and embargo emails end to end"
+git add tests/integration/utils/database.py tests/integration/test_sharing_api.py tests/integration/test_anonymous_links_api.py tests/integration/test_embargo_notifications.py
+git commit -m "test: sharing, invitations, anonymous links and embargo emails end to end"
 ```
 
 ---
@@ -4424,5 +4483,5 @@ git commit -m "chore: ruff format"
 
 ## Self-review notes
 
-- **Spec coverage:** invitations by email/ORCID (Tasks 2, 4), tenancy search excluding owner and current holders (Tasks 3, 4), single-use accept by any account and 409 (Task 5), claim on login (Task 5), `datasets_shared` on grant and accept (Tasks 4, 5), reviewer links only while embargoed, redaction allowlist, no file names, views without identity, `ended`/`published` (Task 6), metrics and panel (Tasks 6, 10), audit events for invitations and links (Tasks 4–6), three new templates in the existing identity (`dataset_invitation`, `embargo_reminder`, `embargo_ended`, each with a written `.txt`) plus access granted through the existing `notification`, with the registered-but-not-findable text, the extend button only for who can extend, and the early and manual-DOI endings (Task 8), reminders to everyone with access, nearest offset only, never an offset past at set time, end notice and `expired` once (Task 9), dispatch wiring (Task 9), integration coverage for every route, repository and Casbin path (Task 11).
+- **Spec coverage:** invitations by email/ORCID (Tasks 2, 4), tenancy search excluding owner and current holders (Tasks 3, 4), single-use accept by any account and 409 (Task 5), claim on login (Task 5), `datasets_shared` on grant and accept (Tasks 4, 5), anonymous links only while embargoed, redaction allowlist, no file names, views without identity, the anonymised page kept after the embargo until publication and then the redirect (`active`/`ended`/`published`, Task 6), metrics and panel (Tasks 6, 10), audit events for invitations and links (Tasks 4–6), three new templates in the existing identity (`dataset_invitation`, `embargo_reminder`, `embargo_ended`, each with a written `.txt`) plus access granted through the existing `notification`, with the registered-but-not-findable text, the extend button only for who can extend, and the early and manual-DOI endings (Task 8), reminders to everyone with access, nearest offset only, never an offset past at set time, end notice and `expired` once (Task 9), dispatch wiring (Task 9), integration coverage for every route, repository and Casbin path (Task 11).
 - **Not in this plan:** the access rule, `datasets_shared` seed rows, embargo routes and the `access` payload (plan 02); the email table, sender, the plain-text part of the renderer and `base.txt`, Mailpit and admin routes (plan 01); the base layout and macros (main, #121); the webapp (plan 05).

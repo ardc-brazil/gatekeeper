@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Where the code goes.** This plan lives in the gatekeeper repo with the other embargo plans, but every file it changes is in the **webapp repo, `/Users/caio.maia/workspace/datamap/datamap-webapp`**, except Task 17, which changes `infrastructure/nginx/datamap.conf` in the **gatekeeper repo**. All paths below are relative to the webapp repo root unless a task says otherwise. Work in a git worktree of the webapp repo on branch `feat/dataset-embargo`, created from `origin/main`; never in the main checkout.
+**Where the code goes.** This plan lives in the gatekeeper repo with the other embargo plans, but every file it changes is in the **webapp repo, `/Users/caio.maia/workspace/datamap/datamap-webapp`**, except Task 18, which changes `infrastructure/nginx/datamap.conf` in the **gatekeeper repo**. All paths below are relative to the webapp repo root unless a task says otherwise. Work in a git worktree of the webapp repo on branch `feat/dataset-embargo`, created from `origin/main`; never in the main checkout.
 
 **Verified against:** webapp `main` at `8c6f761` (#101, the new DataMap identity; #100, the encrypted environment, touches nothing here). Every file this plan modifies was compared with that commit. If `main` has moved, diff the files in *File Structure* against it before starting.
 
-**Goal:** Give the webapp everything RFC 003 asks of the user interface: embargo at creation and on the dataset page, the share dialog, reviewer links, the anonymous review page, the DOI embargo notice, invitation acceptance, a *Shared with me* list that works for an account with no tenancy, and the post-embargo banner.
+**Goal:** Give the webapp everything RFC 003 asks of the user interface: embargo at creation and on the dataset page, the share dialog, anonymous links, the anonymous page, the DOI embargo notice, invitation acceptance, a *Shared with me* list that works for an account with no tenancy, and the post-embargo banner.
 
-**Architecture:** Server-side calls to the gatekeeper live in `lib/embargo.ts` and `lib/share.ts` (axiosInstance + buildHeaders); browser mutations go through new `BFFAPI` methods to new `pages/api` routes built on one helper, `lib/bffRoute.ts`, whose chain authenticates but does not require a tenancy. UI is split into small components under `components/Embargo`, `components/Share`, `components/Review` and `components/Invitation`, each with a jsdom test; the public pages are thin and keep their decisions in tested `lib/*` functions.
+**Architecture:** Server-side calls to the gatekeeper live in `lib/embargo.ts` and `lib/share.ts` (axiosInstance + buildHeaders); browser mutations go through new `BFFAPI` methods to new `pages/api` routes built on one helper, `lib/bffRoute.ts`, whose chain authenticates but does not require a tenancy. UI is split into small components under `components/Embargo`, `components/Share`, `components/Anonymous` and `components/Invitation`, each with a jsdom test; the public pages are thin and keep their decisions in tested `lib/*` functions.
 
 **Tech Stack:** Next.js 14 (pages router), React 18, TypeScript, next-connect, axios, SWR, Formik, TailwindCSS, react-material-symbols, Jest + Testing Library.
 
@@ -25,7 +25,7 @@
 - Component tests start with `/** @jest-environment jsdom */`, live in `__tests__` next to the component, and import components by relative path (Jest does not map `@/`). Components that a test imports must not import `react-markdown` (ESM, not transformed by Jest).
 - Every new page must be listed in `PAGES` (`contants/TelemetryConstants.ts`), or `contants/__tests__/TelemetryConstants.test.ts` fails.
 - Comments: none narrating code. One line only where a reader would otherwise undo something on purpose.
-- Every task ends green on `npx jest <the task's tests>`; Task 16 runs the whole suite and `npm run build`.
+- Every task ends green on `npx jest <the task's tests>`; Task 17 runs the whole suite and `npm run build`.
 
 ## File Structure
 
@@ -39,22 +39,23 @@
 | `lib/shareTarget.ts` (create) | Email / ORCID recognition, ORCID checksum |
 | `lib/embargoDates.ts` (create) | Date limits, validation, request building |
 | `lib/embargoState.ts` (create) | Derived UI decisions from `embargo` + `access` |
-| `lib/reviewMetadata.ts` (create) | Turns redacted metadata into displayable rows |
-| `lib/reviewPage.ts`, `lib/doiLanding.ts`, `lib/invitationPage.ts` (create) | `getServerSideProps` decisions of the three new pages |
+| `lib/anonymousMetadata.ts` (create) | Turns redacted metadata into displayable rows |
+| `lib/anonymousPage.ts`, `lib/doiLanding.ts`, `lib/invitationPage.ts` (create) | `getServerSideProps` decisions of the three new pages |
 | `lib/embargo.ts`, `lib/share.ts` (create), `lib/dataset.ts` (modify) | Server calls to the gatekeeper |
 | `lib/middlewareChain.ts` (modify), `lib/bffRoute.ts` (create) | Tenancy-optional chain and the route helper |
 | `lib/requestErrorHandler.ts` (modify) | 404 renders Next's not-found page instead of crashing |
 | `lib/users.ts` (modify) | `canEditDataset` honours the dataset's `access` |
-| `pages/api/datasets/[datasetId]/{embargo,share,review-links}/…`, `pages/api/datasets/shared.ts`, `pages/api/invitations/accept.ts` (create) | BFF routes |
+| `pages/api/datasets/[datasetId]/{embargo,share,anonymous-links}/…`, `pages/api/datasets/shared.ts`, `pages/api/invitations/accept.ts` (create) | BFF routes |
 | `gateways/BFFAPI.ts` (modify) | Browser methods for the new routes |
 | `hooks/UseDebouncedValue.ts` (create) | Debounce for the search-as-you-type |
 | `components/Embargo/*` (create) | Badge, settings, choice at creation, withheld notice, ended banner |
-| `components/Share/*` (create) | Share button and dialog, input, access list, reviewer links, one-time link |
-| `components/Review/ReviewMetadataList.tsx` (create) | Redacted metadata table |
+| `components/Share/*` (create) | Share button and dialog, input, access list, anonymous links, one-time link |
+| `components/Anonymous/AnonymousMetadataList.tsx` (create) | Redacted metadata table |
 | `components/Invitation/AcceptInvitation.tsx` (create) | Accepts and redirects |
 | `components/LoggedLayout.tsx`, `components/DatasetDetailsPage.tsx`, `components/DatasetDetails/TabPanelSettings.tsx`, `components/DatasetDetails/DataCard/DataExplorer.tsx`, `components/Search/ListItem.tsx`, `components/Tenancy/AccessPending.tsx`, `pages/app/datasets/new.tsx`, `types/new-dataset.d.ts`, `pages/api/auth/[...nextauth].ts` (modify) | Wiring |
-| `pages/app/datasets/shared.tsx`, `pages/review/[token].tsx`, `pages/doi/datasets/[datasetId]/versions/[versionName].tsx`, `pages/invitations/[token].tsx` (create) | New pages |
+| `pages/app/datasets/shared.tsx`, `pages/anonymous/[token].tsx`, `pages/doi/datasets/[datasetId]/versions/[versionName].tsx`, `pages/invitations/[token].tsx` (create) | New pages |
 | `lib/doi.ts`, `components/DatasetDetails/DatasetCitation.tsx` (modify), `components/Embargo/ManualDoiConfirmation.tsx` (create) | A manual DOI ends the embargo only after confirmation |
+| `components/DatasetDetails/DatasetColaboratorsForm.tsx` (modify) | Contributors are credit only: no permission field, a line pointing to Share |
 | `lib/__tests__/emailImages.test.ts` (create) | Keeps `public/img/email/datamap-tile-{36,22}.png`, which the gatekeeper's email templates load, from being deleted |
 | `contants/ShareConstants.ts`, `components/Share/PersonInitial.tsx` (create) | Share dialog row styles and the initial avatar |
 
@@ -72,13 +73,14 @@
 | 8 Embargo on the dataset page | 3, 6 | 10, 11, 12 |
 | 9 Embargo choice at creation | 3, 6, 8 (`EmbargoBadge` not needed; `EmbargoChoice` is created here) | 10, 11, 12 |
 | 10 Share dialog | 3, 6 | 8, 9, 11, 12 |
-| 11 Review page | 2, 4 | 7, 8, 9, 10, 12 |
+| 11 Anonymous page | 2, 4 | 7, 8, 9, 10, 12 |
 | 12 DOI landing page | 2, 4 | 7–11 |
 | 13 Invitation page and claim on sign-in | 2, 4, 6 | 7–12 |
-| 14 Manual DOI confirmation | 1, 3 | 7–13, 15 |
-| 15 Guard on the email images | — | everything |
-| 16 Full verification | all | — |
-| 17 nginx (gatekeeper repo) | 12 deployed | — |
+| 14 Manual DOI confirmation | 1, 3 | 7–13, 15, 16 |
+| 15 Contributors are credit only | 8 (`canEditDataset(user, dataset)`), 10 (the Share button it points to) | 11–14, 16 |
+| 16 Guard on the email images | — | everything |
+| 17 Full verification | all | — |
+| 18 nginx (gatekeeper repo) | 12 deployed | — |
 
 ---
 
@@ -93,8 +95,8 @@
 - Test: `lib/__tests__/rpc.test.ts` (append), `contants/__tests__/EmbargoConstants.test.ts`
 
 **Interfaces:**
-- Produces (TypeScript, `types/GatekeeperAPI.ts`): `PermissionLevel`, `AccessLevel`, `DatasetEmbargo`, `DatasetAccess`, `FilesSummary`, `SetEmbargoRequest`, `ExtendEmbargoRequest`, `EmbargoModeRequest`, `EmbargoStatusResponse`, `ShareUser`, `SharePermission`, `ShareInvitation`, `ReviewLinkViews`, `ReviewLink`, `CreatedReviewLink`, `ShareState`, `GrantRequest`, `GrantResult`, `ReviewPageVersion`, `ReviewPageActive`, `ReviewPageEnded`, `ReviewPageResponse`, `AcceptInvitationResponse`, `ClaimInvitationsResponse`.
-- Produces (`contants/EmbargoConstants.ts`): `MAX_EMBARGO_DAYS = 90`, `REDACTED = "[redacted]"`, `REVIEW_LINK_LABEL_MAX = 256`, `EMBARGO_ERROR_MESSAGES`, `GENERIC_ERROR_MESSAGE`, `messageForApiError(error: unknown): string`.
+- Produces (TypeScript, `types/GatekeeperAPI.ts`): `PermissionLevel`, `AccessLevel`, `DatasetEmbargo`, `DatasetAccess`, `FilesSummary`, `SetEmbargoRequest`, `ExtendEmbargoRequest`, `EmbargoModeRequest`, `EmbargoStatusResponse`, `ShareUser`, `SharePermission`, `ShareInvitation`, `AnonymousLinkViews`, `AnonymousLink`, `CreatedAnonymousLink`, `ShareState`, `GrantRequest`, `GrantResult`, `AnonymousPageVersion`, `AnonymousPageActive`, `AnonymousPageEnded`, `AnonymousPageResponse`, `AcceptInvitationResponse`, `ClaimInvitationsResponse`.
+- Produces (`contants/EmbargoConstants.ts`): `MAX_EMBARGO_DAYS = 90`, `REDACTED = "[redacted]"`, `ANONYMOUS_LINK_LABEL_MAX = 256`, `EMBARGO_ERROR_MESSAGES`, `GENERIC_ERROR_MESSAGE`, `messageForApiError(error: unknown): string`.
 - Produces (`lib/rpc.ts`): `httpErrorHandler` returns `APIError` with `name: "FORBIDDEN", httpCode: 403` and `name: "CONFLICT", httpCode: 409`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -223,7 +225,7 @@ export const MAX_EMBARGO_DAYS = 90;
 
 export const REDACTED = "[redacted]";
 
-export const REVIEW_LINK_LABEL_MAX = 256;
+export const ANONYMOUS_LINK_LABEL_MAX = 256;
 
 export const GENERIC_ERROR_MESSAGE = "Something went wrong. Please try again.";
 
@@ -348,23 +350,23 @@ export interface ShareInvitation {
 }
 
 /** @interface */
-export interface ReviewLinkViews {
+export interface AnonymousLinkViews {
     count: number
     first_at: string | null
     last_at: string | null
 }
 
 /** @interface */
-export interface ReviewLink {
+export interface AnonymousLink {
     id: string
     label: string
     created_at: string
     revoked_at: string | null
-    views: ReviewLinkViews
+    views: AnonymousLinkViews
 }
 
 /** @interface */
-export interface CreatedReviewLink extends ReviewLink {
+export interface CreatedAnonymousLink extends AnonymousLink {
     link: string
 }
 
@@ -373,7 +375,7 @@ export interface ShareState {
     owner: ShareUser
     permissions: SharePermission[]
     invitations: ShareInvitation[]
-    review_links: ReviewLink[]
+    anonymous_links: AnonymousLink[]
 }
 
 /** Exactly one of user_id, email, orcid. */
@@ -389,31 +391,37 @@ export type GrantResult =
     | { kind: "invitation", invitation: ShareInvitation, link: string };
 
 /** @interface */
-export interface ReviewPageVersion {
+export interface AnonymousPageVersion {
     name: string
     created_at: string
     files_summary: FilesSummary
 }
 
 /** @interface */
-export interface ReviewPageActive {
+export interface AnonymousPageActive {
     state: "active"
     embargo_until: string
     dataset: {
         name: string
         data: Record<string, unknown>
-        versions: ReviewPageVersion[]
+        versions: AnonymousPageVersion[]
     }
 }
 
 /** @interface */
-export interface ReviewPageEnded {
+export interface AnonymousPageEnded {
     state: "ended"
-    dataset_id: string
-    published: boolean
+    embargo_ended_at: string
+    dataset: AnonymousPageActive["dataset"]
 }
 
-export type ReviewPageResponse = ReviewPageActive | ReviewPageEnded;
+/** @interface */
+export interface AnonymousPagePublished {
+    state: "published"
+    dataset_id: string
+}
+
+export type AnonymousPageResponse = AnonymousPageActive | AnonymousPageEnded | AnonymousPagePublished;
 
 /** @interface */
 export interface AcceptInvitationResponse {
@@ -500,7 +508,7 @@ git commit -m "feat: types and error messages for the dataset embargo"
 - Test: `contants/__tests__/InternalRoutesConstants_test.ts` (append), `contants/__tests__/TelemetryConstants.test.ts` (append)
 
 **Interfaces:**
-- Produces: `ROUTE_PAGE_DATASETS_SHARED: string`, `ROUTE_PAGE_REVIEW(params: { token }): string`, `ROUTE_PAGE_INVITATION(params: { token }): string`, `ROUTE_PAGE_DOI_LANDING(params: { id, versionName }): string`; UI events `embargo_set`, `embargo_extended`, `dataset_shared`, `review_link_created`.
+- Produces: `ROUTE_PAGE_DATASETS_SHARED: string`, `ROUTE_PAGE_ANONYMOUS(params: { token }): string`, `ROUTE_PAGE_INVITATION(params: { token }): string`, `ROUTE_PAGE_DOI_LANDING(params: { id, versionName }): string`; UI events `embargo_set`, `embargo_extended`, `dataset_shared`, `anonymous_link_created`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -511,15 +519,15 @@ import {
     ROUTE_PAGE_DATASETS_SHARED,
     ROUTE_PAGE_DOI_LANDING,
     ROUTE_PAGE_INVITATION,
-    ROUTE_PAGE_REVIEW,
+    ROUTE_PAGE_ANONYMOUS,
 } from "../InternalRoutesConstants";
 
 test('Shared with me route', () => {
     expect(ROUTE_PAGE_DATASETS_SHARED).toBe("/app/datasets/shared")
 })
 
-test('Review route', () => {
-    expect(ROUTE_PAGE_REVIEW({ token: "abc" })).toBe("/review/abc")
+test('Anonymous route', () => {
+    expect(ROUTE_PAGE_ANONYMOUS({ token: "abc" })).toBe("/anonymous/abc")
 })
 
 test('Invitation route', () => {
@@ -538,7 +546,7 @@ describe("the embargo telemetry", () => {
   it("knows the new pages", () => {
     for (const page of [
       "/app/datasets/shared",
-      "/review/[token]",
+      "/anonymous/[token]",
       "/invitations/[token]",
       "/doi/datasets/[datasetId]/versions/[versionName]",
     ]) {
@@ -547,7 +555,7 @@ describe("the embargo telemetry", () => {
   });
 
   it("accepts the new ui events", () => {
-    for (const event of ["embargo_set", "embargo_extended", "dataset_shared", "review_link_created"]) {
+    for (const event of ["embargo_set", "embargo_extended", "dataset_shared", "anonymous_link_created"]) {
       expect(uiEventLabel(event)).toBe(event);
     }
   });
@@ -557,7 +565,7 @@ describe("the embargo telemetry", () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `npx jest contants/__tests__`
-Expected: FAIL — the new route exports are undefined; `pageLabel("/review/[token]")` returns `"other"`.
+Expected: FAIL — the new route exports are undefined; `pageLabel("/anonymous/[token]")` returns `"other"`.
 
 - [ ] **Step 3: Implement**
 
@@ -571,10 +579,10 @@ In `contants/InternalRoutesConstants.ts`, after `ROUTE_PAGE_DATASETS_NEW`:
 export const ROUTE_PAGE_DATASETS_SHARED = ROUTE_PAGE_DATASETS + "/shared";
 
 /**
- * Route to the anonymous reviewer page.
+ * Route to the anonymous page.
  * @constant
  */
-export const ROUTE_PAGE_REVIEW = (params) => replaceIt('/review/:token', params);
+export const ROUTE_PAGE_ANONYMOUS = (params) => replaceIt('/anonymous/:token', params);
 
 /**
  * Route to the invitation acceptance page.
@@ -617,7 +625,7 @@ export const PAGES: readonly string[] = [
   "/project/partners-and-supporters",
   "/project/research-group",
   "/project/support",
-  "/review/[token]",
+  "/anonymous/[token]",
   "/tools",
 ];
 ```
@@ -640,7 +648,7 @@ export const UI_EVENTS = [
   "embargo_set",
   "embargo_extended",
   "dataset_shared",
-  "review_link_created",
+  "anonymous_link_created",
 ] as const;
 ```
 
@@ -1089,9 +1097,9 @@ git commit -m "feat: recognise emails and ORCIDs, and the embargo date limits"
   - `revokePermission(context, datasetId, userId): Promise<void>`
   - `revokeInvitation(context, datasetId, invitationId): Promise<void>`
   - `regenerateInvitationLink(context, datasetId, invitationId): Promise<{ link: string }>`
-  - `createReviewLink(context, datasetId, label): Promise<CreatedReviewLink>`
-  - `revokeReviewLink(context, datasetId, linkId): Promise<void>`
-  - `getReviewPage(token): Promise<ReviewPageResponse>`
+  - `createAnonymousLink(context, datasetId, label): Promise<CreatedAnonymousLink>`
+  - `revokeAnonymousLink(context, datasetId, linkId): Promise<void>`
+  - `getAnonymousPage(token): Promise<AnonymousPageResponse>`
   - `acceptInvitation(context, token): Promise<AcceptInvitationResponse>`
   - `claimInvitations(uid): Promise<ClaimInvitationsResponse>`
   - `getSharedDatasets(context, query: { [key: string]: string | string[] }): Promise<GetDatasetsResponse>`
@@ -1164,14 +1172,14 @@ import {
     acceptInvitation,
     changePermissionLevel,
     claimInvitations,
-    createReviewLink,
-    getReviewPage,
+    createAnonymousLink,
+    getAnonymousPage,
     getShareState,
     grantAccess,
     regenerateInvitationLink,
     revokeInvitation,
     revokePermission,
-    revokeReviewLink,
+    revokeAnonymousLink,
     searchShareCandidates,
 } from "../share";
 import axiosInstance, { buildHeaders } from "../rpc";
@@ -1199,7 +1207,7 @@ describe("share calls", () => {
     });
 
     test("state", async () => {
-        mockGet.mockResolvedValue({ data: { owner: {}, permissions: [], invitations: [], review_links: [] } });
+        mockGet.mockResolvedValue({ data: { owner: {}, permissions: [], invitations: [], anonymous_links: [] } });
 
         await getShareState(context, "d1");
         expect(mockGet).toHaveBeenCalledWith("/datasets/d1/share", headers);
@@ -1240,25 +1248,25 @@ describe("share calls", () => {
         expect(mockPost).toHaveBeenCalledWith("/datasets/d1/share/invitations/i1/link", {}, headers);
     });
 
-    test("create a reviewer link", async () => {
-        mockPost.mockResolvedValue({ data: { id: "r1", link: "https://x/review/t" } });
+    test("create an anonymous link", async () => {
+        mockPost.mockResolvedValue({ data: { id: "r1", link: "https://x/anonymous/t" } });
 
-        await createReviewLink(context, "d1", "JGR, round 1");
-        expect(mockPost).toHaveBeenCalledWith("/datasets/d1/review-links", { label: "JGR, round 1" }, headers);
+        await createAnonymousLink(context, "d1", "JGR, round 1");
+        expect(mockPost).toHaveBeenCalledWith("/datasets/d1/anonymous-links", { label: "JGR, round 1" }, headers);
     });
 
-    test("revoke a reviewer link", async () => {
+    test("revoke an anonymous link", async () => {
         mockDelete.mockResolvedValue({ status: 204 });
 
-        await revokeReviewLink(context, "d1", "r1");
-        expect(mockDelete).toHaveBeenCalledWith("/datasets/d1/review-links/r1", headers);
+        await revokeAnonymousLink(context, "d1", "r1");
+        expect(mockDelete).toHaveBeenCalledWith("/datasets/d1/anonymous-links/r1", headers);
     });
 
-    test("the review page is asked without a user", async () => {
-        mockGet.mockResolvedValue({ data: { state: "ended", dataset_id: "d1", published: false } });
+    test("the anonymous page is asked without a user", async () => {
+        mockGet.mockResolvedValue({ data: { state: "published", dataset_id: "d1" } });
 
-        await getReviewPage("a/b");
-        expect(mockGet).toHaveBeenCalledWith("/review/a%2Fb");
+        await getAnonymousPage("a/b");
+        expect(mockGet).toHaveBeenCalledWith("/anonymous/a%2Fb");
     });
 
     test("accept sends the user and the token", async () => {
@@ -1342,11 +1350,11 @@ export async function getEmbargoStatus(datasetId: string): Promise<EmbargoStatus
 import {
     AcceptInvitationResponse,
     ClaimInvitationsResponse,
-    CreatedReviewLink,
+    CreatedAnonymousLink,
     GrantRequest,
     GrantResult,
     PermissionLevel,
-    ReviewPageResponse,
+    AnonymousPageResponse,
     SharePermission,
     ShareState,
     ShareUser,
@@ -1390,18 +1398,18 @@ export async function regenerateInvitationLink(context: AppLocalContext, dataset
     return response.data as { link: string };
 }
 
-export async function createReviewLink(context: AppLocalContext, datasetId: string, label: string): Promise<CreatedReviewLink> {
-    const response = await axiosInstance.post(`/datasets/${datasetId}/review-links`, { label }, buildHeaders(context));
-    return response.data as CreatedReviewLink;
+export async function createAnonymousLink(context: AppLocalContext, datasetId: string, label: string): Promise<CreatedAnonymousLink> {
+    const response = await axiosInstance.post(`/datasets/${datasetId}/anonymous-links`, { label }, buildHeaders(context));
+    return response.data as CreatedAnonymousLink;
 }
 
-export async function revokeReviewLink(context: AppLocalContext, datasetId: string, linkId: string): Promise<void> {
-    await axiosInstance.delete(`/datasets/${datasetId}/review-links/${linkId}`, buildHeaders(context));
+export async function revokeAnonymousLink(context: AppLocalContext, datasetId: string, linkId: string): Promise<void> {
+    await axiosInstance.delete(`/datasets/${datasetId}/anonymous-links/${linkId}`, buildHeaders(context));
 }
 
-export async function getReviewPage(token: string): Promise<ReviewPageResponse> {
-    const response = await axiosInstance.get(`/review/${encodeURIComponent(token)}`);
-    return response.data as ReviewPageResponse;
+export async function getAnonymousPage(token: string): Promise<AnonymousPageResponse> {
+    const response = await axiosInstance.get(`/anonymous/${encodeURIComponent(token)}`);
+    return response.data as AnonymousPageResponse;
 }
 
 export async function acceptInvitation(context: AppLocalContext, token: string): Promise<AcceptInvitationResponse> {
@@ -1439,7 +1447,7 @@ Expected: PASS.
 
 ```bash
 git add lib/embargo.ts lib/share.ts lib/dataset.ts lib/__tests__/embargo.test.ts lib/__tests__/share.test.ts lib/__tests__/dataset.test.ts
-git commit -m "feat: server calls for embargo, sharing and reviewer links"
+git commit -m "feat: server calls for embargo, sharing and anonymous links"
 ```
 
 ---
@@ -1651,8 +1659,8 @@ git commit -m "feat: dataset routes no longer require a selected tenancy"
   - `pages/api/datasets/[datasetId]/share/permissions/[userId].ts` (PUT, DELETE)
   - `pages/api/datasets/[datasetId]/share/invitations/[invitationId]/index.ts` (DELETE)
   - `pages/api/datasets/[datasetId]/share/invitations/[invitationId]/link.ts` (POST)
-  - `pages/api/datasets/[datasetId]/review-links/index.ts` (POST)
-  - `pages/api/datasets/[datasetId]/review-links/[linkId].ts` (DELETE)
+  - `pages/api/datasets/[datasetId]/anonymous-links/index.ts` (POST)
+  - `pages/api/datasets/[datasetId]/anonymous-links/[linkId].ts` (DELETE)
   - `pages/api/datasets/shared.ts` (GET)
   - `pages/api/invitations/accept.ts` (POST)
 - Modify: `gateways/BFFAPI.ts`
@@ -1671,8 +1679,8 @@ git commit -m "feat: dataset routes no longer require a selected tenancy"
   - `revokePermission(datasetId, userId): Promise<void>`
   - `revokeInvitation(datasetId, invitationId): Promise<void>`
   - `regenerateInvitationLink(datasetId, invitationId): Promise<{ link: string }>`
-  - `createReviewLink(datasetId, label): Promise<CreatedReviewLink>` (event `review_link_created`)
-  - `revokeReviewLink(datasetId, linkId): Promise<void>`
+  - `createAnonymousLink(datasetId, label): Promise<CreatedAnonymousLink>` (event `anonymous_link_created`)
+  - `revokeAnonymousLink(datasetId, linkId): Promise<void>`
   - `acceptInvitation(token): Promise<AcceptInvitationResponse>`
 - Produces (BFF): `GET /api/datasets/{id}/share` is the SWR key used by the share dialog; `GET /api/datasets/shared?page=&page_size=` by the Shared page.
 
@@ -1718,7 +1726,7 @@ async function send(handler: any, method: string, query: Record<string, string>,
 
 describe("the share BFF routes", () => {
     test("GET answers the share state, without a tenancy", async () => {
-        jest.mocked(getShareState).mockResolvedValue({ owner: { id: "o" }, permissions: [], invitations: [], review_links: [] } as any);
+        jest.mocked(getShareState).mockResolvedValue({ owner: { id: "o" }, permissions: [], invitations: [], anonymous_links: [] } as any);
 
         const res = await send(shareHandler, "GET", { datasetId: "d1" });
 
@@ -2057,33 +2065,33 @@ const router = bffRouter()
 export default bffHandler(router);
 ```
 
-`pages/api/datasets/[datasetId]/review-links/index.ts`:
+`pages/api/datasets/[datasetId]/anonymous-links/index.ts`:
 
 ```ts
 import { NewContext } from "../../../../../lib/appLocalContext";
 import { bffHandler, bffRouter } from "../../../../../lib/bffRoute";
-import { createReviewLink } from "../../../../../lib/share";
+import { createAnonymousLink } from "../../../../../lib/share";
 
 const router = bffRouter()
     .post(async (req, res) => {
         const context = await NewContext(req);
-        res.status(201).json(await createReviewLink(context, req.query.datasetId as string, req.body?.label));
+        res.status(201).json(await createAnonymousLink(context, req.query.datasetId as string, req.body?.label));
     });
 
 export default bffHandler(router);
 ```
 
-`pages/api/datasets/[datasetId]/review-links/[linkId].ts`:
+`pages/api/datasets/[datasetId]/anonymous-links/[linkId].ts`:
 
 ```ts
 import { NewContext } from "../../../../../lib/appLocalContext";
 import { bffHandler, bffRouter } from "../../../../../lib/bffRoute";
-import { revokeReviewLink } from "../../../../../lib/share";
+import { revokeAnonymousLink } from "../../../../../lib/share";
 
 const router = bffRouter()
     .delete(async (req, res) => {
         const context = await NewContext(req);
-        await revokeReviewLink(context, req.query.datasetId as string, req.query.linkId as string);
+        await revokeAnonymousLink(context, req.query.datasetId as string, req.query.linkId as string);
         res.status(204).end();
     });
 
@@ -2129,7 +2137,7 @@ In `gateways/BFFAPI.ts`, add to the imports:
 ```ts
 import {
     AcceptInvitationResponse,
-    CreatedReviewLink,
+    CreatedAnonymousLink,
     DatasetEmbargo,
     EmbargoModeRequest,
     ExtendEmbargoRequest,
@@ -2236,19 +2244,19 @@ and append these methods inside `class BFFAPI`, after `createNewDraftDatasetVers
         }
     }
 
-    async createReviewLink(datasetId: string, label: string): Promise<CreatedReviewLink> {
+    async createAnonymousLink(datasetId: string, label: string): Promise<CreatedAnonymousLink> {
         try {
-            const response = await axios.post(`/api/datasets/${datasetId}/review-links`, { label });
-            trackUiEvent("review_link_created");
-            return response.data as CreatedReviewLink;
+            const response = await axios.post(`/api/datasets/${datasetId}/anonymous-links`, { label });
+            trackUiEvent("anonymous_link_created");
+            return response.data as CreatedAnonymousLink;
         } catch (error) {
             throw httpErrorHandler(error);
         }
     }
 
-    async revokeReviewLink(datasetId: string, linkId: string): Promise<void> {
+    async revokeAnonymousLink(datasetId: string, linkId: string): Promise<void> {
         try {
-            await axios.delete(`/api/datasets/${datasetId}/review-links/${linkId}`);
+            await axios.delete(`/api/datasets/${datasetId}/anonymous-links/${linkId}`);
         } catch (error) {
             throw httpErrorHandler(error);
         }
@@ -2273,7 +2281,7 @@ Expected: PASS.
 
 ```bash
 git add pages/api/datasets/ pages/api/invitations/ gateways/BFFAPI.ts gateways/__tests__/ lib/__tests__/shareRoutes.test.ts lib/__tests__/embargoRoutes.test.ts
-git commit -m "feat: BFF routes for embargo, sharing, reviewer links and invitations"
+git commit -m "feat: BFF routes for embargo, sharing, anonymous links and invitations"
 ```
 
 ---
@@ -3238,18 +3246,18 @@ git commit -m "feat: choose an embargo when creating a dataset"
 
 **Files:**
 - Create: `hooks/UseDebouncedValue.ts`
-- Create: `contants/ShareConstants.ts`, `components/Share/PersonInitial.tsx`, `components/Share/ShareInput.tsx`, `components/Share/OneTimeLink.tsx`, `components/Share/AccessList.tsx`, `components/Share/ReviewLinksSection.tsx`, `components/Share/ShareDialog.tsx`, `components/Share/ShareButton.tsx`
+- Create: `contants/ShareConstants.ts`, `components/Share/PersonInitial.tsx`, `components/Share/ShareInput.tsx`, `components/Share/OneTimeLink.tsx`, `components/Share/AccessList.tsx`, `components/Share/AnonymousLinksSection.tsx`, `components/Share/ShareDialog.tsx`, `components/Share/ShareButton.tsx`
 - Modify: `components/DatasetDetailsPage.tsx`
-- Test: `components/Share/__tests__/ShareInput.test.tsx`, `components/Share/__tests__/AccessList.test.tsx`, `components/Share/__tests__/ReviewLinksSection.test.tsx`, `components/Share/__tests__/ShareDialog.test.tsx`
+- Test: `components/Share/__tests__/ShareInput.test.tsx`, `components/Share/__tests__/AccessList.test.tsx`, `components/Share/__tests__/AnonymousLinksSection.test.tsx`, `components/Share/__tests__/ShareDialog.test.tsx`
 
 **Interfaces:**
-- Consumes: `classifyShareInput` (Task 3); BFFAPI methods (Task 6); `messageForApiError`, `EMBARGO_ERROR_MESSAGES`, `REVIEW_LINK_LABEL_MAX` (Task 1); `formatEmbargoDate` (Task 3); SWR key `/api/datasets/{id}/share`.
+- Consumes: `classifyShareInput` (Task 3); BFFAPI methods (Task 6); `messageForApiError`, `EMBARGO_ERROR_MESSAGES`, `ANONYMOUS_LINK_LABEL_MAX` (Task 1); `formatEmbargoDate` (Task 3); SWR key `/api/datasets/{id}/share`.
 - Produces:
   - `useDebouncedValue<T>(value: T, delayMs: number): T`
   - `ShareInput({ datasetId, onGrant(request: GrantRequest): Promise<void> })`
   - `OneTimeLink({ link, onDismiss })`
   - `AccessList({ state, onChangeLevel(userId, level), onRevokePermission(userId), onRevokeInvitation(id), onRegenerateLink(id) })`
-  - `ReviewLinksSection({ links, embargoActive, onCreate(label): Promise<void>, onRevoke(id) })`
+  - `AnonymousLinksSection({ links, embargoActive, onCreate(label): Promise<void>, onRevoke(id) })`
   - `ShareDialog({ dataset, show, onClose })`, `ShareButton({ dataset })`
 
 - [ ] **Step 1: Write the failing tests**
@@ -3352,7 +3360,7 @@ const state: any = {
         { id: "i2", email: null, orcid: "0000-0002-1825-0097", level: "write", created_at: "2026-09-29T10:00:00+00:00", accepted_at: "2026-09-30T09:00:00+00:00", accepted_by: { id: "u3", name: "Bruno", email: "bruno@gmail.com" }, revoked_at: null },
         { id: "i3", email: "gone@uni.edu", orcid: null, level: "read", created_at: "2026-09-28T10:00:00+00:00", accepted_at: null, accepted_by: null, revoked_at: "2026-09-29T10:00:00+00:00" },
     ],
-    review_links: [],
+    anonymous_links: [],
 };
 
 function renderList(handlers: any = {}) {
@@ -3412,53 +3420,53 @@ describe("AccessList", () => {
 });
 ```
 
-`components/Share/__tests__/ReviewLinksSection.test.tsx`:
+`components/Share/__tests__/AnonymousLinksSection.test.tsx`:
 
 ```tsx
 /** @jest-environment jsdom */
 import { describe, expect, jest, test } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { ReviewLinksSection } from "../ReviewLinksSection";
+import { AnonymousLinksSection } from "../AnonymousLinksSection";
 
 const links: any = [
     { id: "r1", label: "JGR, round 1", created_at: "2026-09-01T10:00:00+00:00", revoked_at: null, views: { count: 12, first_at: "2026-09-02T10:00:00+00:00", last_at: "2026-09-20T10:00:00+00:00" } },
     { id: "r2", label: "Nature, round 1", created_at: "2026-09-10T10:00:00+00:00", revoked_at: null, views: { count: 0, first_at: null, last_at: null } },
 ];
 
-describe("ReviewLinksSection", () => {
+describe("AnonymousLinksSection", () => {
     test("shows how each link was used, without saying by whom", () => {
-        render(<ReviewLinksSection links={links} embargoActive onCreate={jest.fn() as any} onRevoke={jest.fn()} />);
+        render(<AnonymousLinksSection links={links} embargoActive onCreate={jest.fn() as any} onRevoke={jest.fn()} />);
 
         expect(screen.getByText(/Opened 12 times/)).toBeTruthy();
         expect(screen.getByText(/Not opened yet/)).toBeTruthy();
     });
 
     test("warns that free text is not redacted", () => {
-        render(<ReviewLinksSection links={[]} embargoActive onCreate={jest.fn() as any} onRevoke={jest.fn()} />);
+        render(<AnonymousLinksSection links={[]} embargoActive onCreate={jest.fn() as any} onRevoke={jest.fn()} />);
 
         expect(screen.getByText(/description and other free text are shown as written/)).toBeTruthy();
     });
 
     test("creates a link with a label", async () => {
         const onCreate = jest.fn().mockResolvedValue(undefined) as any;
-        render(<ReviewLinksSection links={[]} embargoActive onCreate={onCreate} onRevoke={jest.fn()} />);
+        render(<AnonymousLinksSection links={[]} embargoActive onCreate={onCreate} onRevoke={jest.fn()} />);
 
         fireEvent.change(screen.getByLabelText("Label, seen only by you"), { target: { value: "JGR, round 2" } });
-        fireEvent.click(screen.getByRole("button", { name: "Create reviewer link" }));
+        fireEvent.click(screen.getByRole("button", { name: "Create anonymous link" }));
 
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith("JGR, round 2"));
     });
 
     test("no link can be created without an embargo", () => {
-        render(<ReviewLinksSection links={[]} embargoActive={false} onCreate={jest.fn() as any} onRevoke={jest.fn()} />);
+        render(<AnonymousLinksSection links={[]} embargoActive={false} onCreate={jest.fn() as any} onRevoke={jest.fn()} />);
 
-        expect(screen.queryByRole("button", { name: "Create reviewer link" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Create anonymous link" })).toBeNull();
         expect(screen.getByText(/exist only while the dataset is under embargo/)).toBeTruthy();
     });
 
     test("revokes a link", () => {
         const onRevoke = jest.fn();
-        render(<ReviewLinksSection links={links} embargoActive onCreate={jest.fn() as any} onRevoke={onRevoke} />);
+        render(<AnonymousLinksSection links={links} embargoActive onCreate={jest.fn() as any} onRevoke={onRevoke} />);
 
         fireEvent.click(screen.getByRole("button", { name: "Revoke JGR, round 1" }));
 
@@ -3484,7 +3492,7 @@ jest.mock("../../../gateways/BFFAPI", () => ({
 jest.mock("swr", () => ({
     __esModule: true,
     default: () => ({
-        data: { owner: { id: "o", name: "Olga", email: "olga@usp.br" }, permissions: [], invitations: [], review_links: [] },
+        data: { owner: { id: "o", name: "Olga", email: "olga@usp.br" }, permissions: [], invitations: [], anonymous_links: [] },
         error: undefined,
         mutate,
     }),
@@ -3814,24 +3822,24 @@ export function AccessList(props: Props) {
 }
 ```
 
-`components/Share/ReviewLinksSection.tsx`:
+`components/Share/AnonymousLinksSection.tsx`:
 
 ```tsx
 import { useState } from "react";
 import { EDIT_FORM_HINT_CLASS, EDIT_FORM_INPUT_CLASS, EDIT_FORM_LABEL_CLASS } from "../../contants/EditFormConstants";
-import { REVIEW_LINK_LABEL_MAX } from "../../contants/EmbargoConstants";
+import { ANONYMOUS_LINK_LABEL_MAX } from "../../contants/EmbargoConstants";
 import { SHARE_PERSON_DETAIL_CLASS, SHARE_PERSON_NAME_CLASS, SHARE_ROW_ACTION_CLASS, SHARE_SECTION_LABEL_CLASS } from "../../contants/ShareConstants";
 import { formatEmbargoDate } from "../../lib/embargoDates";
-import { ReviewLink } from "../../types/GatekeeperAPI";
+import { AnonymousLink } from "../../types/GatekeeperAPI";
 
 interface Props {
-    links: ReviewLink[]
+    links: AnonymousLink[]
     embargoActive: boolean
     onCreate(label: string): Promise<void>
     onRevoke(linkId: string): void
 }
 
-export function ReviewLinksSection(props: Props) {
+export function AnonymousLinksSection(props: Props) {
     const [label, setLabel] = useState("");
     const [creating, setCreating] = useState(false);
 
@@ -3846,27 +3854,27 @@ export function ReviewLinksSection(props: Props) {
     }
 
     return (
-        <section className="flex flex-col gap-2.5 border-t border-primary-200 pt-5" aria-labelledby="review-links-title">
-            <h4 id="review-links-title" className={SHARE_SECTION_LABEL_CLASS}>Reviewer links</h4>
+        <section className="flex flex-col gap-2.5 border-t border-primary-200 pt-5" aria-labelledby="anonymous-links-title">
+            <h4 id="anonymous-links-title" className={SHARE_SECTION_LABEL_CLASS}>Anonymous links</h4>
             <p className={EDIT_FORM_HINT_CLASS}>
-                A reviewer link lets a venue&apos;s reviewers read the metadata without an account. Authors, contacts,
+                An anonymous link lets a venue&apos;s reviewers read the metadata without an account. Authors, contacts,
                 collaborators, institution, project and references are redacted, and no file can be downloaded.
                 The description and other free text are shown as written: check that they do not name you.
             </p>
 
             {!props.embargoActive &&
-                <p className="m-0 text-sm text-primary-700">Reviewer links exist only while the dataset is under embargo.</p>
+                <p className="m-0 text-sm text-primary-700">Anonymous links exist only while the dataset is under embargo.</p>
             }
 
             {props.embargoActive &&
                 <div className="flex gap-2 items-end">
                     <div className="w-full">
-                        <label htmlFor="review-link-label" className={EDIT_FORM_LABEL_CLASS}>Label, seen only by you</label>
+                        <label htmlFor="anonymous-link-label" className={EDIT_FORM_LABEL_CLASS}>Label, seen only by you</label>
                         <input
-                            id="review-link-label"
+                            id="anonymous-link-label"
                             type="text"
                             className={EDIT_FORM_INPUT_CLASS}
-                            maxLength={REVIEW_LINK_LABEL_MAX}
+                            maxLength={ANONYMOUS_LINK_LABEL_MAX}
                             placeholder="e.g. JGR Atmospheres, round 1"
                             value={label}
                             onChange={(e) => setLabel(e.target.value)}
@@ -3878,7 +3886,7 @@ export function ReviewLinksSection(props: Props) {
                         disabled={creating || label.trim() === ""}
                         onClick={create}
                     >
-                        Create reviewer link
+                        Create anonymous link
                     </button>
                 </div>
             }
@@ -3922,7 +3930,7 @@ import { GrantRequest, PermissionLevel, ShareState } from "../../types/Gatekeepe
 import Modal from "../base/PopupModal";
 import { AccessList } from "./AccessList";
 import { OneTimeLink } from "./OneTimeLink";
-import { ReviewLinksSection } from "./ReviewLinksSection";
+import { AnonymousLinksSection } from "./AnonymousLinksSection";
 import { ShareInput } from "./ShareInput";
 
 interface Props {
@@ -3989,14 +3997,14 @@ export function ShareDialog(props: Props) {
                 }
 
                 {state &&
-                    <ReviewLinksSection
-                        links={state.review_links}
+                    <AnonymousLinksSection
+                        links={state.anonymous_links}
                         embargoActive={props.dataset.embargo?.active === true}
                         onCreate={async (label) => {
-                            const result = await run(() => bffGateway.createReviewLink(datasetId, label));
+                            const result = await run(() => bffGateway.createAnonymousLink(datasetId, label));
                             if (result) setOneTimeLink(result.link);
                         }}
-                        onRevoke={(id) => run(() => bffGateway.revokeReviewLink(datasetId, id))}
+                        onRevoke={(id) => run(() => bffGateway.revokeAnonymousLink(datasetId, id))}
                     />
                 }
             </div>
@@ -4046,28 +4054,28 @@ Expected: PASS.
 
 ```bash
 git add hooks/UseDebouncedValue.ts contants/ShareConstants.ts components/Share/ components/DatasetDetailsPage.tsx
-git commit -m "feat: share dialog with tenancy search, invitations and reviewer links"
+git commit -m "feat: share dialog with tenancy search, invitations and anonymous links"
 ```
 
 ---
 
-### Task 11: Anonymous review page
+### Task 11: Anonymous page
 
 **Files:**
-- Create: `lib/reviewMetadata.ts`, `lib/reviewPage.ts`, `components/Review/ReviewMetadataList.tsx`, `pages/review/[token].tsx`
-- Test: `lib/__tests__/reviewMetadata.test.ts`, `lib/__tests__/reviewPage.test.ts`, `components/Review/__tests__/ReviewMetadataList.test.tsx`
+- Create: `lib/anonymousMetadata.ts`, `lib/anonymousPage.ts`, `components/Anonymous/AnonymousMetadataList.tsx`, `pages/anonymous/[token].tsx`
+- Test: `lib/__tests__/anonymousMetadata.test.ts`, `lib/__tests__/anonymousPage.test.ts`, `components/Anonymous/__tests__/AnonymousMetadataList.test.tsx`
 
 **Interfaces:**
-- Consumes: `getReviewPage` (Task 4), `REDACTED` (Task 1), `ROUTE_PAGE_DATASETS_SNAPSHOTS_DETAILS` (existing), `ReviewPageResponse` (Task 1).
-- Produces: `displayValue(value: unknown): string`, `reviewMetadataEntries(data): { key, label, value, redacted }[]`, `reviewPageProps(page: ReviewPageResponse)`, `ReviewMetadataList({ data })`.
+- Consumes: `getAnonymousPage` (Task 4), `REDACTED` (Task 1), `ROUTE_PAGE_DATASETS_SNAPSHOTS_DETAILS` (existing), `AnonymousPageResponse` (Task 1).
+- Produces: `displayValue(value: unknown): string`, `anonymousMetadataEntries(data): { key, label, value, redacted }[]`, `anonymousPageProps(page: AnonymousPageResponse)`, `AnonymousMetadataList({ data })`.
 
 - [ ] **Step 1: Write the failing tests**
 
-`lib/__tests__/reviewMetadata.test.ts`:
+`lib/__tests__/anonymousMetadata.test.ts`:
 
 ```ts
 import { describe, expect, test } from '@jest/globals';
-import { displayValue, reviewMetadataEntries } from "../reviewMetadata";
+import { displayValue, anonymousMetadataEntries } from "../anonymousMetadata";
 
 describe("displayValue", () => {
     test("a redacted list keeps its length", () => {
@@ -4086,9 +4094,9 @@ describe("displayValue", () => {
     });
 });
 
-describe("reviewMetadataEntries", () => {
+describe("anonymousMetadataEntries", () => {
     test("marks redacted rows, skips the description, labels known keys", () => {
-        const entries = reviewMetadataEntries({
+        const entries = anonymousMetadataEntries({
             authors: [{ name: "[redacted]" }],
             institution: "[redacted]",
             license: "CC-BY-4.0",
@@ -4106,42 +4114,43 @@ describe("reviewMetadataEntries", () => {
 });
 ```
 
-`lib/__tests__/reviewPage.test.ts`:
+`lib/__tests__/anonymousPage.test.ts`:
 
 ```ts
 import { describe, expect, test } from '@jest/globals';
-import { reviewPageProps } from "../reviewPage";
+import { anonymousPageProps } from "../anonymousPage";
 
-describe("reviewPageProps", () => {
+describe("anonymousPageProps", () => {
     test("an active embargo renders the page", () => {
         const page: any = { state: "active", embargo_until: "2026-12-01T23:59:59+00:00", dataset: { name: "x", data: {}, versions: [] } };
 
-        expect(reviewPageProps(page)).toEqual({ props: { page } });
+        expect(anonymousPageProps(page)).toEqual({ props: { page } });
     });
 
-    test("after the embargo, a published dataset redirects to its public page", () => {
-        expect(reviewPageProps({ state: "ended", dataset_id: "d1", published: true }))
+    test("after the embargo, an unpublished dataset keeps its anonymous page", () => {
+        const page: any = { state: "ended", embargo_ended_at: "2026-12-01T23:59:59+00:00", dataset: { name: "x", data: {}, versions: [] } };
+
+        expect(anonymousPageProps(page)).toEqual({ props: { page } });
+    });
+
+    test("a published dataset redirects to its public page", () => {
+        expect(anonymousPageProps({ state: "published", dataset_id: "d1" }))
             .toEqual({ redirect: { destination: "/datasets/d1", permanent: false } });
-    });
-
-    test("after the embargo, an unpublished dataset says so", () => {
-        expect(reviewPageProps({ state: "ended", dataset_id: "d1", published: false }))
-            .toEqual({ props: { ended: true } });
     });
 });
 ```
 
-`components/Review/__tests__/ReviewMetadataList.test.tsx`:
+`components/Anonymous/__tests__/AnonymousMetadataList.test.tsx`:
 
 ```tsx
 /** @jest-environment jsdom */
 import { describe, expect, test } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
-import { ReviewMetadataList } from "../ReviewMetadataList";
+import { AnonymousMetadataList } from "../AnonymousMetadataList";
 
-describe("ReviewMetadataList", () => {
+describe("AnonymousMetadataList", () => {
     test("shows redacted fields as redacted, and the rest as they are", () => {
-        render(<ReviewMetadataList data={{ authors: [{ name: "[redacted]" }, { name: "[redacted]" }], license: "CC-BY-4.0" }} />);
+        render(<AnonymousMetadataList data={{ authors: [{ name: "[redacted]" }, { name: "[redacted]" }], license: "CC-BY-4.0" }} />);
 
         expect(screen.getByText("[redacted], [redacted]").className).toContain("italic");
         expect(screen.getByText("CC-BY-4.0")).toBeTruthy();
@@ -4151,12 +4160,12 @@ describe("ReviewMetadataList", () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `npx jest lib/__tests__/reviewMetadata.test.ts lib/__tests__/reviewPage.test.ts components/Review/__tests__`
+Run: `npx jest lib/__tests__/anonymousMetadata.test.ts lib/__tests__/anonymousPage.test.ts components/Anonymous/__tests__`
 Expected: FAIL — modules missing.
 
 - [ ] **Step 3: Implement**
 
-`lib/reviewMetadata.ts`:
+`lib/anonymousMetadata.ts`:
 
 ```ts
 import { REDACTED } from "../contants/EmbargoConstants";
@@ -4206,7 +4215,7 @@ export function displayValue(value: unknown): string {
     return String(value);
 }
 
-export function reviewMetadataEntries(data: Record<string, unknown>): { key: string, label: string, value: string, redacted: boolean }[] {
+export function anonymousMetadataEntries(data: Record<string, unknown>): { key: string, label: string, value: string, redacted: boolean }[] {
     return Object.keys(data)
         .filter((key) => !NOT_LISTED.has(key))
         .sort()
@@ -4217,33 +4226,30 @@ export function reviewMetadataEntries(data: Record<string, unknown>): { key: str
 }
 ```
 
-`lib/reviewPage.ts`:
+`lib/anonymousPage.ts`:
 
 ```ts
 import { ROUTE_PAGE_DATASETS_SNAPSHOTS_DETAILS } from "../contants/InternalRoutesConstants";
-import { ReviewPageResponse } from "../types/GatekeeperAPI";
+import { AnonymousPageResponse } from "../types/GatekeeperAPI";
 
-export function reviewPageProps(page: ReviewPageResponse) {
-    if (page.state === "active") {
-        return { props: { page } };
-    }
-    if (page.published) {
+export function anonymousPageProps(page: AnonymousPageResponse) {
+    if (page.state === "published") {
         return { redirect: { destination: ROUTE_PAGE_DATASETS_SNAPSHOTS_DETAILS({ id: page.dataset_id }), permanent: false } };
     }
-    return { props: { ended: true } };
+    return { props: { page } };
 }
 ```
 
-`components/Review/ReviewMetadataList.tsx` — one `FactRow` per field, the row component #101 introduced for the dataset page's facts:
+`components/Anonymous/AnonymousMetadataList.tsx` — one `FactRow` per field, the row component #101 introduced for the dataset page's facts:
 
 ```tsx
-import { reviewMetadataEntries } from "../../lib/reviewMetadata";
+import { anonymousMetadataEntries } from "../../lib/anonymousMetadata";
 import { FactRow } from "../DatasetDetails/DataCard/FactRow";
 
-export function ReviewMetadataList(props: { data: Record<string, unknown> }) {
+export function AnonymousMetadataList(props: { data: Record<string, unknown> }) {
     return (
         <div className="flex flex-col">
-            {reviewMetadataEntries(props.data).map((entry) => (
+            {anonymousMetadataEntries(props.data).map((entry) => (
                 <FactRow
                     key={entry.key}
                     label={entry.label}
@@ -4257,50 +4263,46 @@ export function ReviewMetadataList(props: { data: Record<string, unknown> }) {
 }
 ```
 
-`pages/review/[token].tsx` — laid out like the logged-in dataset page since #101 (`max-w-5xl` column, status pill row, 30px title, white cards), inside the public `Layout`:
+`pages/anonymous/[token].tsx` — laid out like the logged-in dataset page since #101 (`max-w-5xl` column, status pill row, 30px title, white cards), inside the public `Layout`:
 
 ```tsx
 import Head from "next/head";
 import { MaterialSymbol } from "react-material-symbols";
 import { Description } from "../../components/DatasetSnapshot/Description";
 import Layout from "../../components/Layout";
-import { ReviewMetadataList } from "../../components/Review/ReviewMetadataList";
+import { AnonymousMetadataList } from "../../components/Anonymous/AnonymousMetadataList";
 import { formatEmbargoDate } from "../../lib/embargoDates";
 import { bytesToSize } from "../../lib/file";
-import { reviewPageProps } from "../../lib/reviewPage";
-import { getReviewPage } from "../../lib/share";
-import { ReviewPageActive } from "../../types/GatekeeperAPI";
+import { anonymousPageProps } from "../../lib/anonymousPage";
+import { getAnonymousPage } from "../../lib/share";
+import { AnonymousPageActive, AnonymousPageEnded } from "../../types/GatekeeperAPI";
 
 interface Props {
-    page?: ReviewPageActive
-    ended?: boolean
+    page: AnonymousPageActive | AnonymousPageEnded
 }
 
-export default function ReviewPage(props: Props) {
+export default function AnonymousPage(props: Props) {
     return (
         <Layout fluid={true} hideFooter={true}>
             <Head>
                 <meta name="robots" content="noindex, nofollow" />
             </Head>
             <div className="mx-auto w-full max-w-5xl px-8 pt-10 pb-24 flex flex-col gap-7">
-                {props.ended &&
-                    <div className="flex gap-3 items-start rounded-lg border border-primary-200 bg-primary-0 p-6" role="status">
-                        <MaterialSymbol icon="lock_open" size={20} grade={-25} weight={400} className="mt-1 text-primary-700" />
-                        <div>
-                            <h2 className="m-0 text-lg leading-snug tracking-[-0.01em]">The embargo on this dataset has ended</h2>
-                            <p className="m-0 mt-1 text-sm text-primary-600">The dataset has not been published yet. Its page will appear here once it is.</p>
-                        </div>
-                    </div>
-                }
-
                 {props.page &&
                     <>
                         <div className="flex gap-3 items-start rounded-lg border border-primary-200 bg-secondary-500 px-4 py-3 text-sm leading-5 text-primary-700" role="note">
                             <MaterialSymbol icon="visibility_off" size={18} grade={-25} weight={400} className="mt-0.5 text-primary-900" />
-                            <span>
-                                Anonymous copy for review. Information that identifies the authors is redacted.
-                                The data are under embargo until {formatEmbargoDate(props.page.embargo_until)} and cannot be downloaded.
-                            </span>
+                            {props.page.state === "active"
+                                ? <span>
+                                    Anonymous copy for review. Information that identifies the authors is redacted.
+                                    The data are under embargo until {formatEmbargoDate(props.page.embargo_until)} and cannot be downloaded.
+                                </span>
+                                : <span role="status">
+                                    The embargo on this dataset ended on {formatEmbargoDate(props.page.embargo_ended_at)}.
+                                    It has not been published yet, so this anonymous copy stays available until it is;
+                                    the link will then lead to the dataset&apos;s public page.
+                                </span>
+                            }
                         </div>
 
                         <div className="flex flex-col gap-2.5 min-w-0">
@@ -4331,7 +4333,7 @@ export default function ReviewPage(props: Props) {
 
                             <aside className="rounded-lg border border-primary-200 bg-primary-0 px-4 pt-3 pb-1">
                                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary-500">Metadata</span>
-                                <ReviewMetadataList data={props.page.dataset.data} />
+                                <AnonymousMetadataList data={props.page.dataset.data} />
                             </aside>
                         </div>
                     </>
@@ -4343,7 +4345,7 @@ export default function ReviewPage(props: Props) {
 
 export async function getServerSideProps({ query }) {
     try {
-        return reviewPageProps(await getReviewPage(query.token as string));
+        return anonymousPageProps(await getAnonymousPage(query.token as string));
     } catch (error) {
         if (error?.response?.status === 404) {
             return { notFound: true };
@@ -4357,14 +4359,14 @@ export async function getServerSideProps({ query }) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `npx jest lib/__tests__/reviewMetadata.test.ts lib/__tests__/reviewPage.test.ts components/Review/__tests__ contants/__tests__/TelemetryConstants.test.ts`
+Run: `npx jest lib/__tests__/anonymousMetadata.test.ts lib/__tests__/anonymousPage.test.ts components/Anonymous/__tests__ contants/__tests__/TelemetryConstants.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lib/reviewMetadata.ts lib/reviewPage.ts lib/__tests__/reviewMetadata.test.ts lib/__tests__/reviewPage.test.ts components/Review/ "pages/review/[token].tsx"
-git commit -m "feat: anonymous reviewer page with redacted metadata"
+git add lib/anonymousMetadata.ts lib/anonymousPage.ts lib/__tests__/anonymousMetadata.test.ts lib/__tests__/anonymousPage.test.ts components/Anonymous/ "pages/anonymous/[token].tsx"
+git commit -m "feat: anonymous page with redacted metadata"
 ```
 
 ---
@@ -5046,7 +5048,173 @@ git commit -m "feat: a manual DOI ends the embargo only after the owner confirms
 
 ---
 
-### Task 15: The images the emails show stay where they are served
+### Task 15: Contributors are credit only
+
+The contributors in a dataset's metadata (`data.colaborators[]`) carried a `permission` — owner, can view, can edit — that nothing ever enforced. Under the embargo it would contradict the real access granted in the share dialog: someone listed as "Editor" would get a 404. Contributors become credit only: the form stops asking for a permission and stops showing it, and points to Share for access. Existing `permission` values stay in the JSON untouched; nothing reads them, so there is no migration.
+
+Verified against webapp main `8c6f761` (`components/DatasetDetails/DatasetColaboratorsForm.tsx`, 185 lines).
+
+**Files:**
+- Modify: `components/DatasetDetails/DatasetColaboratorsForm.tsx`
+- Test: `components/DatasetDetails/__tests__/DatasetColaboratorsForm.test.tsx`
+
+**Interfaces:**
+- Consumes: `canEditDataset(user, dataset)` (Task 8), the Share button (Task 10) that the new line points to.
+- Produces: `CONTRIBUTORS_ACCESS_NOTE` exported from the form module, the sentence the form shows.
+
+- [ ] **Step 1: Write the failing test**
+
+`components/DatasetDetails/__tests__/DatasetColaboratorsForm.test.tsx`:
+
+```tsx
+/** @jest-environment jsdom */
+import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+const updateDataset = jest.fn() as any;
+jest.mock("../../../gateways/BFFAPI", () => ({
+    BFFAPI: jest.fn().mockImplementation(() => ({ updateDataset })),
+}));
+jest.mock("../../../lib/users", () => ({ canEditDataset: () => true }));
+
+import DatasetColaboratorsForm, { CONTRIBUTORS_ACCESS_NOTE } from "../DatasetColaboratorsForm";
+
+function dataset(colaborators: any[]): any {
+    return { id: "d1", name: "Ozone", tenancy: "t", is_enabled: true, data: { colaborators } };
+}
+
+describe("DatasetColaboratorsForm", () => {
+    beforeEach(() => updateDataset.mockResolvedValue({}));
+
+    test("lists contributors by name only, whatever permission the JSON still holds", () => {
+        render(<DatasetColaboratorsForm dataset={dataset([{ name: "Ana", permission: "can_edit" }])} user={{} as any} />);
+
+        expect(screen.getByText("Ana")).toBeTruthy();
+        expect(screen.queryByText(/Editor|Viewer|Owner/)).toBeNull();
+    });
+
+    test("the form asks for a name, not a permission, and points to Share for access", () => {
+        render(<DatasetColaboratorsForm dataset={dataset([{ name: "Ana" }])} user={{} as any} alwaysEdition />);
+
+        expect(screen.getByLabelText("Name")).toBeTruthy();
+        expect(screen.queryByLabelText("Permission")).toBeNull();
+        expect(screen.getByText(CONTRIBUTORS_ACCESS_NOTE)).toBeTruthy();
+    });
+
+    test("a contributor with only a name is saved, and stored permissions are kept", async () => {
+        const data = dataset([{ name: "Ana", permission: "owner" }]);
+        render(<DatasetColaboratorsForm dataset={data} user={{} as any} alwaysEdition />);
+
+        fireEvent.click(screen.getByText("+ Add collaborator"));
+        fireEvent.change(screen.getAllByLabelText("Name")[1], { target: { value: "Bruno" } });
+        fireEvent.submit(screen.getAllByLabelText("Name")[1].closest("form") as HTMLFormElement);
+
+        await waitFor(() => expect(updateDataset).toHaveBeenCalledTimes(1));
+        expect(updateDataset.mock.calls[0][0].data.colaborators).toEqual([
+            { name: "Ana", permission: "owner" },
+            { name: "Bruno" },
+        ]);
+    });
+});
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `npx jest components/DatasetDetails/__tests__/DatasetColaboratorsForm.test.tsx`
+Expected: FAIL — `CONTRIBUTORS_ACCESS_NOTE` is undefined, the read mode shows `(Editor)`, the form has a `Permission` select, and the second contributor fails validation with `Select one`.
+
+- [ ] **Step 3: Make contributors credit only**
+
+In `components/DatasetDetails/DatasetColaboratorsForm.tsx`:
+
+1. Drop `EDIT_FORM_SELECT_CLASS` from the `EditFormConstants` import, and export the note after the imports:
+
+```tsx
+import { EDIT_FORM_ERROR_CLASS, EDIT_FORM_HINT_CLASS, EDIT_FORM_INPUT_CLASS, EDIT_FORM_LABEL_CLASS, EMPTY_VALUE_CLASS } from "../../contants/EditFormConstants";
+```
+
+```tsx
+export const CONTRIBUTORS_ACCESS_NOTE = "Listing someone here credits them; it does not give them access. To give someone access to this dataset, use Share.";
+```
+
+2. The schema validates the name only:
+
+```tsx
+    const schema = Yup.object().shape({
+        colaborators: Yup.array()
+            .of(
+                Yup.object().shape({
+                    name: Yup.string()
+                        .max(255, "Name should be less than 255 characters")
+                        .required("Name is required."),
+                })
+            )
+    });
+```
+
+3. Delete `getPermissionDescription` entirely.
+
+4. In the edit form, show the note under the hint:
+
+```tsx
+                                        <p className={EDIT_FORM_HINT_CLASS}>
+                                            {infoText}
+                                        </p>
+                                        <p className={EDIT_FORM_HINT_CLASS}>
+                                            {CONTRIBUTORS_ACCESS_NOTE}
+                                        </p>
+```
+
+and replace each row (the `<div className="flex items-start gap-2" key={index}>` block) with the name field and the remove button only:
+
+```tsx
+                                                        <div className="flex items-start gap-2" key={index}>
+                                                            <div className="min-w-0 flex-1">
+                                                                <label htmlFor={`colaborators.${index}.name`} className={EDIT_FORM_LABEL_CLASS}>Name</label>
+                                                                <Field
+                                                                    id={`colaborators.${index}.name`}
+                                                                    name={`colaborators.${index}.name`}
+                                                                    className={EDIT_FORM_INPUT_CLASS}
+                                                                    placeholder="Name of a contributor"
+                                                                />
+                                                                <ErrorMessage
+                                                                    name={`colaborators.${index}.name`}
+                                                                    component="div"
+                                                                    className={EDIT_FORM_ERROR_CLASS}
+                                                                />
+                                                            </div>
+                                                            <div className="pt-[26px]">
+                                                                <CloseButton label="Remove collaborator" onClick={() => arrayHelpers.remove(index)} />
+                                                            </div>
+                                                        </div>
+```
+
+5. Read mode lists names only:
+
+```tsx
+                {props?.dataset?.data?.colaborators?.map((person, index) =>
+                    <li key={index}>
+                        {person.name}
+                    </li>)}
+```
+
+The `permission` key of entries already stored is left in `values.colaborators` as it came, so saving the form never rewrites it.
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx jest components/DatasetDetails/__tests__/DatasetColaboratorsForm.test.tsx`
+Expected: PASS (3 tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add components/DatasetDetails/DatasetColaboratorsForm.tsx components/DatasetDetails/__tests__/DatasetColaboratorsForm.test.tsx
+git commit -m "feat: contributors are credit only; access is given through Share"
+```
+
+---
+
+### Task 16: The images the emails show stay where they are served
 
 The gatekeeper's email templates (`app/resources/email_templates/base.html`, gatekeeper #121) load `{site_url}/img/email/datamap-tile-36.png` in the header and `{site_url}/img/email/datamap-tile-22.png` in the footer. Webapp #101 already ships both under `public/img/email/` (72×72 and 44×44: twice the size they are shown at). Nothing in this repo refers to them, so nothing stops a later clean-up from deleting them and every email from losing its logo. This task adds that guard; it creates no image.
 
@@ -5108,7 +5276,7 @@ git commit -m "test: keep the images the emails load where the webapp serves the
 
 ---
 
-### Task 16: Full verification
+### Task 17: Full verification
 
 **Files:** none changed unless a check fails.
 
@@ -5120,7 +5288,7 @@ Expected: `Tests:` line with `0 failed`; `Test Suites:` all passed. Read the exi
 - [ ] **Step 2: Type-check and production build**
 
 Run: `npm run build; echo "exit=$?"`
-Expected: `exit=0`; the route list includes `/app/datasets/shared`, `/review/[token]`, `/invitations/[token]`, `/doi/datasets/[datasetId]/versions/[versionName]` and the new `/api/...` routes.
+Expected: `exit=0`; the route list includes `/app/datasets/shared`, `/anonymous/[token]`, `/invitations/[token]`, `/doi/datasets/[datasetId]/versions/[versionName]` and the new `/api/...` routes.
 
 - [ ] **Step 3: The images the emails load are served**
 
@@ -5139,7 +5307,7 @@ With the gatekeeper integration stack up (`make ENV_FILE_PATH=integration-test.e
 1. Create a dataset with *Embargo, hidden* and a date 30 days ahead → the dataset page shows the badge; the Settings tab shows the embargo section.
 2. Share → type a colleague's name from the tenancy → pick → they appear under *Who has access*.
 3. Share → type an unknown email → *Invite* → the one-time link appears once.
-4. Create a reviewer link → open it in a private window → names are `[redacted]`, no file names, no download.
+4. Create an anonymous link → open it in a private window → names are `[redacted]`, no file names, no download.
 5. Open `/doi/datasets/<id>/versions/1` in a private window → embargo notice, no dataset name.
 6. Sign in as a second account with no tenancy → *Shared with me* lists nothing; accept the invitation link → redirected to the dataset.
 
@@ -5159,7 +5327,7 @@ git add -A && git commit -m "fix: issues found in the embargo webapp verificatio
 
 ---
 
-### Task 17: nginx — the DOI lands on the webapp page (gatekeeper repo)
+### Task 18: nginx — the DOI lands on the webapp page (gatekeeper repo)
 
 **Deploy order:** merge and deploy the webapp with Task 12 first. Until the page exists, this change would send DOI visitors to a 404. The gatekeeper with plans 02 and 03 must be deployed too, or the page cannot read the embargo status (it then redirects as today, which is safe).
 
@@ -5263,13 +5431,15 @@ Expected: `307 https://datamap.pcs.usp.br/app/datasets/<dataset-id>/versions/1`.
 | Download and delete hidden where not allowed | 8 |
 | Share dialog: tenancy search, email/ORCID detection with checksum, levels, list, revoke | 3, 10 |
 | Invitation link shown once, regenerate, accepted-by shown | 10 |
-| Reviewer links: label, one-time link, views count/first/last, revoke, free-text warning | 10 |
-| Anonymous review page: redacted metadata, counts only, ended → redirect or notice | 11 |
-| DOI landing notice, no metadata; redirect otherwise | 12, 17 |
+| Anonymous links: label, one-time link, views count/first/last, revoke, free-text warning | 10 |
+| Anonymous page: redacted metadata, counts only; after the embargo the same page with a notice until published, then the redirect | 11 |
+| DOI landing notice, no metadata; redirect otherwise | 12, 18 |
 | Invitation page, login with callback, 409 message | 13 |
 | Claim pending invitations at sign-in, never blocking | 13 |
 | Accounts with no tenancy: Shared with me, dataset pages, dataset BFF routes | 5, 7, 8 |
 | Post-embargo banner: registered but not findable, manual promotion | 3, 8 |
 | Telemetry pages and events | 2, 6 |
 | Manual DOI under embargo: confirm, `end_embargo: true`, owner only; no embargo after a manual DOI | 1, 3, 8, 14 |
-| Email images at `{PUBLIC_BASE_URL}/img/email/datamap-tile-{36,22}.png` (shipped by #101; guarded here) | 15, 16 |
+| Email images at `{PUBLIC_BASE_URL}/img/email/datamap-tile-{36,22}.png` (shipped by #101; guarded here) | 16, 17 |
+| Contributors are credit only; access goes through Share | 15 |
+| Sharing on any dataset, embargoed or not (the Share button follows `access.can_share`, never the embargo) | 10 |
