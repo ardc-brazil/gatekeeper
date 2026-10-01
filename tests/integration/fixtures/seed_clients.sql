@@ -21,6 +21,9 @@ INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_w
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_admin', '/api/v1/datasets', '(GET|POST|PUT|DELETE)', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_write', '/api/v1/datasets/.*/enable', 'PUT', 'deny', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_filters', '/api/v1/datasets/filters', 'GET', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_shared', '/api/v1/datasets/?$', 'GET', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_shared', '/api/v1/datasets/[0-9a-f-]{36}(/.*)?$', '(GET|POST|PUT|DELETE)', 'allow', NULL, NULL);
+INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'datasets_shared', '/api/v1/tus', 'POST', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_read', '/api/v1/tenancies', 'GET', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_write', '/api/v1/tenancies', '(GET|POST|PUT)', 'allow', NULL, NULL);
 INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ('p', 'tenancies_write', '/api/v1/tenancies/.*/enable', 'PUT', 'allow', NULL, NULL);
