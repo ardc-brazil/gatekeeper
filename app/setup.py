@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 
 from app.logging_config import fields, request_id_var, setup_logging  # noqa: F401
 from app.metrics import metrics
+from app.controller.v1.admin.email import router as admin_email_router
 from app.controller.v1.client.client import router as client_router
 from app.controller.v1.infrastructure.infrastructure import (
     router as infrastructure_router,
@@ -19,6 +20,9 @@ from app.controller.v1.dataset.dataset import router as dataset_router
 from app.controller.v1.dataset.dataset_snapshot import router as dataset_snapshot_router
 from app.controller.v1.internal.dataset_collocation import (
     router as internal_dataset_collocation_router,
+)
+from app.controller.v1.internal.notification import (
+    router as internal_notification_router,
 )
 from app.controller.v1.tus.tus import router as tus_router
 from app.exception.bad_request import BadRequestException
@@ -185,6 +189,8 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(infrastructure_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_protected_router, prefix="/v1")
     fastAPIApp.include_router(internal_dataset_collocation_router, prefix="/v1")
+    fastAPIApp.include_router(internal_notification_router, prefix="/v1")
+    fastAPIApp.include_router(admin_email_router, prefix="/v1")
     fastAPIApp.include_router(tus_router, prefix="/v1")
 
 

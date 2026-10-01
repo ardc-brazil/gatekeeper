@@ -5,6 +5,7 @@ from casbin import SyncedEnforcer
 from minio import Minio
 
 from app.gateway.doi.doi import DOIGateway
+from app.gateway.email.smtp import SmtpSender
 from app.gateway.object_storage.http_client import build_http_client
 from app.service.health import DependencyHealthService
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
@@ -12,11 +13,14 @@ from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
+from app.repository.email import EmailRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
 from app.service.dataset_collocation import DatasetCollocationService
 from app.service.doi import DOIService
+from app.service.email import EmailService
+from app.service.email_template import EmailTemplateRenderer
 from app.service.tus import TusService
 from app.service.user import UserService
 
@@ -47,6 +51,8 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
             "app.controller.v1.internal.dataset_collocation",
+            "app.controller.v1.internal.notification",
+            "app.controller.v1.admin.email",
             "app.controller.v1.infrastructure.infrastructure",
         ]
     )
@@ -221,4 +227,36 @@ class Container(containers.DeclarativeContainer):
     tus_service = providers.Factory(
         TusService,
         dataset_service=dataset_service,
+    )
+
+    email_repository = providers.Factory(
+        EmailRepository,
+        session_factory=db.provided.session,
+    )
+
+    email_renderer = providers.Singleton(
+        EmailTemplateRenderer,
+        site_url=config.PUBLIC_BASE_URL,
+    )
+
+    smtp_sender = providers.Factory(
+        SmtpSender,
+        host=config.SMTP_HOST,
+        port=config.SMTP_PORT,
+        username=config.SMTP_USERNAME,
+        password=config.SMTP_PASSWORD,
+        starttls=config.SMTP_STARTTLS,
+        timeout_seconds=config.SMTP_TIMEOUT_SECONDS,
+    )
+
+    email_service = providers.Factory(
+        EmailService,
+        repository=email_repository,
+        renderer=email_renderer,
+        sender=smtp_sender,
+        enabled=config.EMAIL_ENABLED,
+        from_name=config.EMAIL_FROM_NAME,
+        from_address=config.EMAIL_FROM_ADDRESS,
+        reply_to=config.EMAIL_REPLY_TO,
+        template_version=config.BUILD_COMMIT,
     )

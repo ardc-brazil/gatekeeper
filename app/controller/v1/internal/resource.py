@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -42,3 +43,11 @@ class UpdateCollocationStatusRequest(BaseModel):
     """Request model to update dataset's file collocation status."""
 
     status: str = Field(..., title="New status (PENDING, PROCESSING, COMPLETED)")
+
+
+class NotificationDispatchResponse(BaseModel):
+    queued: int = Field(..., description="Messages queued by this pass")
+    sent: int = Field(..., description="Messages accepted by the SMTP server")
+    failed: int = Field(..., description="Messages that will not be sent")
+    skipped: int = Field(..., description="Messages recorded and not sent")
+    retried: int = Field(..., description="Messages refused and scheduled again")
