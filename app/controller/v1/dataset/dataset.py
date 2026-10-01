@@ -224,6 +224,7 @@ def get_datasets(
     version: str = None,
     visibility: str = None,
     minimal: bool = False,
+    shared: bool = False,
     page: int = 1,
     page_size: int = 10,
     user_id: UUID = Depends(parse_user_header),
@@ -246,6 +247,7 @@ def get_datasets(
         design_state=design_state,
         visibility=visibility,
         minimal=minimal,
+        shared=shared,
         page=page,
         page_size=page_size,
     )

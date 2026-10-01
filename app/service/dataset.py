@@ -526,16 +526,9 @@ class DatasetService:
     def search_datasets(
         self, query: DatasetQuery, user_id: UUID, tenancies: list[str] = None
     ) -> PaginatedResult:
-        """
-        Search datasets with full-text search and pagination.
-
-        Returns a PaginatedResult containing adapted Dataset domain objects.
-        """
-        if tenancies is None:
-            tenancies = []
+        allowed = self._determine_tenancies(user_id=user_id, tenancies=tenancies or [])
         result: PaginatedResult = self._repository.search(
-            query_params=query,
-            tenancies=self._determine_tenancies(user_id=user_id, tenancies=tenancies),
+            query_params=query, tenancies=allowed, user_id=user_id
         )
         metrics.search(
             has_text=bool(query.full_text),
@@ -553,23 +546,23 @@ class DatasetService:
 
         if result is None or result.items is None:
             return PaginatedResult(
-                items=[],
-                total_count=0,
-                page=query.page,
-                page_size=query.page_size,
+                items=[], total_count=0, page=query.page, page_size=query.page_size
             )
 
-        if query.minimal:
-            adapted_items = [
-                self._adapt_minimal_dataset(dataset=dataset) for dataset in result.items
-            ]
-        else:
-            adapted_items = [
-                self._adapt_dataset(dataset=dataset) for dataset in result.items
-            ]
+        adapt = self._adapt_minimal_dataset if query.minimal else self._adapt_dataset
+        items = []
+        for dataset in result.items:
+            level = self._access.level_of(
+                user_id=user_id, dataset=dataset, tenancies=allowed
+            )
+            if level is None:
+                continue
+            items.append(
+                self._view(adapt(dataset=dataset), dataset, user_id, allowed, level)
+            )
 
         return PaginatedResult(
-            items=adapted_items,
+            items=items,
             total_count=result.total_count,
             page=result.page,
             page_size=result.page_size,

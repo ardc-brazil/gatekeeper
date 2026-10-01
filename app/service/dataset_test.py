@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import datetime
 from datetime import timedelta
 import json
+from types import SimpleNamespace
 import unittest
 
 from prometheus_client import REGISTRY
@@ -38,6 +39,7 @@ from app.model.db.doi import DOI as DOIDBModel
 from app.service.dataset import DatasetService
 from app.model.dataset_access import AccessLevel, DatasetAccess, DatasetAction
 from app.service.dataset_access import DatasetAccessService
+from app.model.embargo import Embargo
 from app.service.embargo_termination import EmbargoTermination
 from app.model.user import User
 from app.model.doi import (
@@ -291,21 +293,79 @@ class TestDatasetService(unittest.TestCase):
             self.assertEqual(filters, {"filters": "data"})
 
     def test_search_datasets(self):
-        query = DatasetQuery(page=1, page_size=20, minimal=False)
         user_id = uuid4()
-        tenancies = ["tenancy1"]
-        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=True
+        )
+        query = DatasetQuery(shared=True)
         self.dataset_repository.search.return_value = PaginatedResult(
             items=[], total_count=0, page=1, page_size=10
         )
 
-        result = self.dataset_service.search_datasets(
-            query=query, user_id=user_id, tenancies=tenancies
+        self.dataset_service.search_datasets(query=query, user_id=user_id)
+
+        self.dataset_repository.search.assert_called_once_with(
+            query_params=query, tenancies=["tenancy1"], user_id=user_id
         )
-        self.assertIsInstance(result, PaginatedResult)
-        self.assertEqual(result.total_count, 0)
-        self.assertEqual(result.page, 1)
-        self.dataset_repository.search.assert_called_once()
+
+    def test_search_skips_an_item_the_rule_does_not_show(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        hidden = Mock(spec=DatasetDBModel)
+        hidden.versions = []
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[hidden], total_count=1, page=1, page_size=10
+        )
+        self.dataset_access.level_of.return_value = None
+
+        result = self.dataset_service.search_datasets(
+            query=DatasetQuery(), user_id=uuid4()
+        )
+
+        self.assertEqual(result.items, [])
+
+    def test_a_caller_with_no_tenancy_and_no_header_still_searches(self):
+        user_id = uuid4()
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[], total_count=0, page=1, page_size=10
+        )
+
+        self.dataset_service.search_datasets(
+            query=DatasetQuery(), user_id=user_id, tenancies=[]
+        )
+
+        self.dataset_repository.search.assert_called_once_with(
+            query_params=DatasetQuery(), tenancies=[], user_id=user_id
+        )
+
+    def test_minimal_items_carry_embargo_and_access(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        shared = Mock(spec=DatasetDBModel)
+        shared.versions = []
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[shared], total_count=1, page=1, page_size=10
+        )
+        self.dataset_access.level_of.return_value = AccessLevel.READ
+        embargo = Embargo(
+            until=datetime.datetime(2026, 12, 1, tzinfo=datetime.timezone.utc),
+            active=True,
+            metadata_visible=False,
+        )
+        self.dataset_access.embargo_of.return_value = embargo
+        adapted = SimpleNamespace(versions=[], current_version=None, version=None)
+
+        with patch.object(
+            self.dataset_service, "_adapt_minimal_dataset", return_value=adapted
+        ):
+            result = self.dataset_service.search_datasets(
+                query=DatasetQuery(minimal=True), user_id=uuid4()
+            )
+
+        self.assertIs(result.items[0].embargo, embargo)
+        self.assertIs(
+            result.items[0].access, self.dataset_access.access_flags.return_value
+        )
 
     def test_create_data_file(self):
         file = Mock(spec=DataFile)
@@ -2191,7 +2251,7 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.search.assert_called_once_with(
-            query_params=query, tenancies=tenancies
+            query_params=query, tenancies=tenancies, user_id=user_id
         )
         self.assertEqual(len(result.items), 1)
         self.assertEqual(result.items[0].visibility, VisibilityStatus.PUBLIC)
