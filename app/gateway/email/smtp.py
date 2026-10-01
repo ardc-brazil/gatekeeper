@@ -19,6 +19,18 @@ class UncertainSendFailure(Exception):
     """The message may have been accepted; retrying could deliver it twice."""
 
 
+def _refusal_summary(
+    e: smtplib.SMTPRecipientsRefused
+    | smtplib.SMTPSenderRefused
+    | smtplib.SMTPDataError,
+) -> str:
+    if isinstance(e, smtplib.SMTPRecipientsRefused):
+        codes = sorted({code for code, _ in e.recipients.values()})
+    else:
+        codes = [e.smtp_code]
+    return f"{type(e).__name__} {','.join(str(code) for code in codes)}"
+
+
 class SmtpSender:
     def __init__(
         self,
@@ -62,7 +74,7 @@ class SmtpSender:
             try:
                 connection.send_message(message)
             except _REFUSED_BY_SERVER as e:
-                raise DefiniteSendFailure(f"refused: {e}") from e
+                raise DefiniteSendFailure(f"refused: {_refusal_summary(e)}") from e
             except (OSError, smtplib.SMTPException) as e:
                 raise UncertainSendFailure(f"during send: {e}") from e
         finally:

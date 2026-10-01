@@ -107,3 +107,41 @@ class TestSmtpSender(unittest.TestCase):
         self.sender().send(_message())
 
         self.connection.send_message.assert_called_once()
+
+    def test_a_refused_recipient_does_not_leak_the_address(self):
+        self.connection.send_message.side_effect = smtplib.SMTPRecipientsRefused(
+            {
+                "someone@example.com": (
+                    550,
+                    b"5.1.1 <someone@example.com> does not exist",
+                )
+            }
+        )
+
+        with self.assertRaises(DefiniteSendFailure) as context:
+            self.sender().send(_message())
+
+        self.assertNotIn("someone@example.com", str(context.exception))
+        self.assertIn("550", str(context.exception))
+
+    def test_a_refused_sender_does_not_leak_the_address(self):
+        self.connection.send_message.side_effect = smtplib.SMTPSenderRefused(
+            553, b"5.1.8 sender address rejected", "someone@example.com"
+        )
+
+        with self.assertRaises(DefiniteSendFailure) as context:
+            self.sender().send(_message())
+
+        self.assertNotIn("someone@example.com", str(context.exception))
+        self.assertIn("553", str(context.exception))
+
+    def test_a_data_refusal_does_not_leak_the_address(self):
+        self.connection.send_message.side_effect = smtplib.SMTPDataError(
+            554, b"rejected <someone@example.com>"
+        )
+
+        with self.assertRaises(DefiniteSendFailure) as context:
+            self.sender().send(_message())
+
+        self.assertNotIn("someone@example.com", str(context.exception))
+        self.assertIn("554", str(context.exception))
