@@ -87,9 +87,13 @@ the environment the containers read. The decrypted copies are removed afterwards
 including when the job fails.
 
 `scripts/check_tracked_secrets.py` runs against those decrypted copies and fails
-the deploy if any of their values appears in a tracked file. That is why every
-file is decrypted and not only the gatekeeper's: reading one would quietly stop
-checking the other services' credentials.
+the deploy if any of their values appears in a tracked file.
+
+It sees this repository's credentials only. The archivist and the webapp hold
+their own encrypted configuration in their own repositories and decrypt it in
+their own deploys — one owner per secret, nothing to drift, and each repository
+guarding what it holds. A secret shared across two of them, like the upload
+token the webapp signs and this service verifies, has to be changed in both.
 
 **The encrypted copies are the source of truth.** There is no plaintext to drift
 from any more, which is why the deploy no longer compares against one — with a
@@ -97,8 +101,40 @@ single source, drift is not something to detect, it is something that cannot
 happen. The files that used to hold it are at `~/environment/retired-<date>/` on
 the host, and can be deleted once nobody misses them.
 
-To change a value, edit the encrypted file and merge it. There is no second copy
-to keep in step:
+## Running something by hand on the host
+
+`~/environment` no longer holds a plaintext file to point `ENV_FILE_PATH` at, so
+decrypt one where it will be cleaned up:
+
+```bash
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; umask 077
+~/bin/sops --decrypt secrets/production/scripts-gatekeeper.env > "$T/env"
+make ENV_FILE_PATH="$T/env" SCRIPT=generate_legacy_snapshots run-script
+```
+
+The `trap` is the point: without it the file outlives the shell. The archivist's
+own configuration works the same way, with `--input-type dotenv --output-type
+dotenv`, because sops cannot infer the format of its `.env.sops` names.
+
+`make` is doing more than passing a path: `include ${ENV_FILE_PATH}` plus
+`export` puts every variable in its own environment, which is what `${VAR}` in a
+compose file is expanded from. A bare `docker compose` with only `ENV_FILE_PATH`
+set leaves those blank — including the host paths of the database and object
+storage. Source the file as well, and see
+[host-applied-changes.md](host-applied-changes.md):
+
+```bash
+set -a; . "$ENV_FILE_PATH"; set +a
+```
+
+The retired plaintext is in `~/environment/retired-<date>/` if something needs it
+in a hurry, and can be deleted once nobody has.
+
+## Changing a value
+
+Edit the encrypted file and merge it. There is no second copy to keep in step:
 
 ```bash
 sops secrets/production/gatekeeper.env

@@ -33,26 +33,36 @@ cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
 export COMPOSE_PROJECT_NAME=gatekeeper
 ```
 
-`~/gatekeeper` is a second, manual checkout and it lags — it was two commits
-behind while this was written. Compose read from there would quietly reinstate
-the infrastructure of whatever commit it happens to sit on, including the MinIO
-image pin.
+That is the only checkout on the host. There used to be a second one at
+`~/gatekeeper`, which lagged — it was two commits behind while this was written,
+and Compose read from there would quietly reinstate the infrastructure of
+whatever commit it sat on, including the MinIO image pin. It is gone.
 
 **Never paste a new value into a terminal.** `scripts/set_env_value.py` prompts
 for it with the echo off, writes it into the file, and prints only an eight
 character fingerprint:
 
 ```bash
-python3 scripts/set_env_value.py ~/environment/gatekeeper.prod.env DOI_PASSWORD
+sops secrets/production/gatekeeper.env
 ```
+
+`sops` re-encrypts on save and only the changed value gets new ciphertext, so the
+diff names what moved. When the value must not reach an editor buffer at all,
+`scripts/set_env_value.py <file> DOI_PASSWORD` prompts with the echo off and
+prints only a fingerprint; point it at a decrypted copy and re-encrypt after.
 
 Two files hold the same credential when they print the same fingerprint, which
 is how a shared secret is checked without anyone reading it, and the only thing
 about a credential that is safe to quote in a message:
 
 ```bash
-python3 scripts/env_fingerprint.py ~/environment/frontend.prod.env AUTH_FILE_UPLOAD_TOKEN_SECRET
+python3 scripts/env_fingerprint.py <file> AUTH_FILE_UPLOAD_TOKEN_SECRET
 ```
+
+Each service's configuration is now encrypted in its own repository, so "the
+file" is a `sops --decrypt` away rather than a path on the host. A secret two
+services share has to change in both repositories: the webapp signs upload
+tokens with `AUTH_FILE_UPLOAD_TOKEN_SECRET` and the API verifies them.
 
 `openssl rand -base64 32 | tr -d '/+=' | cut -c1-32` is enough for a machine
 credential. The credentials a person logs in with — MinIO root, Grafana,
@@ -94,21 +104,34 @@ change. The three application access keys do not move with this step.
 The console login is the reason to rotate it: the root username has been public
 since 2024, and the community console has no second factor.
 
-Set `MINIO_ROOT_PASSWORD` in `~/environment/gatekeeper.prod.env`, then
+Set `MINIO_ROOT_PASSWORD` in `secrets/production/gatekeeper.env`, merge it, let
+the deploy update the host's checkout, then recreate MinIO from a decrypted copy
+— see [host-applied-changes.md](host-applied-changes.md) for why the variables
+have to be in the shell:
 
 ```bash
-docker compose --env-file ~/environment/gatekeeper.prod.env \
-  -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; umask 077
+~/bin/sops --decrypt secrets/production/gatekeeper.env > "$T/env"
+export ENV_FILE_PATH="$T/env"
+set -a; . "$ENV_FILE_PATH"; set +a
+```
+
+```bash
+docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml \
   up -d --force-recreate --wait minio
 ```
 
 Then prove both directions — the new password works and the old one does not:
 
 ```bash
-ssh datamap-prod 'set -a; . ~/environment/gatekeeper.prod.env; set +a;
-  docker exec -e MC_HOST_l="http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@127.0.0.1:9000" \
-    datamap_min_io mc admin info l | head -3'
+docker exec -e MC_HOST_l="http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@127.0.0.1:9000" \
+  datamap_min_io mc admin info l | head -3
 ```
+
+with the environment sourced as above. Then run it again with the old password
+substituted by hand, and watch it be refused.
 
 A step that only confirms the new value tells you nothing: the old one has to
 be seen failing.
@@ -119,10 +142,9 @@ One per consumer: gatekeeper, tusd, archivist. They are already three distinct
 accounts — keep it that way, so that any future rotation stays this cheap.
 
 ```bash
-ssh datamap-prod 'set -a; . ~/environment/gatekeeper.prod.env; set +a;
-  docker exec -e MC_HOST_l="http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@127.0.0.1:9000" \
-    datamap_min_io mc admin user svcacct add l "$MINIO_ROOT_USER" \
-      --access-key <new-key> --secret-key <new-secret>'
+docker exec -e MC_HOST_l="http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@127.0.0.1:9000" \
+  datamap_min_io mc admin user svcacct add l "$MINIO_ROOT_USER" \
+    --access-key <new-key> --secret-key <new-secret>
 ```
 
 Update the consumer's env file, recreate it, confirm it reads and writes, and
@@ -142,17 +164,24 @@ the same value and move together. The tokens last a day, so rotating invalidates
 up to 24 hours of issued ones — in practice whoever has an upload open or a page
 already loaded.
 
-Set it in `~/environment/gatekeeper.prod.env` **and**
-`~/environment/frontend.prod.env` — the same value in both — then recreate the
-API instances and the webapp. A mismatch fails every upload with an
+Set it in `secrets/production/gatekeeper.env` here **and** in the webapp's
+`secrets/production/frontend.env.sops` — the same value in both, in two
+repositories — then recreate the API instances and the webapp. A mismatch fails every upload with an
 authorisation error that says nothing about its cause, so confirm the two files
 agree before recreating anything:
 
 ```bash
-for f in gatekeeper.prod.env frontend.prod.env; do
-  python3 scripts/env_fingerprint.py ~/environment/$f AUTH_FILE_UPLOAD_TOKEN_SECRET
+sops --decrypt secrets/production/gatekeeper.env > /tmp/a.env
+sops --decrypt --input-type dotenv --output-type dotenv \
+  <webapp>/secrets/production/frontend.env.sops > /tmp/b.env
+for f in /tmp/a.env /tmp/b.env; do
+  python3 scripts/env_fingerprint.py "$f" AUTH_FILE_UPLOAD_TOKEN_SECRET
 done
+rm -f /tmp/a.env /tmp/b.env
 ```
+
+`--input-type` on the second: sops reads the format from the extension, and
+`.env.sops` is not one it knows.
 
 Two identical fingerprints, and no value on screen.
 
@@ -167,25 +196,35 @@ keeps working after the `ALTER` and fails only when the pool opens a new
 connection. That is the window, and it is why the environment files are updated
 first.
 
-1. New value into all four files: `gatekeeper.prod.env`,
-   `archivist.prod.env`, `archivist-test.prod.env`,
-   `scripts-gatekeeper.prod.env`. Four identical fingerprints before anything
-   is recreated:
+1. New value into all four files. Four identical fingerprints before anything
+   is recreated.
 
-   ```bash
-   for f in gatekeeper archivist archivist-test scripts-gatekeeper; do
-     python3 scripts/env_fingerprint.py ~/environment/$f.prod.env POSTGRES_PASSWORD
-   done
-   ```
+   The password is shared, and the files live in two repositories:
+   `secrets/production/gatekeeper.env` and `scripts-gatekeeper.env` here,
+   `archivist.env.sops` and `archivist-test.env.sops` in the archivist. Decrypt
+   each and compare the fingerprints before anything is recreated.
 2. `ALTER USER gk_admin PASSWORD '<new>';`
 3. Roll the API (`docker-deployment-rolling`), then recreate the archivist.
 
-Verify by asking the application, not the database: a `200` from the API means
-it authenticated with the new value through its own pool.
+Verify by asking the application, not the database. The proof is that the rolled
+instance started at all: the app runs `alembic upgrade head` before it serves, so
+an instance that reports healthy has authenticated with the new value through its
+own pool. `docker-deployment-rolling` waits for exactly that, and fails if it does
+not come.
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://datamap.pcs.usp.br/api/v1/health-check/dependencies/
+docker ps --filter name=datamap_gatekeeper --format "{{.Names}}\t{{.Status}}"
 ```
+
+Both `healthy`, and the roll returned. `/api/v1/health-check/` is not the proof —
+it is deliberately shallow and does no I/O, so it answers whether or not the
+database is reachable.
+
+`/api/v1/health-check/dependencies` does report the database, but it is behind
+authentication *and* a Casbin policy — three headers and a client that has been
+granted the route. Measured: no credential in any environment file reaches it
+(`{"detail":"not_authorized"}`). It is for an operator who has set that up, not
+for a check at the end of a rotation.
 
 `local.env` on each developer's machine still holds the old password, because
 that is where the leak came from. Give it a value of its own; it has no reason

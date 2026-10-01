@@ -7,9 +7,15 @@ own data and do not need replacing when the application changes.
 ## Starting it
 
 ```bash
-cd ~/gatekeeper
-make ENV_FILE_PATH=../environment/gatekeeper.prod.env observability-run
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; umask 077
+~/bin/sops --decrypt secrets/production/gatekeeper.env > "$T/env"
+make ENV_FILE_PATH="$T/env" observability-run
 ```
+
+The workflow in `.github/workflows/observability.yml` does the same thing, and is
+the normal way in; this is for when it has to be done by hand.
 
 Grafana listens on `127.0.0.1:3001`, not on a public interface. Reach it over an
 SSH tunnel:
@@ -20,8 +26,8 @@ ssh -L 3001:127.0.0.1:3001 datamap-prod
 
 Then <http://localhost:3001>.
 
-**Set `GF_SECURITY_ADMIN_PASSWORD` in `gatekeeper.prod.env` before the first
-start.** Without it Grafana takes `admin`/`admin` and asks for a new password at
+**Set `GF_SECURITY_ADMIN_PASSWORD` in `secrets/production/gatekeeper.env` before
+the first start.** Without it Grafana takes `admin`/`admin` and asks for a new password at
 first login, which is fine for one operator and not fine for a shared host.
 
 Prometheus is not published at all. It is reachable only from Grafana, over the
@@ -192,9 +198,16 @@ recreated, and the automated deploy never recreates MinIO. Downloads pause for
 the few seconds it takes:
 
 ```bash
-cd ~/gatekeeper
-COMPOSE_PROJECT_NAME=gatekeeper ENV_FILE_PATH=../environment/gatekeeper.prod.env \
-  docker compose -f docker-compose-infrastructure.yaml up -d minio
+cd /home/datamap/actions-runner/_work/gatekeeper/gatekeeper
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; umask 077
+~/bin/sops --decrypt secrets/production/gatekeeper.env > "$T/env"
+export ENV_FILE_PATH="$T/env"
+set -a; . "$ENV_FILE_PATH"; set +a
+```
+
+```bash
+docker compose -f docker-compose-infrastructure.yaml up -d minio
 ```
 
 Port 9000 is published on the host. From **outside** the host, confirm the

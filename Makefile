@@ -1,5 +1,15 @@
 #!make
 
+# An empty `include` is a silent no-op, so without this every target still runs,
+# with every variable blank -- including the host paths of the database and the
+# object storage.
+ifeq ($(strip $(ENV_FILE_PATH)),)
+$(error ENV_FILE_PATH is not set. Pass one, e.g. make ENV_FILE_PATH=local.env <target>. On the production host see Makefile.infra)
+endif
+ifeq ($(wildcard $(ENV_FILE_PATH)),)
+$(error ENV_FILE_PATH=$(ENV_FILE_PATH) does not exist)
+endif
+
 include ${ENV_FILE_PATH}
 export $(shell sed 's/=.*//' ${ENV_FILE_PATH})
 
@@ -50,7 +60,7 @@ docker-prune:
 	@echo "${On_Green}Images prune${Color_Off}"
 	time docker image prune -a -f
 
-observability-run: # Usage: make ENV_FILE_PATH=../environment/gatekeeper.prod.env observability-run
+observability-run: # Usage: make ENV_FILE_PATH=<decrypted-env> observability-run
 	@echo "${On_Green}Starting Prometheus and Grafana${Color_Off}"
 	docker compose -f docker-compose-observability.yaml up -d
 

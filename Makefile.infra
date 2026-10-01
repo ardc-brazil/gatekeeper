@@ -1,0 +1,124 @@
+#!make
+#
+# Infrastructure the deploy does not apply, on the production host.
+#
+#   make -f Makefile.infra help
+#
+# No ENV_FILE_PATH: each target decrypts what it needs into a temporary file and
+# removes it on the way out. See docs/runbooks/host-applied-changes.md.
+
+SOPS = $(HOME)/bin/sops
+AGE_KEY = $(HOME)/.config/sops/age/keys.txt
+SECRET = secrets/production/gatekeeper.env
+COMPOSE = docker compose -f docker-compose-infrastructure.yaml -f docker-compose-database.yaml
+NGINX_CONF = /etc/nginx/sites-available/datamap
+PUBLIC_URL = https://datamap.pcs.usp.br
+
+export COMPOSE_PROJECT_NAME = gatekeeper
+
+Green=\033[0;32m
+Red=\033[0;31m
+Yellow=\033[0;33m
+Off=\033[0m
+
+# Both are host-only, so a target that would half-run elsewhere stops here.
+define require_host
+	test -x $(SOPS) || { printf "$(Red)$(SOPS) not found: this runs on the production host$(Off)\n"; exit 1; }; \
+	test -r $(AGE_KEY) || { printf "$(Red)$(AGE_KEY) not readable$(Off)\n"; exit 1; };
+endef
+
+# One shell, so the trap and the sourced variables survive to the command that
+# needs them. `set -a` is the half that ENV_FILE_PATH alone does not do: compose
+# expands $${VAR} from its own environment, not from env_file.
+define with_env
+	export SOPS_AGE_KEY_FILE=$(AGE_KEY); \
+	T=$$(mktemp -d); trap 'rm -rf "$$T"' EXIT; umask 077; \
+	$(SOPS) --decrypt $(SECRET) > "$$T/env"; \
+	export ENV_FILE_PATH="$$T/env"; \
+	set -a; . "$$T/env"; set +a;
+endef
+
+.PHONY: help workspace-status nginx-diff nginx-apply pgadmin minio observability \
+        pgadmin-check services stack
+
+help:
+	@printf "$(Green)Infrastructure applied by hand$(Off)  (docs/runbooks/host-applied-changes.md)\n\n"
+	@printf "  workspace-status  is this checkout carrying the merge you want to apply?\n"
+	@printf "  nginx-diff        what the host runs vs. what this checkout has\n"
+	@printf "  nginx-apply       back up, copy, nginx -t, reload           $(Yellow)[sudo]$(Off)\n"
+	@printf "  pgadmin           recreate pgAdmin, then check it\n"
+	@printf "  minio             recreate MinIO (downloads pause briefly)\n"
+	@printf "  observability     bring up Prometheus, Grafana, Loki, Alloy\n"
+	@printf "  pgadmin-check     loopback 200, public 200, direct port closed\n"
+	@printf "  services          service names this stack accepts\n"
+	@printf "  stack             every container and its status\n\n"
+	@printf "Merge first, let the deploy update this checkout, then apply.\n"
+
+# Trap 3: merging changes nothing here until a later deploy checks it out.
+workspace-status:
+	@printf "$(Green)checkout$(Off)  %s\n" "$$(pwd)"
+	@printf "$(Green)HEAD$(Off)      %s\n" "$$(git log --oneline -1)"
+	@git fetch -q origin main 2>/dev/null || true
+	@behind=$$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "?"); \
+	if [ "$$behind" = "0" ]; then \
+		printf "$(Green)up to date with origin/main$(Off)\n"; \
+	else \
+		printf "$(Yellow)%s commits behind origin/main: a merge you expect may not be here yet$(Off)\n" "$$behind"; \
+		git log --oneline HEAD..origin/main 2>/dev/null | sed 's/^/    /'; \
+	fi
+
+nginx-diff:
+	@diff $(NGINX_CONF) infrastructure/nginx/datamap.conf \
+		&& printf "$(Green)the host matches this checkout$(Off)\n" \
+		|| printf "$(Yellow)above: < host, > this checkout$(Off)\n"
+
+# A reload with a bad file keeps the old configuration; a restart would not.
+nginx-apply: nginx-diff
+	sudo cp $(NGINX_CONF) $(NGINX_CONF).$$(date +%F-%H%M).bak
+	sudo cp infrastructure/nginx/datamap.conf $(NGINX_CONF)
+	sudo nginx -t
+	sudo systemctl reload nginx
+	@$(MAKE) -f Makefile.infra --no-print-directory pgadmin-check
+
+pgadmin:
+	@$(require_host)
+	@$(with_env) $(COMPOSE) up -d gatekeeper-pgadmin
+	@$(MAKE) -f Makefile.infra --no-print-directory pgadmin-check
+
+minio:
+	@$(require_host)
+	@$(with_env) $(COMPOSE) up -d --force-recreate --wait minio
+
+observability:
+	@$(require_host)
+	@$(with_env) $(MAKE) ENV_FILE_PATH="$$ENV_FILE_PATH" observability-run
+
+# pgAdmin needs about twenty seconds, and a curl fired sooner answers 000 while
+# nginx answers 502. Poll, or the check reports a failure that is not there.
+pgadmin-check:
+	@printf "$(Green)waiting for pgAdmin$(Off)"
+	@for i in $$(seq 1 40); do \
+		if [ "$$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:5050/login)" = "200" ]; then \
+			printf " up after %ss\n" "$$i"; break; \
+		fi; \
+		printf "."; sleep 1; \
+	done
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:5050/login); \
+	[ "$$code" = "200" ] && printf "  $(Green)ok$(Off)   loopback 127.0.0.1:5050 -> %s\n" "$$code" \
+	                     || { printf "  $(Red)FAIL$(Off) loopback 127.0.0.1:5050 -> %s\n" "$$code"; exit 1; }
+	@code=$$(curl -sL -o /dev/null -w '%{http_code}' --max-time 15 $(PUBLIC_URL)/pgadmin); \
+	[ "$$code" = "200" ] && printf "  $(Green)ok$(Off)   $(PUBLIC_URL)/pgadmin -> %s\n" "$$code" \
+	                     || { printf "  $(Red)FAIL$(Off) $(PUBLIC_URL)/pgadmin -> %s  (nginx cannot reach it)\n" "$$code"; exit 1; }
+	@ip=$$(hostname -I | awk '{print $$1}'); \
+	if curl -s -o /dev/null --max-time 5 "http://$$ip:5050/login"; then \
+		printf "  $(Red)FAIL$(Off) http://%s:5050 still answers in the clear\n" "$$ip"; exit 1; \
+	else \
+		printf "  $(Green)ok$(Off)   http://%s:5050 closed\n" "$$ip"; \
+	fi
+
+services:
+	@$(require_host)
+	@$(with_env) $(COMPOSE) config --services 2>/dev/null | sort | sed 's/^/  /'
+
+stack:
+	@docker ps --format "  {{.Names}}\t{{.Status}}" | sort

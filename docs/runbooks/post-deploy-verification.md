@@ -119,10 +119,12 @@ ssh datamap-prod 'docker logs --since 1h datamap_gatekeeper 2>&1 | grep -ciE "tr
 The deploy is a container restart, so rolling back is deploying the previous
 commit — re-run the workflow from the commit before the merge, or on the host:
 
-```bash
-cd ~/gatekeeper && git checkout <previous-sha> && \
-  ENV_FILE_PATH=../environment/gatekeeper.prod.env make docker-deployment-no-prune
-```
+Re-running the workflow is the one to prefer: the host has a single checkout and
+it belongs to the runner, so moving its `HEAD` by hand leaves the next deploy
+starting from somewhere unexpected. If it has to be done locally anyway, decrypt
+the environment as in
+[host-applied-changes.md](host-applied-changes.md) and use
+`make ENV_FILE_PATH="$T/env" docker-deployment-no-prune`.
 
 No migration in this release alters the schema, so a rollback needs no database
 step. That will not hold for the embargo release (RFC 003), which adds tables.

@@ -13,7 +13,10 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from scripts.backup_metrics import write as write_metrics
+try:  # invoked as `python3 -m scripts.backup_database`
+    from scripts.backup_metrics import write as write_metrics
+except ImportError:  # invoked as `python3 scripts/backup_database.py`
+    from backup_metrics import write as write_metrics
 
 CONTAINER = "datamap_gatekeeper_db"
 DATABASE = "gatekeeper_db"
