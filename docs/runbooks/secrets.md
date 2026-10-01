@@ -87,9 +87,13 @@ the environment the containers read. The decrypted copies are removed afterwards
 including when the job fails.
 
 `scripts/check_tracked_secrets.py` runs against those decrypted copies and fails
-the deploy if any of their values appears in a tracked file. That is why every
-file is decrypted and not only the gatekeeper's: reading one would quietly stop
-checking the other services' credentials.
+the deploy if any of their values appears in a tracked file.
+
+It sees this repository's credentials only. The archivist and the webapp hold
+their own encrypted configuration in their own repositories and decrypt it in
+their own deploys — one owner per secret, nothing to drift, and each repository
+guarding what it holds. A secret shared across two of them, like the upload
+token the webapp signs and this service verifies, has to be changed in both.
 
 **The encrypted copies are the source of truth.** There is no plaintext to drift
 from any more, which is why the deploy no longer compares against one — with a
