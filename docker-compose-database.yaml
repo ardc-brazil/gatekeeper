@@ -40,8 +40,11 @@ services:
       # offers by default needs SMTP that is not configured.
       - PGADMIN_CONFIG_MFA_FORCE_REGISTRATION=True
       - PGADMIN_CONFIG_MFA_SUPPORTED_METHODS=['authenticator']
+    # Loopback only: nginx reaches it from the host, and published on every
+    # interface it also answered on plain HTTP from the university network,
+    # where the password and the TOTP code travelled unencrypted.
     ports:
-      - 5050:5050
+      - 127.0.0.1:5050:5050
     volumes:
       - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json
     depends_on:
