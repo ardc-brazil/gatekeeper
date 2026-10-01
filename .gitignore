@@ -172,3 +172,5 @@ staging.env
 secrets/production/*.decrypted
 secrets/production/*.plain
 *.env.decrypted
+
+.DS_Store
