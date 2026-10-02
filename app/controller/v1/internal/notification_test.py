@@ -26,3 +26,19 @@ class TestDispatch(unittest.TestCase):
             response.model_dump(),
             {"queued": 4, "sent": 4, "failed": 1, "skipped": 2, "retried": 1},
         )
+
+    def test_a_failing_queue_still_dispatches_and_reports_dispatch_counts_only(self):
+        notifications = Mock(spec=EmbargoNotificationService)
+        notifications.queue_due.side_effect = RuntimeError("boom")
+        email_service = Mock(spec=EmailService)
+        email_service.dispatch_due.return_value = DispatchResult(
+            queued=1, sent=4, failed=1, skipped=2, retried=1
+        )
+
+        response = dispatch(notifications=notifications, email_service=email_service)
+
+        email_service.dispatch_due.assert_called_once()
+        self.assertEqual(
+            response.model_dump(),
+            {"queued": 1, "sent": 4, "failed": 1, "skipped": 2, "retried": 1},
+        )
