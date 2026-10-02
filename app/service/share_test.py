@@ -325,6 +325,30 @@ class TestManage(ShareServiceTestCase):
         with self.assertRaises(NotFoundException):
             self.service.regenerate_link(self.dataset.id, CALLER, uuid4())
 
+    def test_revoking_a_pending_invitation_stamps_it_and_records_the_event(self):
+        invitation_id = uuid4()
+        self.invitations.fetch.return_value = SimpleNamespace(
+            id=invitation_id, accepted_at=None, revoked_at=None
+        )
+
+        self.service.revoke_invitation(self.dataset.id, CALLER, invitation_id)
+
+        self.invitations.revoke.assert_called_once_with(invitation_id, NOW)
+        self.assertEqual(
+            self.audit.record.call_args.kwargs["event_type"],
+            AccessEventType.INVITATION_REVOKED,
+        )
+
+    def test_an_accepted_invitation_is_not_revoked_its_permission_is(self):
+        self.invitations.fetch.return_value = SimpleNamespace(
+            id=uuid4(), accepted_at=NOW, revoked_at=None
+        )
+
+        with self.assertRaises(NotFoundException):
+            self.service.revoke_invitation(self.dataset.id, CALLER, uuid4())
+
+        self.invitations.revoke.assert_not_called()
+
     def test_candidates_need_two_characters(self):
         self.assertEqual(self.service.candidates(self.dataset.id, CALLER, "a"), [])
         self.users.search_share_candidates.assert_not_called()

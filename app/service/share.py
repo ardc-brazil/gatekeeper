@@ -404,7 +404,11 @@ class ShareService:
     ) -> None:
         dataset = self._authorized(dataset_id, user_id)
         invitation = self._invitations.fetch(dataset.id, invitation_id)
-        if invitation is None or invitation.revoked_at is not None:
+        if (
+            invitation is None
+            or invitation.revoked_at is not None
+            or invitation.accepted_at is not None
+        ):
             raise NotFoundException(f"not_found: {invitation_id}")
         self._invitations.revoke(invitation_id, self._clock())
         self._audit.record(
