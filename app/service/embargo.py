@@ -222,12 +222,6 @@ class EmbargoService:
                 return version.doi.identifier
         return None
 
-    def doi_for(self, dataset_id: UUID, version_name: str) -> str | None:
-        dataset = self._fetch_for_status(dataset_id)
-        if dataset is None:
-            return None
-        return self._doi_in(dataset, version_name)
-
     def status(self, dataset_id: UUID) -> tuple[bool, datetime | None]:
         dataset = self._fetch_for_status(dataset_id)
         if dataset is None or not self._access.embargo_active(dataset):

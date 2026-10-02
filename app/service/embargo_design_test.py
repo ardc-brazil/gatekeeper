@@ -110,25 +110,6 @@ class TestSetNote(EmbargoDesignTestCase):
             self.service.set_note(self.dataset.id, self.user_id, None, "x")
 
 
-class TestDoiFor(EmbargoDesignTestCase):
-    def test_the_doi_of_the_named_version_is_returned(self):
-        dataset = SimpleNamespace(
-            versions=[
-                SimpleNamespace(
-                    name="1", doi=SimpleNamespace(identifier="10.5281/datamap.1")
-                ),
-                SimpleNamespace(name="2", doi=None),
-            ]
-        )
-        self.repository.fetch.return_value = dataset
-
-        self.assertEqual(
-            self.service.doi_for(self.dataset.id, "1"), "10.5281/datamap.1"
-        )
-        self.assertIsNone(self.service.doi_for(self.dataset.id, "2"))
-        self.assertIsNone(self.service.doi_for(self.dataset.id, "9"))
-
-
 class TestOwnerName(unittest.TestCase):
     def setUp(self):
         self.users = Mock(spec=UserService)
