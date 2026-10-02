@@ -24,6 +24,9 @@ from tests.integration.fixtures.tus_auth import create_tus_payload
 from tests.integration.utils.assertions import assert_status_code
 
 
+OTHER_TENANCY = "datamap/production/amazon-face"
+
+
 @pytest.fixture
 def owner():
     return AuthFixture.valid_headers()
@@ -334,7 +337,7 @@ class TestOwnerAndPermissions:
         assert dataset["id"] in _ids(shared)
         assert_status_code(update, 403)
 
-    def test_someone_with_no_tenancy_finds_it_in_every_listing(
+    def test_someone_with_no_tenancy_finds_it_only_under_shared(
         self, http_client, owner, outsider
     ):
         dataset = create_dataset(http_client, owner)
@@ -345,18 +348,40 @@ class TestOwnerAndPermissions:
             "versions"
         ][0]["name"]
 
-        listing = http_client.get("/datasets/", headers=headers)
-        minimal = http_client.get("/datasets/?minimal=true", headers=headers)
+        listing = http_client.get("/datasets/?page_size=100", headers=headers)
+        shared = http_client.get("/datasets/?shared=true", headers=headers)
+        minimal = http_client.get(
+            "/datasets/?shared=true&minimal=true", headers=headers
+        )
         by_version = http_client.get(
             f"/datasets/{dataset['id']}/versions/{version}", headers=headers
         )
 
         assert_status_code(listing, 200)
-        assert dataset["id"] in _ids(listing)
+        assert _ids(listing) == []
+        assert dataset["id"] in _ids(shared)
         item = next(i for i in minimal.json()["content"] if i["id"] == dataset["id"])
         assert item["embargo"]["active"] is True
         assert item["access"]["level"] == "read"
         assert_status_code(by_version, 200)
+
+    def test_the_workspace_listing_never_shows_another_workspaces_dataset(
+        self, http_client, owner
+    ):
+        dataset = create_dataset(http_client, owner)
+        user_id = create_user(http_client, ["datasets_write"], [OTHER_TENANCY])
+        grant(http_client, dataset["id"], user_id, "write")
+        headers = headers_for(user_id, OTHER_TENANCY)
+
+        listing = http_client.get("/datasets/?page_size=100", headers=headers)
+        shared = http_client.get("/datasets/?shared=true", headers=headers)
+        detail = http_client.get(f"/datasets/{dataset['id']}", headers=headers)
+
+        assert_status_code(listing, 200)
+        assert dataset["id"] not in _ids(listing)
+        assert dataset["id"] in _ids(shared)
+        assert_status_code(detail, 200)
+        assert detail.json()["access"]["level"] == "write"
 
     def test_a_write_permission_can_edit_and_does_not_take_ownership(
         self, http_client, owner, outsider
@@ -429,13 +454,15 @@ class TestOwnerAndPermissions:
         hidden = http_client.get(f"/datasets/{of_the_tenancy['id']}", headers=headers)
         shared = http_client.get(f"/datasets/{shared_with_them['id']}", headers=headers)
         listing = http_client.get("/datasets/?page_size=100", headers=headers)
+        shared_listing = http_client.get("/datasets/?shared=true", headers=headers)
 
         assert_status_code(hidden, 404)
         assert_status_code(shared, 200)
         assert shared.json()["access"]["level"] == "read"
         assert_status_code(listing, 200)
         assert of_the_tenancy["id"] not in _ids(listing)
-        assert shared_with_them["id"] in _ids(listing)
+        assert shared_with_them["id"] not in _ids(listing)
+        assert shared_with_them["id"] in _ids(shared_listing)
 
     def test_a_write_permission_cannot_delete(self, http_client, owner, outsider):
         dataset = create_dataset(http_client, owner)
