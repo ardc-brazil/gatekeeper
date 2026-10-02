@@ -60,7 +60,7 @@ class TestAdapters(unittest.TestCase):
         self.assertEqual(body["dataset"]["name"], "Ozone")
         self.assertEqual(
             body["dataset"]["versions"][0]["files_summary"],
-            {"count": 2, "total_size_bytes": 42},
+            {"count": 2, "total_size_bytes": 42, "extensions": []},
         )
         self.assertNotIn("dataset_id", body)
 

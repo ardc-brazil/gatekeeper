@@ -10,17 +10,38 @@ from app.model.dataset_access import AccessEventType, DatasetAction
 from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.db.sharing import DatasetAnonymousLink
 from app.model.embargo import embargo_active
-from app.model.sharing import AnonymousLinkView, AnonymousPage, AnonymousVersion
+from app.model.sharing import (
+    AnonymousExtension,
+    AnonymousLinkView,
+    AnonymousPage,
+    AnonymousVersion,
+)
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.service.dataset import DatasetService
 from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.redaction import redact_metadata
-from app.service.share_token import hash_token, new_token
+from app.service.share_token import hash_token, new_token, token_hint
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _extensions(files) -> list[AnonymousExtension]:
+    grouped: dict[str | None, list[int]] = {}
+    for file in files:
+        grouped.setdefault(file.extension or None, []).append(file.size_bytes or 0)
+    return sorted(
+        (
+            AnonymousExtension(
+                extension=extension, count=len(sizes), total_size_bytes=sum(sizes)
+            )
+            for extension, sizes in grouped.items()
+        ),
+        key=lambda item: item.total_size_bytes,
+        reverse=True,
+    )
 
 
 class AnonymousLinkService:
@@ -61,6 +82,7 @@ class AnonymousLinkService:
             DatasetAnonymousLink(
                 dataset_id=dataset.id,
                 token_hash=hash_token(token),
+                token_hint=token_hint(token),
                 label=label.strip(),
                 created_by=user_id,
             )
@@ -73,7 +95,11 @@ class AnonymousLinkService:
         )
         metrics.anonymous_link_created(dataset.tenancy)
         view = AnonymousLinkView(
-            id=link.id, label=link.label, created_at=link.created_at, revoked_at=None
+            id=link.id,
+            label=link.label,
+            created_at=link.created_at,
+            revoked_at=None,
+            token_hint=link.token_hint,
         )
         return view, f"{self._base_url}/anonymous/{token}"
 
@@ -128,6 +154,7 @@ class AnonymousLinkService:
                     total_size_bytes=sum(
                         file.size_bytes or 0 for file in version.files_in
                     ),
+                    extensions=_extensions(version.files_in),
                 )
                 for version in dataset.versions
                 if version.is_enabled

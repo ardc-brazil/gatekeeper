@@ -13,12 +13,14 @@ from app.model.sharing import (
     AcceptResult,
     GrantRequest,
     GrantResult,
+    InvitationPreview,
     InvitationView,
     PermissionView,
     AnonymousLinkView,
     AnonymousLinkViews,
     ShareState,
     ShareUser,
+    TenancyAccess,
 )
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_invitation import DatasetInvitationRepository
@@ -27,7 +29,7 @@ from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 from app.service.dataset import DatasetService
 from app.service.email import EmailService
-from app.service.email_format import long_date
+from app.service.email_format import long_date, tenancy_display_name
 from app.service.email_template import EmailTemplate
 from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.permission import PermissionService
@@ -122,6 +124,9 @@ class ShareService:
             revoked_at=invitation.revoked_at,
         )
 
+    def _address(self, invitation) -> str:
+        return invitation.email if invitation.email else f"ORCID {invitation.orcid}"
+
     def _queue(self, **kwargs) -> None:
         try:
             self._email.enqueue(**kwargs)
@@ -152,17 +157,61 @@ class ShareService:
             ShareUser(id=user.id, name=user.name, email=user.email) for user in users
         ]
 
+    def preview(self, token: str) -> InvitationPreview:
+        invitation = self._invitations.fetch_by_token_hash(hash_token(token))
+        if invitation is None or invitation.revoked_at is not None:
+            raise NotFoundException("invitation_not_found")
+        dataset = self._dataset_repository.fetch(
+            dataset_id=invitation.dataset_id, restrict_by_tenancy=False
+        )
+        if dataset is None:
+            raise NotFoundException("invitation_not_found")
+        inviter = self._share_user(invitation.invited_by)
+        owner = self._share_user(dataset.owner_id)
+        embargoed = (
+            dataset.embargo_until is not None and dataset.embargo_until > self._clock()
+        )
+        accepted = invitation.accepted_at is not None
+        return InvitationPreview(
+            state="accepted" if accepted else "pending",
+            dataset_name=dataset.name,
+            inviter_name=inviter.name if inviter else "A DataMap user",
+            owner_name=owner.name if owner else "the owner",
+            level=invitation.level,
+            invited_as=self._address(invitation),
+            embargo_until=dataset.embargo_until if embargoed else None,
+            accepted_at=invitation.accepted_at,
+            dataset_id=dataset.id if accepted else None,
+        )
+
     def state(self, dataset_id: UUID, user_id: UUID) -> ShareState:
         dataset = self._authorized(dataset_id, user_id)
+        invitations = self._invitations.list_for_dataset(dataset.id)
+        invited_as = {
+            invitation.accepted_by: self._address(invitation)
+            for invitation in invitations
+            if invitation.accepted_by is not None
+        }
+        permissions = []
+        for permission in self._permissions.list_for_dataset(dataset.id):
+            view = self._permission_view(permission)
+            view.invited_as = invited_as.get(permission.user_id)
+            permissions.append(view)
+        embargoed = (
+            dataset.embargo_until is not None and dataset.embargo_until > self._clock()
+        )
+        tenancy = None
+        if dataset.tenancy and not embargoed:
+            tenancy = TenancyAccess(
+                name=tenancy_display_name(dataset.tenancy),
+                path=dataset.tenancy,
+                members=self._users.count_in_tenancy(dataset.tenancy),
+            )
         return ShareState(
             owner=self._share_user(dataset.owner_id),
-            permissions=[
-                self._permission_view(permission)
-                for permission in self._permissions.list_for_dataset(dataset.id)
-            ],
+            permissions=permissions,
             invitations=[
-                self._invitation_view(invitation)
-                for invitation in self._invitations.list_for_dataset(dataset.id)
+                self._invitation_view(invitation) for invitation in invitations
             ],
             anonymous_links=[
                 AnonymousLinkView(
@@ -171,11 +220,13 @@ class ShareService:
                     created_at=link.created_at,
                     revoked_at=link.revoked_at,
                     views=AnonymousLinkViews(count=count, first_at=first, last_at=last),
+                    token_hint=link.token_hint,
                 )
                 for link, count, first, last in self._anonymous_links.list_with_views(
                     dataset.id
                 )
             ],
+            tenancy=tenancy,
         )
 
     def grant(

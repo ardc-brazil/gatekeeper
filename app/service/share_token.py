@@ -8,3 +8,7 @@ def new_token() -> str:
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def token_hint(token: str) -> str:
+    return f"{token[:4]}…{token[-4:]}"

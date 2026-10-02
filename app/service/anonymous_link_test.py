@@ -26,7 +26,10 @@ def _sample(name, **labels):
 
 
 def dataset(until=NOW + timedelta(days=30), visibility=VisibilityStatus.PRIVATE):
-    files = [SimpleNamespace(size_bytes=10), SimpleNamespace(size_bytes=32)]
+    files = [
+        SimpleNamespace(size_bytes=10, extension=".nc"),
+        SimpleNamespace(size_bytes=32, extension=".nc"),
+    ]
     return SimpleNamespace(
         id=uuid4(),
         name="Ozone at ATTO",
@@ -60,6 +63,7 @@ class AnonymousLinkTestCase(unittest.TestCase):
             created_at=NOW,
             revoked_at=None,
             token_hash=link.token_hash,
+            token_hint=link.token_hint,
         )
         self.service = AnonymousLinkService(
             dataset_service=self.dataset_service,

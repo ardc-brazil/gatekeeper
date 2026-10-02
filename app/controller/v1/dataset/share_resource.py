@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from app.model.sharing import (
     GrantResult,
+    InvitationPreview,
     InvitationView,
     PermissionView,
     AnonymousLinkView,
@@ -26,6 +27,7 @@ class PermissionResponse(BaseModel):
     level: str
     granted_at: datetime
     granted_by: UUID | None = None
+    invited_as: str | None = None
 
 
 class InvitationResponse(BaseModel):
@@ -48,10 +50,17 @@ class AnonymousLinkViewsResponse(BaseModel):
 class AnonymousLinkResponse(BaseModel):
     id: UUID
     label: str
+    token_hint: str | None = None
     created_at: datetime
     revoked_at: datetime | None = None
     views: AnonymousLinkViewsResponse
     link: str | None = None
+
+
+class TenancyAccessResponse(BaseModel):
+    name: str
+    path: str
+    members: int
 
 
 class ShareStateResponse(BaseModel):
@@ -59,6 +68,7 @@ class ShareStateResponse(BaseModel):
     permissions: list[PermissionResponse]
     invitations: list[InvitationResponse]
     anonymous_links: list[AnonymousLinkResponse]
+    tenancy: TenancyAccessResponse | None = None
 
 
 class GrantRequestBody(BaseModel):
@@ -102,6 +112,18 @@ class ClaimResponse(BaseModel):
     accepted: list[AcceptResultResponse]
 
 
+class InvitationPreviewResponse(BaseModel):
+    state: Literal["pending", "accepted"]
+    dataset_name: str
+    inviter_name: str
+    owner_name: str
+    level: str
+    invited_as: str
+    embargo_until: datetime | None = None
+    accepted_at: datetime | None = None
+    dataset_id: UUID | None = None
+
+
 def adapt_user(user: ShareUser | None) -> ShareUserResponse | None:
     if user is None:
         return None
@@ -114,6 +136,7 @@ def adapt_permission(permission: PermissionView) -> PermissionResponse:
         level=permission.level,
         granted_at=permission.granted_at,
         granted_by=permission.granted_by,
+        invited_as=permission.invited_as,
     )
 
 
@@ -136,6 +159,7 @@ def adapt_anonymous_link(
     return AnonymousLinkResponse(
         id=link.id,
         label=link.label,
+        token_hint=link.token_hint,
         created_at=link.created_at,
         revoked_at=link.revoked_at,
         views=AnonymousLinkViewsResponse(
@@ -153,6 +177,27 @@ def adapt_share_state(state: ShareState) -> ShareStateResponse:
         permissions=[adapt_permission(p) for p in state.permissions],
         invitations=[adapt_invitation(i) for i in state.invitations],
         anonymous_links=[adapt_anonymous_link(link) for link in state.anonymous_links],
+        tenancy=TenancyAccessResponse(
+            name=state.tenancy.name,
+            path=state.tenancy.path,
+            members=state.tenancy.members,
+        )
+        if state.tenancy
+        else None,
+    )
+
+
+def adapt_invitation_preview(preview: InvitationPreview) -> InvitationPreviewResponse:
+    return InvitationPreviewResponse(
+        state=preview.state,
+        dataset_name=preview.dataset_name,
+        inviter_name=preview.inviter_name,
+        owner_name=preview.owner_name,
+        level=preview.level,
+        invited_as=preview.invited_as,
+        embargo_until=preview.embargo_until,
+        accepted_at=preview.accepted_at,
+        dataset_id=preview.dataset_id,
     )
 
 
@@ -186,6 +231,14 @@ def adapt_anonymous_page(page: AnonymousPage) -> dict:
                     "files_summary": {
                         "count": version.file_count,
                         "total_size_bytes": version.total_size_bytes,
+                        "extensions": [
+                            {
+                                "extension": item.extension,
+                                "count": item.count,
+                                "total_size_bytes": item.total_size_bytes,
+                            }
+                            for item in version.extensions
+                        ],
                     },
                 }
                 for version in page.versions

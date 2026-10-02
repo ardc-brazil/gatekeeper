@@ -53,6 +53,7 @@ class DatasetAnonymousLink(Base):
     )
     dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False)
     token_hash = Column(String(64), nullable=False, unique=True)
+    token_hint = Column(String(16), nullable=True)
     label = Column(String(256), nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
