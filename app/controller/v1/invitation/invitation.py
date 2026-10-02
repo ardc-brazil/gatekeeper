@@ -10,10 +10,21 @@ from app.controller.v1.dataset.share_resource import (
     AcceptInvitationBody,
     AcceptResultResponse,
     ClaimResponse,
+    InvitationPreviewResponse,
+    adapt_invitation_preview,
 )
 from app.service.share import ShareService
 
 router = APIRouter(tags=["invitations"], dependencies=[Depends(authenticate)])
+
+
+@router.get("/invitations/{token}", response_model=InvitationPreviewResponse)
+@inject
+def preview_invitation(
+    token: str,
+    service: ShareService = Depends(Provide[Container.share_service]),
+) -> InvitationPreviewResponse:
+    return adapt_invitation_preview(service.preview(token))
 
 
 @router.post("/invitations/accept", response_model=AcceptResultResponse)

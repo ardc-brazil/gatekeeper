@@ -106,6 +106,21 @@ class UserRepository:
                 query = query.filter(User.id.notin_(exclude_ids))
             return query.order_by(User.name).limit(limit).all()
 
+    def count_in_tenancy(self, tenancy: str) -> int:
+        with self._session_factory() as session:
+            return (
+                session.query(func.count(User.id))
+                .join(
+                    user_tenancy_association,
+                    user_tenancy_association.c.user_id == User.id,
+                )
+                .filter(
+                    user_tenancy_association.c.tenancy == tenancy,
+                    User.is_enabled == true(),
+                )
+                .scalar()
+            )
+
     def search(self, query_params: UserQuery) -> List[User]:
         with self._session_factory() as session:
             query = session.query(User)
