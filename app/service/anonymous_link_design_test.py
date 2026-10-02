@@ -101,3 +101,24 @@ class TestAdapters(unittest.TestCase):
             summary["extensions"],
             [{"extension": ".nc", "count": 1, "total_size_bytes": 5}],
         )
+
+
+class TestExtensionSpelling(unittest.TestCase):
+    def test_a_stored_extension_without_its_dot_is_shown_with_one(self):
+        from app.service.anonymous_link import _extensions
+
+        grouped = _extensions(
+            [
+                SimpleNamespace(size_bytes=10, extension="nc"),
+                SimpleNamespace(size_bytes=5, extension=".NC"),
+                SimpleNamespace(size_bytes=1, extension=""),
+            ]
+        )
+
+        self.assertEqual(
+            grouped,
+            [
+                AnonymousExtension(extension=".nc", count=2, total_size_bytes=15),
+                AnonymousExtension(extension=None, count=1, total_size_bytes=1),
+            ],
+        )

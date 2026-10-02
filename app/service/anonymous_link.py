@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, Iterable
 from uuid import UUID
 
 from app.exception.bad_request import BadRequestException, ErrorDetails
@@ -7,6 +7,7 @@ from app.exception.not_found import NotFoundException
 from app.metrics import metrics
 from app.model.dataset import VisibilityStatus
 from app.model.dataset_access import AccessEventType, DatasetAction
+from app.model.db.dataset import DataFile
 from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.db.sharing import DatasetAnonymousLink
 from app.model.embargo import embargo_active
@@ -28,10 +29,15 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _extensions(files) -> list[AnonymousExtension]:
+def _spelled(extension: str | None) -> str | None:
+    stripped = (extension or "").strip().lstrip(".").lower()
+    return f".{stripped}" if stripped else None
+
+
+def _extensions(files: Iterable[DataFile]) -> list[AnonymousExtension]:
     grouped: dict[str | None, list[int]] = {}
     for file in files:
-        grouped.setdefault(file.extension or None, []).append(file.size_bytes or 0)
+        grouped.setdefault(_spelled(file.extension), []).append(file.size_bytes or 0)
     return sorted(
         (
             AnonymousExtension(
