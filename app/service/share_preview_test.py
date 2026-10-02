@@ -39,6 +39,7 @@ class TestPreview(ShareServiceTestCase):
         self.assertEqual(preview.invited_as, "fernanda@inpe.br")
         self.assertEqual(preview.embargo_until, self.dataset.embargo_until)
         self.assertIsNone(preview.accepted_at)
+        self.assertIsNone(preview.dataset_id)
 
     def test_an_orcid_invitation_is_shown_as_orcid(self):
         self.invitation.email = None
@@ -55,6 +56,7 @@ class TestPreview(ShareServiceTestCase):
 
         self.assertEqual(preview.state, "accepted")
         self.assertEqual(preview.accepted_at, NOW - timedelta(days=2))
+        self.assertEqual(preview.dataset_id, self.dataset.id)
 
     def test_a_revoked_or_unknown_token_is_not_found(self):
         self.invitation.revoked_at = NOW
