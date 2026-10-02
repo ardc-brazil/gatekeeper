@@ -119,7 +119,7 @@ python-pip-freeze:
 	pip3 freeze > requirements.txt
 
 python-run:
-	uvicorn app.main:fastAPIApp --host 0.0.0.0 --port 9092 --reload
+	uvicorn app.main:fastAPIApp --host 0.0.0.0 --port 9092 --reload --no-access-log
 
 # Database commands
 db-upgrade:

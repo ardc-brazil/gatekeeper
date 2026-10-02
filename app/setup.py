@@ -5,7 +5,12 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 
-from app.logging_config import fields, request_id_var, setup_logging  # noqa: F401
+from app.logging_config import (  # noqa: F401
+    fields,
+    mask_path_tokens,
+    request_id_var,
+    setup_logging,
+)
 from app.metrics import metrics
 from app.controller.v1.admin.email import router as admin_email_router
 from app.controller.v1.client.client import router as client_router
@@ -172,7 +177,7 @@ def _log_access(
     )
     entry = fields(
         method=request.method,
-        path=request.url.path,
+        path=mask_path_tokens(request.url.path),
         route=route,
         client=client,
         status_code=status_code,

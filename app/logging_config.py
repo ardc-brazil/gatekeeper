@@ -27,6 +27,18 @@ def fields(**values: Any) -> dict[str, Any]:
     }
 
 
+_PATH_TOKEN = re.compile(
+    r"((?:^|/v1|://[^/?#]+)/(?:anonymous|invitations)/)(?!accept(?:[/?#]|$))[^/?#]+"
+)
+
+_PATH_FIELDS = frozenset({"path", "url"})
+
+
+def mask_path_tokens(path: str) -> str:
+    """Replaces the bearer token in an anonymous-link or invitation path."""
+    return _PATH_TOKEN.sub(r"\1{token}", path)
+
+
 class Redactor:
     KEY_PATTERN = re.compile(_SECRET_WORDS, re.IGNORECASE)
 
@@ -42,14 +54,21 @@ class Redactor:
     def scrub(cls, value: Any) -> Any:
         if isinstance(value, dict):
             return {
-                key: REDACTED if cls.KEY_PATTERN.search(str(key)) else cls.scrub(inner)
-                for key, inner in value.items()
+                key: cls.scrub_field(str(key), inner) for key, inner in value.items()
             }
         if isinstance(value, (list, tuple)):
             return type(value)(cls.scrub(item) for item in value)
         if isinstance(value, str):
             return cls.scrub_text(value)
         return value
+
+    @classmethod
+    def scrub_field(cls, key: str, value: Any) -> Any:
+        if cls.KEY_PATTERN.search(key):
+            return REDACTED
+        if key in _PATH_FIELDS and isinstance(value, str):
+            value = mask_path_tokens(value)
+        return cls.scrub(value)
 
     @classmethod
     def scrub_text(cls, text: str) -> str:
@@ -64,9 +83,7 @@ class RedactingFilter(logging.Filter):
         for key, value in list(record.__dict__.items()):
             if key in _STANDARD_RECORD_ATTRS:
                 continue
-            record.__dict__[key] = (
-                REDACTED if Redactor.KEY_PATTERN.search(key) else Redactor.scrub(value)
-            )
+            record.__dict__[key] = Redactor.scrub_field(key, value)
         return True
 
 
