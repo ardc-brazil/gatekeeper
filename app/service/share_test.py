@@ -54,6 +54,7 @@ class ShareServiceTestCase(unittest.TestCase):
             tenancy="datamap/production/data-amazon",
             embargo_until=NOW + timedelta(days=30),
             embargo_note="Under review at JGR Atmospheres",
+            members_can_edit=True,
         )
         self.datasets.fetch_authorized.return_value = (
             self.dataset,

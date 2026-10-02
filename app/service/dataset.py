@@ -40,7 +40,7 @@ from app.model.db.dataset import (
 from app.adapter import doi as DOIAdapter
 from app.metrics import metrics
 from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
-from app.service.dataset_access import DatasetAccessService
+from app.service.dataset_access import DatasetAccessService, allows_member_edits
 from app.service.embargo_termination import EmbargoTermination
 
 
@@ -198,6 +198,7 @@ class DatasetService:
         now = utcnow()
         adapted.owner_id = dataset_db.owner_id
         adapted.embargo = self._access.embargo_of(dataset_db, now)
+        adapted.members_can_edit = allows_member_edits(dataset_db)
         adapted.access = self._access.access_flags(
             user_id=user_id,
             dataset=dataset_db,

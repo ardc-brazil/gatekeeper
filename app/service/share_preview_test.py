@@ -108,3 +108,19 @@ class TestStateExtras(ShareServiceTestCase):
         self.assertEqual(tenancy.name, "Data Amazon")
         self.assertEqual(tenancy.path, "datamap/production/data-amazon")
         self.assertEqual(tenancy.members, 14)
+
+    def test_the_tenancy_row_says_what_members_can_do(self):
+        self.invitations.list_for_dataset.return_value = []
+        self.anonymous_links.list_with_views.return_value = []
+        self.users.count_in_tenancy.return_value = 14
+        self.dataset.embargo_until = None
+
+        self.assertTrue(
+            self.service.state(self.dataset.id, OWNER).tenancy.members_can_edit
+        )
+
+        self.dataset.members_can_edit = False
+
+        self.assertFalse(
+            self.service.state(self.dataset.id, OWNER).tenancy.members_can_edit
+        )

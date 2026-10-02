@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 
 class DataFileResponse(BaseModel):
@@ -96,6 +96,9 @@ class DatasetGetResponse(BaseModel):
     visibility: Optional[str] = Field(None, title="Visibility status")
     embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
     access: Optional[AccessResponse] = Field(None, title="What the caller may do")
+    members_can_edit: bool = Field(
+        True, title="Members of the tenancy may edit when no embargo is active"
+    )
     owner: Optional[OwnerResponse] = Field(None, title="Owner")
 
 
@@ -131,6 +134,9 @@ class DatasetVersionGetResponse(BaseModel):
     visibility: Optional[str] = Field(None, title="Visibility status")
     embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
     access: Optional[AccessResponse] = Field(None, title="What the caller may do")
+    members_can_edit: bool = Field(
+        True, title="Members of the tenancy may edit when no embargo is active"
+    )
     owner: Optional[OwnerResponse] = Field(None, title="Owner")
 
 
@@ -317,3 +323,16 @@ class AccessHistoryEntryResponse(BaseModel):
 
 class AccessHistoryResponse(BaseModel):
     items: list[AccessHistoryEntryResponse]
+
+
+class MembersAccessRequest(BaseModel):
+    members_can_edit: StrictBool = Field(
+        ..., title="Members of the tenancy may edit (true) or only read (false)"
+    )
+
+
+class MembersAccessResponse(BaseModel):
+    members_can_edit: bool = Field(
+        ..., title="Members of the tenancy may edit when no embargo is active"
+    )
+    access: AccessResponse = Field(..., title="What the caller may do")

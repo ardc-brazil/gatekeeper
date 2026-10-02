@@ -174,6 +174,7 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
         embargo=_adapt_embargo(dataset.embargo),
         access=_adapt_access(dataset.access),
+        members_can_edit=dataset.members_can_edit,
         owner=_adapt_owner(dataset),
     )
 
@@ -197,6 +198,7 @@ def _adapt_minimal_dataset(dataset: Dataset) -> DatasetGetResponse:
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
         embargo=_adapt_embargo(dataset.embargo),
         access=_adapt_access(dataset.access),
+        members_can_edit=dataset.members_can_edit,
     )
 
 
@@ -214,6 +216,7 @@ def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetVersionGetRespon
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
         embargo=_adapt_embargo(dataset.embargo),
         access=_adapt_access(dataset.access),
+        members_can_edit=dataset.members_can_edit,
         owner=_adapt_owner(dataset),
     )
 

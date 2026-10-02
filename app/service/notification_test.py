@@ -72,6 +72,7 @@ class TestQueueDue(unittest.TestCase):
             owner_id=self.owner.id,
             tenancy="datamap/production/data-amazon",
             embargo_until=NOW + timedelta(days=4, hours=6),
+            members_can_edit=True,
             versions=[],
         )
         self.permissions.list_for_dataset.return_value = [
@@ -98,6 +99,7 @@ class TestQueueDue(unittest.TestCase):
             owner_id=self.owner.id,
             tenancy="datamap/production/data-amazon",
             embargo_until=NOW - timedelta(minutes=3),
+            members_can_edit=True,
             versions=list(versions),
         )
 
@@ -233,6 +235,7 @@ class TestQueueDue(unittest.TestCase):
             owner_id=self.owner.id,
             tenancy="datamap/production/data-amazon",
             embargo_until=NOW + timedelta(days=4, hours=6),
+            members_can_edit=True,
             versions=[],
         )
         self.repository.datasets_with_reminders_due.return_value = [
@@ -347,3 +350,26 @@ class TestQueueDue(unittest.TestCase):
         self.service.queue_due(NOW)
 
         self.assert_every_queued_message_renders(expected=10)
+
+    def test_the_reminder_says_what_members_get_when_the_embargo_ends(self):
+        self.dataset.members_can_edit = False
+
+        self.service.queue_due(NOW)
+
+        contexts = [
+            call.kwargs["context"] for call in self.email.enqueue.call_args_list
+        ]
+        self.assertEqual(len(contexts), 2)
+        self.assertEqual({context["members_can_edit"] for context in contexts}, {False})
+
+    def test_the_end_notice_says_what_members_got_back(self):
+        ended = self.ended()
+        self.repository.datasets_with_reminders_due.return_value = []
+        self.repository.datasets_expired_unannounced.return_value = [ended]
+
+        self.service.queue_due(NOW)
+
+        contexts = [
+            call.kwargs["context"] for call in self.email.enqueue.call_args_list
+        ]
+        self.assertEqual({context["members_can_edit"] for context in contexts}, {True})

@@ -7,6 +7,7 @@
 {% set days = days_remaining ~ (" day" if days_remaining == 1 else " days") %}
 {{ m.heading(("Your embargo ends in " if is_owner else "An embargo ends in ") ~ days) }}
 {% call m.paragraph() %}On {{ m.strong(embargo_until_date) }} the files of the dataset below become available to every member of {{ m.strong(tenancy_name) }}.{% if is_owner %} Nothing becomes public: the public page only appears when you make the DOI findable.{% else %} Your own access doesn't change.{% endif %}{% endcall %}
+{% call m.paragraph() %}{% if members_can_edit %}When the embargo ends, members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}When the embargo ends, members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}When the embargo ends, members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}{% endcall %}
 {% set rows = [{"label": "Dataset", "value": dataset_name}, {"label": "Embargo ends", "value": embargo_until_date ~ " · " ~ days}] %}
 {% if is_owner %}
 {% if people_with_access %}{% set rows = rows + [{"label": "People with access", "value": people_with_access | join(", ")}] %}{% endif %}

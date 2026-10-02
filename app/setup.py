@@ -25,6 +25,7 @@ from app.controller.v1.dataset.dataset import router as dataset_router
 from app.controller.v1.dataset.dataset_snapshot import router as dataset_snapshot_router
 from app.controller.v1.dataset.embargo import router as embargo_router
 from app.controller.v1.dataset.embargo_status import router as embargo_status_router
+from app.controller.v1.dataset.members_access import router as members_access_router
 from app.controller.v1.dataset.share import router as share_router
 from app.controller.v1.dataset.anonymous_link import router as anonymous_link_router
 from app.controller.v1.invitation.invitation import router as invitation_router
@@ -202,6 +203,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(dataset_snapshot_router, prefix="/v1")
     fastAPIApp.include_router(embargo_router, prefix="/v1")
     fastAPIApp.include_router(embargo_status_router, prefix="/v1")
+    fastAPIApp.include_router(members_access_router, prefix="/v1")
     fastAPIApp.include_router(tenancies_router, prefix="/v1")
     fastAPIApp.include_router(user_router, prefix="/v1")
     fastAPIApp.include_router(client_router, prefix="/v1")

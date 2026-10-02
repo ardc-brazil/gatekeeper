@@ -61,6 +61,7 @@ class TenancyAccessResponse(BaseModel):
     name: str
     path: str
     members: int
+    members_can_edit: bool = True
 
 
 class ShareStateResponse(BaseModel):
@@ -181,6 +182,7 @@ def adapt_share_state(state: ShareState) -> ShareStateResponse:
             name=state.tenancy.name,
             path=state.tenancy.path,
             members=state.tenancy.members,
+            members_can_edit=state.tenancy.members_can_edit,
         )
         if state.tenancy
         else None,
