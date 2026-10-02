@@ -28,6 +28,7 @@ from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 from app.service.dataset import DatasetService
+from app.service.dataset_access import allows_member_edits
 from app.service.email import EmailService
 from app.service.email_format import long_date, tenancy_display_name
 from app.service.email_template import EmailTemplate
@@ -206,6 +207,7 @@ class ShareService:
                 name=tenancy_display_name(dataset.tenancy),
                 path=dataset.tenancy,
                 members=self._users.count_in_tenancy(dataset.tenancy),
+                members_can_edit=allows_member_edits(dataset),
             )
         return ShareState(
             owner=self._share_user(dataset.owner_id),

@@ -10,14 +10,16 @@ from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.db.dataset_access import DatasetPermission as DatasetPermissionDBModel
 from app.model.dataset_access import AccessLevel, DatasetAction
 from app.repository.permission import PermissionRepository
-from app.service.dataset_access import DatasetAccessService
+from app.service.dataset_access import DatasetAccessService, allows_member_edits
 from app.service.user import UserService
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
 TENANCY = "datamap/production/data-amazon"
 
 
-def _dataset(owner_id=None, until=None, visible=False, tenancy=TENANCY):
+def _dataset(
+    owner_id=None, until=None, visible=False, tenancy=TENANCY, members_can_edit=True
+):
     return DatasetDBModel(
         id=uuid4(),
         name="d",
@@ -27,6 +29,7 @@ def _dataset(owner_id=None, until=None, visible=False, tenancy=TENANCY):
         embargo_until=until,
         embargo_metadata_visible=visible,
         embargo_note=None,
+        members_can_edit=members_can_edit,
     )
 
 
@@ -289,3 +292,127 @@ class TestDatasetAccessService(unittest.TestCase):
         self.assertTrue(flags.can_extend_embargo)
         self.assertFalse(flags.can_manage_embargo)
         self.assertFalse(flags.can_delete)
+
+
+class TestMembersAccess(unittest.TestCase):
+    def setUp(self):
+        self.permissions = Mock(spec=PermissionRepository)
+        self.permissions.fetch.return_value = None
+        self.users = Mock(spec=UserService)
+        self.users.enforce.return_value = True
+        self.access = DatasetAccessService(
+            permission_repository=self.permissions, user_service=self.users
+        )
+        self.user_id = uuid4()
+
+    def _grant(self, level: str):
+        self.permissions.fetch.return_value = DatasetPermissionDBModel(
+            dataset_id=uuid4(), user_id=self.user_id, level=level
+        )
+
+    def _permits(self, dataset, action, tenancies=(TENANCY,)):
+        return self.access.permits(self.user_id, dataset, list(tenancies), action, NOW)
+
+    def test_read_only_members_still_read_and_download(self):
+        dataset = _dataset(owner_id=uuid4(), members_can_edit=False)
+
+        self.assertTrue(self._permits(dataset, DatasetAction.READ_METADATA))
+        self.assertTrue(self._permits(dataset, DatasetAction.READ_FILES))
+
+    def test_read_only_members_neither_write_nor_delete_whatever_their_role(self):
+        dataset = _dataset(owner_id=uuid4(), members_can_edit=False)
+
+        self.assertFalse(self._permits(dataset, DatasetAction.WRITE))
+        self.assertFalse(self._permits(dataset, DatasetAction.DELETE))
+        asked = [call.kwargs["action"] for call in self.users.enforce.call_args_list]
+        self.assertNotIn("PUT", asked)
+        self.assertNotIn("DELETE", asked)
+
+    def test_by_default_members_write_and_delete_as_their_role_allows(self):
+        dataset = _dataset(owner_id=uuid4())
+
+        self.assertTrue(self._permits(dataset, DatasetAction.WRITE))
+        self.assertTrue(self._permits(dataset, DatasetAction.DELETE))
+
+    def test_a_read_permission_does_not_borrow_the_roles_write_in_read_only_mode(self):
+        self._grant("read")
+        dataset = _dataset(owner_id=uuid4())
+        self.assertTrue(self._permits(dataset, DatasetAction.WRITE))
+
+        dataset.members_can_edit = False
+
+        self.assertFalse(self._permits(dataset, DatasetAction.WRITE))
+        self.assertTrue(self._permits(dataset, DatasetAction.READ_FILES))
+
+    def test_a_write_permission_still_writes_in_read_only_mode(self):
+        self._grant("write")
+        dataset = _dataset(owner_id=uuid4(), members_can_edit=False)
+
+        self.assertTrue(self._permits(dataset, DatasetAction.WRITE, tenancies=()))
+        self.assertTrue(self._permits(dataset, DatasetAction.WRITE))
+        self.assertFalse(self._permits(dataset, DatasetAction.DELETE))
+
+    def test_the_owner_keeps_everything_in_read_only_mode(self):
+        dataset = _dataset(owner_id=self.user_id, members_can_edit=False)
+
+        flags = self.access.access_flags(
+            self.user_id, dataset, [TENANCY], AccessLevel.OWNER, NOW
+        )
+
+        self.assertTrue(flags.can_edit)
+        self.assertTrue(flags.can_share)
+        self.assertTrue(flags.can_delete)
+
+    def test_the_flags_of_a_read_only_member(self):
+        dataset = _dataset(owner_id=uuid4(), members_can_edit=False)
+
+        flags = self.access.access_flags(
+            self.user_id, dataset, [TENANCY], AccessLevel.TENANCY, NOW
+        )
+
+        self.assertEqual(flags.level, AccessLevel.TENANCY)
+        self.assertFalse(flags.can_edit)
+        self.assertFalse(flags.can_share)
+        self.assertFalse(flags.can_delete)
+        self.assertFalse(flags.can_manage_embargo)
+
+    def test_the_setting_is_inert_during_an_embargo(self):
+        for members_can_edit in (True, False):
+            with self.subTest(members_can_edit=members_can_edit):
+                dataset = _dataset(
+                    owner_id=uuid4(),
+                    until=NOW + timedelta(days=5),
+                    visible=True,
+                    members_can_edit=members_can_edit,
+                )
+
+                self.assertTrue(self._permits(dataset, DatasetAction.READ_METADATA))
+                self.assertFalse(self._permits(dataset, DatasetAction.READ_FILES))
+                self.assertFalse(self._permits(dataset, DatasetAction.WRITE))
+
+    def test_the_setting_decides_what_members_get_back_when_the_embargo_ends(self):
+        ended = NOW - timedelta(seconds=1)
+        read_only = _dataset(owner_id=uuid4(), until=ended, members_can_edit=False)
+        editable = _dataset(owner_id=uuid4(), until=ended, members_can_edit=True)
+
+        self.assertTrue(self._permits(read_only, DatasetAction.READ_FILES))
+        self.assertFalse(self._permits(read_only, DatasetAction.WRITE))
+        self.assertTrue(self._permits(editable, DatasetAction.WRITE))
+
+    def test_a_row_not_yet_flushed_reads_as_the_default(self):
+        dataset = _dataset(owner_id=uuid4())
+        dataset.members_can_edit = None
+
+        self.assertTrue(allows_member_edits(dataset))
+        self.assertTrue(self._permits(dataset, DatasetAction.WRITE))
+        self.assertFalse(allows_member_edits(_dataset(members_can_edit=False)))
+
+    def test_only_the_owner_changes_what_members_can_do(self):
+        dataset = _dataset(owner_id=self.user_id)
+        self.assertTrue(self._permits(dataset, DatasetAction.MANAGE_MEMBERS_ACCESS))
+
+        self._grant("write")
+        others = _dataset(owner_id=uuid4())
+
+        self.assertFalse(self._permits(others, DatasetAction.MANAGE_MEMBERS_ACCESS))
+        self.users.enforce.assert_not_called()

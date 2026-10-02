@@ -6,6 +6,9 @@
 Registering the external DOI {{ doi }} ended the embargo on the dataset below today, {{ ended_on_date }}. Its files are now available to every member of {{ tenancy_name }}, and its public page is published.{% if not is_owner %} Your own access doesn't change.{% endif %}
 
 
+{% if members_can_edit %}Members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}Members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}Members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}
+
+
 Dataset: {{ dataset_name }}
 Files: Now available to every member of {{ tenancy_name }}
 Public page: Published, with the authors
@@ -17,6 +20,9 @@ Anonymous links now lead to the public page.
 {% endif %}
 {% elif is_owner %}
 {% if ended_early %}You ended the embargo on the dataset below early, today, {{ ended_on_date }}.{% else %}The embargo on the dataset below ended today, {{ ended_on_date }}.{% endif %}
+
+
+{% if members_can_edit %}Members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}Members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}Members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}
 
 
 Dataset: {{ dataset_name }}
@@ -45,6 +51,9 @@ Anonymous links keep showing the anonymised page until you publish; then they le
 {% endif %}
 {% else %}
 {% if ended_early %}{{ owner_name }} ended the embargo on the dataset below early, today, {{ ended_on_date }}.{% else %}The embargo on the dataset below ended today, {{ ended_on_date }}.{% endif %} Its files are now available to every member of {{ tenancy_name }}. Your own access doesn't change.
+
+{% if members_can_edit %}Members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}Members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}Members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}
+
 
 Dataset: {{ dataset_name }}
 Owner: {{ owner_name }}{% if owner_email %} · {{ owner_email }}{% endif %}

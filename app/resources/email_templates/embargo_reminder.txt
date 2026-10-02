@@ -7,6 +7,9 @@
 On {{ embargo_until_date }} the files of the dataset below become available to every member of {{ tenancy_name }}.{% if is_owner %} Nothing becomes public: the public page only appears when you make the DOI findable.{% else %} Your own access doesn't change.{% endif %}
 
 
+{% if members_can_edit %}When the embargo ends, members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}When the embargo ends, members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}When the embargo ends, members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}
+
+
 Dataset: {{ dataset_name }}
 Embargo ends: {{ embargo_until_date }} · {{ days }}
 {% if is_owner %}

@@ -3052,6 +3052,33 @@ class TestDatasetService(unittest.TestCase):
         self.assertEqual(no_ext["count"], 1)  # readme only
         self.assertEqual(no_ext["total_size_bytes"], 256)
 
+    def test_every_item_says_whether_members_can_edit(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        read_only = Mock(spec=DatasetDBModel)
+        read_only.versions = []
+        read_only.members_can_edit = False
+        editable = Mock(spec=DatasetDBModel)
+        editable.versions = []
+        editable.members_can_edit = True
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[read_only, editable], total_count=2, page=1, page_size=10
+        )
+
+        with patch.object(
+            self.dataset_service,
+            "_adapt_minimal_dataset",
+            side_effect=lambda dataset: SimpleNamespace(
+                versions=[], current_version=None, version=None
+            ),
+        ):
+            result = self.dataset_service.search_datasets(
+                query=DatasetQuery(minimal=True), user_id=uuid4()
+            )
+
+        self.assertEqual(
+            [item.members_can_edit for item in result.items], [False, True]
+        )
+
 
 def _sample(name: str, **labels) -> float:
     return REGISTRY.get_sample_value(name, labels) or 0.0

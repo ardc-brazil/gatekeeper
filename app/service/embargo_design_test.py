@@ -131,7 +131,9 @@ class TestOwnerName(unittest.TestCase):
             dataset_bucket="b",
         )
         self.owner_id = uuid4()
-        self.repository.fetch.return_value = SimpleNamespace(owner_id=self.owner_id)
+        self.repository.fetch.return_value = SimpleNamespace(
+            owner_id=self.owner_id, members_can_edit=True
+        )
         self.service._determine_tenancies = Mock(return_value=["t"])
         self.service._adapt_dataset = Mock(
             side_effect=lambda dataset: Dataset(name="d", data={})

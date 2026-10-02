@@ -77,6 +77,12 @@ class Dataset(Base):
         server_default=sqlalchemy.false(),
     )
     embargo_note = Column(Text, nullable=True)
+    members_can_edit = Column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=sqlalchemy.true(),
+    )
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
 

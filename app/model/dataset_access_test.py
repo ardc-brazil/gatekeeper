@@ -20,3 +20,13 @@ class TestAccessModel(unittest.TestCase):
 
         with open(module.__file__) as source:
             self.assertNotIn("app.model.embargo", source.read())
+
+    def test_the_members_access_event_and_action_have_their_contract_values(self):
+        from app.model.dataset_access import DatasetAction
+
+        self.assertEqual(
+            AccessEventType.MEMBERS_ACCESS_CHANGED.value, "members_access_changed"
+        )
+        self.assertEqual(
+            DatasetAction.MANAGE_MEMBERS_ACCESS.value, "manage_members_access"
+        )

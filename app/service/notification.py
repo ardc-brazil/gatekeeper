@@ -10,6 +10,7 @@ from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
+from app.service.dataset_access import allows_member_edits
 from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.email import EmailService
 from app.service.email_format import long_date, short_date, tenancy_display_name
@@ -135,6 +136,7 @@ class EmbargoNotificationService:
         base = {
             "dataset_name": dataset.name,
             "tenancy_name": tenancy_display_name(dataset.tenancy),
+            "members_can_edit": allows_member_edits(dataset),
             "owner_name": owner_name,
             "owner_email": owner.email if owner is not None and owner_active else None,
             "anonymous_link_count": self._links.count_active(dataset.id),
