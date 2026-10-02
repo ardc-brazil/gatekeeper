@@ -1,0 +1,45 @@
+{% extends "_transactional.txt" %}
+{% block content %}
+{% set days = days_remaining ~ (" day" if days_remaining == 1 else " days") %}
+{% if is_owner %}Your embargo ends in {{ days }}.{% else %}An embargo ends in {{ days }}.{% endif %}
+
+
+On {{ embargo_until_date }} the files of the dataset below become available to every member of {{ tenancy_name }}.{% if is_owner %} Nothing becomes public: the public page only appears when you make the DOI findable.{% else %} Your own access doesn't change.{% endif %}
+
+
+Dataset: {{ dataset_name }}
+Embargo ends: {{ embargo_until_date }} · {{ days }}
+{% if is_owner %}
+{% if people_with_access %}
+People with access: {{ people_with_access | join(", ") }}
+{% endif %}
+{% if anonymous_link_count %}
+Anonymous links: {{ anonymous_link_count }} · keep working until you publish
+{% endif %}
+{% else %}
+Owner: {{ owner_name }}{% if owner_email and owner_active %} · {{ owner_email }}{% endif %}{% if not owner_active %} · account no longer active{% endif %}
+
+{% endif %}
+
+{% if is_owner %}
+Still under review? You can extend the embargo by up to 90 days at a time, as many times as needed. Each extension is recorded with your name and the date.
+
+Review the embargo: {{ dataset_url }}
+
+{% if later_offsets %}You'll hear from us again {{ later_offsets[:-1] | join(", ") }}{% if later_offsets | length > 1 %} and {% endif %}{{ later_offsets[-1] }} day{{ "" if later_offsets[-1] == 1 else "s" }} before it ends.{% else %}This is the last reminder.{% endif %}{% if others_notified %} The other people with access get the same reminders.{% endif %}
+
+{% elif can_extend %}
+If the article is still under review, the embargo can be extended by up to 90 days at a time. The owner's account is no longer active, so anyone with access can extend it — you included.
+
+Review the embargo: {{ dataset_url }}
+
+You're told because, if the owner is unavailable, someone has to know the dataset still needs to be published after the embargo.
+{% else %}
+If the article is still under review, the embargo can be extended by up to 90 days at a time. {{ owner_name }}, the owner, is the person who can do that.
+
+Open the dataset: {{ dataset_url }}
+
+You're told because, if the owner is unavailable, someone has to know the dataset still needs to be published after the embargo.
+{% endif %}
+{% endblock %}
+{% block why %}{% if is_owner %}You received this email because you own this dataset.{% else %}You received this email because {{ shared_by_name or owner_name }} shared this dataset with you.{% endif %}{% endblock %}

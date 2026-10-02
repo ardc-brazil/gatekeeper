@@ -1,0 +1,20 @@
+{% extends "_transactional.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ inviter_name }} shared a dataset with you{% endblock %}
+{% block preheader %}{{ inviter_name }} gave you access to "{{ dataset_name }}"{% if embargo_until_date %}, a dataset under embargo on DataMap{% else %} on DataMap{% endif %}.{% endblock %}
+{% block label %}Invitation{% endblock %}
+{% block content %}
+{% set access = "Read, download and edit" if level == "write" else "Read and download" %}
+{{ m.heading(inviter_name ~ " shared a dataset with you") }}
+{% call m.paragraph() %}{{ m.strong(inviter_name) }}{% if inviter_email %} ({{ inviter_email }}){% endif %} gave you access to a dataset on DataMap.{% if embargo_until_date %} It is under embargo: until it ends, only the owner and the people they share it with can see its files.{% endif %}{% endcall %}
+{% set rows = [{"label": "Dataset", "value": dataset_name}, {"label": "Access", "value": access}] %}
+{% if embargo_until_date %}{% set rows = rows + [{"label": "Embargo ends", "value": embargo_until_date}] %}{% endif %}
+{% if note %}{% set rows = rows + [{"label": "Note from " ~ inviter_name.split()[0], "value": note}] %}{% endif %}
+{{ m.details(rows) }}
+{{ m.button("Open the dataset", link) }}
+{{ m.spacer(16) }}
+{% call m.note(bottom=16) %}Sign in with any account &mdash; ORCID or GitHub. The link works once, for whoever opens it; {{ inviter_name.split()[0] }} will see which account accepted.{% if embargo_until_date %} Your access stays after the embargo ends.{% endif %}{% endcall %}
+{% call m.note(bottom=16) %}If you weren't expecting this, you can ignore this email.{% endcall %}
+{{ m.link_fallback(link) }}
+{% endblock %}
+{% block reason %}You received this email because {{ inviter_email or inviter_name }} invited {{ invited_address }} to a dataset on DataMap.{% endblock %}

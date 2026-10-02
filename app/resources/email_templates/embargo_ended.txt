@@ -1,0 +1,61 @@
+{% extends "_transactional.txt" %}
+{% block content %}
+{{ "Your embargo has ended." if is_owner else "An embargo has ended." }}
+
+{% if ended_by_manual_doi %}
+Registering the external DOI {{ doi }} ended the embargo on the dataset below today, {{ ended_on_date }}. Its files are now available to every member of {{ tenancy_name }}, and its public page is published.{% if not is_owner %} Your own access doesn't change.{% endif %}
+
+
+Dataset: {{ dataset_name }}
+Files: Now available to every member of {{ tenancy_name }}
+Public page: Published, with the authors
+
+Open the dataset: {{ dataset_url }}
+{% if anonymous_link_count and is_owner %}
+
+Anonymous links now lead to the public page.
+{% endif %}
+{% elif is_owner %}
+{% if ended_early %}You ended the embargo on the dataset below early, today, {{ ended_on_date }}.{% else %}The embargo on the dataset below ended today, {{ ended_on_date }}.{% endif %}
+
+
+Dataset: {{ dataset_name }}
+Files: Now available to every member of {{ tenancy_name }}
+DOI: {% if doi_registered %}{{ doi }} · registered, not findable{% elif doi %}{{ doi }} · not registered yet{% else %}None yet{% endif %}
+
+
+Nothing has been made public.
+
+{% if doi_registered %}
+Your DOI is registered but not findable. That means it resolves — anyone with the number lands on DataMap — but DataCite doesn't index it: the dataset won't appear in DataCite search, in Google Dataset Search or in any service that harvests from them, and it has no public page yet.
+
+To publish it, make the DOI findable from the dataset page. That creates the public page with the authors. Nothing will do this for you.
+
+Make the DOI findable: {{ dataset_url }}
+{% else %}
+To publish it, create a DOI from the dataset page and make it findable. That creates the public page with the authors. Nothing will do this for you.
+
+Open the dataset: {{ dataset_url }}
+{% endif %}
+
+Not ready to publish? Leave it as it is. The files stay available to {{ tenancy_name }} members and to the people you shared with. This reminder stays on the dataset page until you decide.
+{% if anonymous_link_count %}
+
+Anonymous links keep showing the anonymised page until you publish; then they lead to the public page.
+{% endif %}
+{% else %}
+{% if ended_early %}{{ owner_name }} ended the embargo on the dataset below early, today, {{ ended_on_date }}.{% else %}The embargo on the dataset below ended today, {{ ended_on_date }}.{% endif %} Its files are now available to every member of {{ tenancy_name }}. Your own access doesn't change.
+
+Dataset: {{ dataset_name }}
+Owner: {{ owner_name }}{% if owner_email %} · {{ owner_email }}{% endif %}
+
+{% if doi_registered %}
+DOI: {{ doi }} · registered, not findable
+{% endif %}
+
+Nothing has been made public yet. The dataset gets its public page when {{ owner_name }} makes the DOI findable — a manual step only the owner can take. If you're co-author, this may be a good moment to check with them.
+
+Open the dataset: {{ dataset_url }}
+{% endif %}
+{% endblock %}
+{% block why %}{% if is_owner %}You received this email because you own this dataset.{% else %}You received this email because {{ shared_by_name or owner_name }} shared this dataset with you.{% endif %}{% endblock %}

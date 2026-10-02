@@ -1,0 +1,4 @@
+{% extends "base.txt" %}
+{% block reason %}{% block why %}{% endblock %}
+
+This is a transactional message about a dataset you have access to; it is sent to everyone the dataset depends on. Questions? Reply to this email or visit {{ site_url }}/project/support.{% endblock %}
