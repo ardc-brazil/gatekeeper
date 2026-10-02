@@ -692,13 +692,37 @@ class TestWhatTheDesignAdds:
         detail = http_client.get(f"/datasets/{dataset['id']}", headers=owner)
 
         assert_status_code(detail, 200)
-        assert detail.json()["owner"]["name"]
+        assert detail.json()["owner"]["id"] == config.user_id
+        assert detail.json()["owner"]["name"] == "Integration Test User"
+
+        listed = http_client.get(
+            "/datasets/", params={"full_text": dataset["name"]}, headers=owner
+        )
+
+        assert_status_code(listed, 200)
+        items = listed.json()["content"]
+        assert len(items) == 1
+        assert items[0]["owner"] is None
 
     def test_a_tenancy_member_cannot_read_the_history(self, http_client, owner, member):
         dataset = create_dataset(http_client, owner)
         set_embargo(http_client, dataset["id"], owner, visible=True)
         _, headers = member
 
-        assert http_client.get(
+        response = http_client.get(
             f"/datasets/{dataset['id']}/access-events", headers=headers
-        ).status_code in (403, 404)
+        )
+
+        assert_status_code(response, 403)
+
+    def test_a_tenancy_editor_cannot_read_the_history_without_an_embargo(
+        self, http_client, owner, member
+    ):
+        dataset = create_dataset(http_client, owner)
+        _, headers = member
+
+        response = http_client.get(
+            f"/datasets/{dataset['id']}/access-events", headers=headers
+        )
+
+        assert_status_code(response, 403)

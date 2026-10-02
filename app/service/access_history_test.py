@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 
+from app.exception.forbidden import ForbiddenException
 from app.model.dataset_access import AccessLevel, DatasetAction
 from app.repository.access_event import AccessEventRepository
 from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
@@ -57,15 +58,33 @@ class TestAccessHistory(unittest.TestCase):
             anonymous_link_repository=self.links,
         )
 
-    def test_reading_the_history_needs_write_access(self):
+    def test_reading_the_history_checks_visibility_not_write_access(self):
         self.events.list_for_dataset.return_value = []
 
         self.service.list(self.dataset.id, self.owner, [])
 
         self.assertEqual(
             self.datasets.fetch_authorized.call_args.kwargs["action"],
-            DatasetAction.WRITE,
+            DatasetAction.READ_METADATA,
         )
+
+    def test_a_tenancy_level_caller_is_forbidden(self):
+        self.datasets.fetch_authorized.return_value = (
+            self.dataset,
+            [],
+            AccessLevel.TENANCY,
+        )
+        self.events.list_for_dataset.return_value = []
+
+        with self.assertRaises(ForbiddenException):
+            self.service.list(self.dataset.id, self.owner, [])
+
+    def test_owner_and_write_levels_can_read(self):
+        self.events.list_for_dataset.return_value = []
+
+        for level in (AccessLevel.OWNER, AccessLevel.WRITE):
+            self.datasets.fetch_authorized.return_value = (self.dataset, [], level)
+            self.assertEqual(self.service.list(self.dataset.id, self.owner, []), [])
 
     def test_entries_name_who_acted_and_on_whom(self):
         link_id, invitation_id = uuid4(), uuid4()
@@ -108,9 +127,33 @@ class TestAccessHistory(unittest.TestCase):
         self.assertEqual(entries[3].note, "Second round")
         self.assertEqual(entries[3].new_value, {"until": "b"})
 
-    def test_at_most_a_hundred_entries_are_returned(self):
+    def test_the_history_is_limited_at_the_repository(self):
+        self.events.list_for_dataset.return_value = []
+
+        self.service.list(self.dataset.id, self.owner, [])
+
+        self.events.list_for_dataset.assert_called_once_with(self.dataset.id, limit=100)
+
+    def test_user_lookups_are_memoised_per_call(self):
         self.events.list_for_dataset.return_value = [
-            event("expired") for _ in range(150)
+            event("expired", self.owner) for _ in range(100)
         ]
 
-        self.assertEqual(len(self.service.list(self.dataset.id, self.owner, [])), 100)
+        self.service.list(self.dataset.id, self.owner, [])
+
+        self.assertEqual(self.users.fetch_by_id.call_count, 1)
+
+    def test_an_invitation_with_neither_email_nor_orcid_names_no_one(self):
+        invitation_id = uuid4()
+        self.invitations.fetch.return_value = SimpleNamespace(email=None, orcid=None)
+        self.events.list_for_dataset.return_value = [
+            event(
+                "invitation_created",
+                self.owner,
+                new={"invitation_id": str(invitation_id), "level": "read"},
+            )
+        ]
+
+        entries = self.service.list(self.dataset.id, self.owner, [])
+
+        self.assertIsNone(entries[0].subject)

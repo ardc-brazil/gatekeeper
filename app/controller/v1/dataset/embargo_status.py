@@ -19,6 +19,5 @@ def get_embargo_status(
     version: str | None = None,
     service: EmbargoService = Depends(Provide[Container.embargo_service]),
 ) -> EmbargoStatusResponse:
-    embargoed, until = service.status(dataset_id=dataset_id)
-    doi = service.doi_for(dataset_id, version) if embargoed and version else None
+    embargoed, until, doi = service.status_with_doi(dataset_id, version)
     return EmbargoStatusResponse(embargoed=embargoed, until=until, doi=doi)

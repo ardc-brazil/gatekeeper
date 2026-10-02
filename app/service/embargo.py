@@ -211,21 +211,34 @@ class EmbargoService:
             )
         return self._access.embargo_of(dataset, now)
 
-    def doi_for(self, dataset_id: UUID, version_name: str) -> str | None:
-        dataset = self._repository.fetch(
+    def _fetch_for_status(self, dataset_id: UUID) -> DatasetDBModel | None:
+        return self._repository.fetch(
             dataset_id=dataset_id, version_is_enabled=False, restrict_by_tenancy=False
         )
-        if dataset is None:
-            return None
+
+    def _doi_in(self, dataset: DatasetDBModel, version_name: str) -> str | None:
         for version in dataset.versions:
             if version.name == version_name and version.doi is not None:
                 return version.doi.identifier
         return None
 
+    def doi_for(self, dataset_id: UUID, version_name: str) -> str | None:
+        dataset = self._fetch_for_status(dataset_id)
+        if dataset is None:
+            return None
+        return self._doi_in(dataset, version_name)
+
     def status(self, dataset_id: UUID) -> tuple[bool, datetime | None]:
-        dataset = self._repository.fetch(
-            dataset_id=dataset_id, version_is_enabled=False, restrict_by_tenancy=False
-        )
+        dataset = self._fetch_for_status(dataset_id)
         if dataset is None or not self._access.embargo_active(dataset):
             return False, None
         return True, dataset.embargo_until
+
+    def status_with_doi(
+        self, dataset_id: UUID, version_name: str | None
+    ) -> tuple[bool, datetime | None, str | None]:
+        dataset = self._fetch_for_status(dataset_id)
+        if dataset is None or not self._access.embargo_active(dataset):
+            return False, None, None
+        doi = self._doi_in(dataset, version_name) if version_name else None
+        return True, dataset.embargo_until, doi

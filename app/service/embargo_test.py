@@ -243,3 +243,31 @@ class TestEmbargoService(unittest.TestCase):
         self.assertEqual(
             self.service.status(self.dataset.id), (True, NOW + timedelta(days=10))
         )
+
+    def test_status_with_doi_of_an_unknown_dataset_reveals_nothing(self):
+        self.repository.fetch.return_value = None
+        self.assertEqual(
+            self.service.status_with_doi(uuid4(), "1"), (False, None, None)
+        )
+
+    def test_status_with_doi_fetches_the_dataset_once(self):
+        self.dataset.embargo_until = NOW + timedelta(days=10)
+        self.dataset.versions = [
+            DatasetVersionDBModel(
+                name="1", doi=DOIDBModel(identifier="10.123", mode="AUTO", doi={})
+            )
+        ]
+        self.repository.fetch.return_value = self.dataset
+
+        result = self.service.status_with_doi(self.dataset.id, "1")
+
+        self.assertEqual(result, (True, NOW + timedelta(days=10), "10.123"))
+        self.repository.fetch.assert_called_once()
+
+    def test_status_with_doi_without_a_version_skips_the_doi_lookup(self):
+        self.dataset.embargo_until = NOW + timedelta(days=10)
+        self.repository.fetch.return_value = self.dataset
+
+        result = self.service.status_with_doi(self.dataset.id, None)
+
+        self.assertEqual(result, (True, NOW + timedelta(days=10), None))
