@@ -11,12 +11,13 @@ Spec: `docs/rfcs/003-dataset-embargo.md`. This file fixes the interfaces the gat
 | 03 | `2026-09-30-embargo-03-gatekeeper-sharing-anonymous-links.md` | gatekeeper | 01, 02 |
 | 04 | `2026-09-30-embargo-04-archivist-dispatch.md` | archivist | this file (route only) |
 | 05 | `2026-09-30-embargo-05-webapp.md` | datamap-webapp | this file; merges after 02 and 03 |
+| 06 | `2026-10-02-embargo-06-members-access.md` | gatekeeper, datamap-webapp | 02, 03, 05 |
 
-01, 02 and 04 start together. 05 starts together too, against this file, with the gatekeeper mocked in its tests. 03 starts when 01 and 02 are merged into the feature branch.
+01, 02 and 04 start together. 05 starts together too, against this file, with the gatekeeper mocked in its tests. 03 starts when 01 and 02 are merged into the feature branch. 06 starts when 03 is merged into the gatekeeper feature branch and 05 into the webapp's; its gatekeeper tasks merge before its webapp tasks.
 
-Migrations form one chain and merge in this order, never re-pointed: 01 `d4e5f6a7b8c9` (revises the current head `c3h4i5j6k7l8`) → 02 `e5f6a7b8c9d0` → 03 `f6a7b8c9d0e1`. Plans 01, 02 and 03 merge into the gatekeeper in that order.
+Migrations form one chain and merge in this order, never re-pointed: 01 `d4e5f6a7b8c9` (revises the current head `c3h4i5j6k7l8`) → 02 `e5f6a7b8c9d0` → 03 `f6a7b8c9d0e1` → 06 `a7b8c9d0e1f2`. Plans 01, 02, 03 and 06 merge into the gatekeeper in that order.
 
-Deploy order: gatekeeper (01+02+03) → archivist (04) → webapp (05) → nginx change for `/doi/` (last task of 05, file in the gatekeeper repo). `EMAIL_ENABLED` is switched on only after all of it is verified in production.
+Deploy order: gatekeeper (01+02+03, then 06) → archivist (04) → webapp (05, then 06) → nginx change for `/doi/` (last task of 05, file in the gatekeeper repo). `EMAIL_ENABLED` is switched on only after all of it is verified in production.
 
 ## Conventions
 
@@ -84,6 +85,8 @@ Every dataset object returned by `GET /datasets/{id}`, `GET /datasets/` (items, 
 - When the embargo is active and the caller's level is `tenancy` (open mode), every version's file list is returned empty and the version gains `"files_withheld": true` with `"files_summary": {"count": N, "total_size_bytes": B}`. Otherwise `files_withheld` is `false` and `files_summary` is still present.
 
 `GET /datasets/` accepts `shared=true`: only datasets the caller holds a permission on, in any tenancy. Items have the same shape.
+
+The default `GET /datasets/` (no `shared`) lists the datasets the caller owns or holds a permission on in any tenancy, not only in the selected one, plus those of the selected tenancies that the embargo leaves visible (plan 02 Task 8).
 
 The detail payloads (`GET /datasets/{id}`, `GET /datasets/{id}/versions/{v}`; not list items) also carry the owner, whose name the dataset page shows to members and collaborators (design §1e) — plan 03, Task 13:
 
@@ -187,7 +190,11 @@ Client-only, with `X-User-Id`:
 // InvitationPreview — the invitation page before and after it is used (design §1i)
 {"state": "pending"|"accepted", "dataset_name": "…", "inviter_name": "Luciana Rizzo",
  "owner_name": "Luciana Rizzo", "level": "read", "invited_as": "fernanda@inpe.br"|"ORCID 0000-…",
- "embargo_until": ts|null, "accepted_at": ts|null}
+ "embargo_until": ts|null, "accepted_at": ts|null,
+ "dataset_id": "…"|null}
+// dataset_id: present when state is "accepted", so the used-invitation page can link to the
+// dataset; null while pending. Asked for by the plan 05 review; plan 03 Task 12 builds the
+// preview, and this file wins over that task's code, which predates the field.
 ```
 
 The webapp calls `claim` right after sign-in (NextAuth `jwt` callback, `trigger == "signIn"`), and `accept` from the invitation page. Granting a permission or accepting an invitation adds the Casbin grouping `g, <user_id>, datasets_shared` when the user lacks it.
@@ -434,3 +441,92 @@ Every screen follows the Claude Design canvas vendored at `docs/design/rfc-003-e
 | `/invitations/[token]` | logged in (redirect to login with callback) | `GET /invitations/{token}` to show the invitation, or that it was used (§1i); `POST /invitations/accept` on "Accept", then redirect to the dataset |
 
 nginx (`infrastructure/nginx/datamap.conf` in the gatekeeper repo): the `location ~ ^/doi/datasets/...` block stops rewriting and proxies to the webapp, after the webapp page is deployed.
+
+## Members' access (plan 06)
+
+A per-dataset setting, the owner's alone: whether the members of the dataset's tenancy may only read it, or read and edit it as their workspace role allows. It changes what a member may do when no embargo is active; reads never change. During an active embargo it is inert, since the embargo already removes the members' access (plan 02), and it decides what they get back when the embargo ends. Permissions given through Share are untouched by it.
+
+| `members_can_edit` | Member of the tenancy, no active embargo | Member of the tenancy, active embargo |
+|---|---|---|
+| `true` (default, today's behaviour) | the role decides reading, downloading, writing and deleting | as plan 02: badge only (open mode) or 404 (hidden mode) |
+| `false` | the role decides reading and downloading; no write, no delete | same as `true` |
+
+"Write" is every route checked as `DatasetAction.WRITE`: metadata, versions, uploads (the TUS hook), DOIs, sharing and anonymous links (`can_share` follows `can_edit`), the access history. "Delete" is `DatasetAction.DELETE`. With `false`, writes stay with the owner and `write` permission holders, delete with the owner. A member who also holds a `read` permission is a member for this purpose: the permission gives no write, and the role gives none either. Search is unchanged.
+
+Storage: `datasets.members_can_edit boolean NOT NULL DEFAULT true`, migration `a7b8c9d0e1f2` (revises `f6a7b8c9d0e1`).
+
+The rule, in `DatasetAccessService._permits`, last branch (tenancy member, no active embargo):
+
+```python
+if action in (DatasetAction.WRITE, DatasetAction.DELETE) and not allows_member_edits(dataset):
+    return False
+return self._role_allows(user_id, _ROLE_METHOD[action])
+```
+
+`access.can_edit`, `can_share` and `can_delete` follow the rule: for a caller whose level is `tenancy` they are all `false` while `members_can_edit` is `false`. For the owner and permission holders nothing changes.
+
+Payloads. Every dataset object of §Dataset payload additions (`GET /datasets/{id}`, `GET /datasets/{id}/versions/{v}`, `GET /datasets/` items including `minimal=true`) gains:
+
+```json
+"members_can_edit": true
+```
+
+`ShareState.tenancy` (plan 03 Task 12) gains the same field, and is still `null` while an embargo is active:
+
+```json
+"tenancy": {"name": "Data Amazon", "path": "datamap/production/data-amazon", "members": 14, "members_can_edit": true}|null
+```
+
+User route:
+
+| Verb | Path | Body | Who | Success | Errors |
+|---|---|---|---|---|---|
+| PUT | `/datasets/{id}/members-access` | `{"members_can_edit": bool}` (strict boolean) | owner | `200 {"members_can_edit": bool, "access": {…}}` — `access` as in §Dataset payload additions, for the caller | `404` who may not see the dataset; `403 {"detail": "forbidden"}` who sees it and is not the owner; `422` a body without a boolean |
+
+It answers the same with or without an active embargo. A change appends one `dataset_access_events` row through `DatasetAccessAudit`; setting the value it already has appends nothing:
+
+```json
+{"event_type": "members_access_changed", "old_value": {"members_can_edit": true},
+ "new_value": {"members_can_edit": false}, "changed_by": "<owner>", "note": null}
+```
+
+`GET /datasets/{id}/access-events` returns it like any other entry, with `subject: null`; `datamap_dataset_access_events_total{event="members_access_changed"}` counts it. The route sits under `/api/v1/datasets/<uuid>/…`, which the `datasets_write` and `datasets_shared` policies already cover: no seed change.
+
+Gatekeeper internal interface:
+
+```python
+# plan 06 — app/model/dataset_access.py
+class DatasetAction(enum.Enum): ..., MANAGE_MEMBERS_ACCESS = "manage_members_access"   # owner only
+class AccessEventType(str, enum.Enum): ..., MEMBERS_ACCESS_CHANGED = "members_access_changed"
+@dataclass class MembersAccess: members_can_edit: bool; access: DatasetAccess
+
+# plan 06 — app/model/db/dataset.py: Dataset.members_can_edit; app/model/dataset.py: Dataset.members_can_edit: bool = True
+
+# plan 06 — app/service/dataset_access.py
+def allows_member_edits(dataset) -> bool   # the column; None (a row not yet flushed) reads as the default, true
+
+# plan 06 — app/service/members_access.py                     provider: members_access_service
+class MembersAccessService:
+    def set(self, dataset_id: UUID, user_id: UUID, tenancies: list[str] | None,
+            members_can_edit: bool) -> MembersAccess
+        # fetch_authorized(action=MANAGE_MEMBERS_ACCESS); upserts and records only on a change
+```
+
+Emails (plan 03's templates). `embargo_reminder` and `embargo_ended` take a required context key `members_can_edit` (bool), which `EmbargoNotificationService` reads from the dataset. Each message gains one sentence, in the owner's and the collaborators' copy alike (`{T}` is `tenancy_name`, `{O}` is `owner_name`):
+
+| Message | `members_can_edit` | Owner's copy | Collaborator's copy |
+|---|---|---|---|
+| Reminder | true | When the embargo ends, members of {T} can read and edit this dataset again; the people you shared it with keep their access. | When the embargo ends, members of {T} can read and edit this dataset again; the people {O} shared it with keep their access. |
+| Reminder | false | When the embargo ends, members of {T} can read this dataset; editing stays with the people you shared it with. | When the embargo ends, members of {T} can read this dataset; editing stays with {O} and the people they shared it with. |
+| Ended (every variant, the manual DOI included) | true | Members of {T} can read and edit this dataset again; the people you shared it with keep their access. | Members of {T} can read and edit this dataset again; the people {O} shared it with keep their access. |
+| Ended | false | Members of {T} can read this dataset; editing stays with the people you shared it with. | Members of {T} can read this dataset; editing stays with {O} and the people they shared it with. |
+
+Webapp:
+
+| Piece | Contract |
+|---|---|
+| Types | `MembersAccessRequest {members_can_edit: boolean}`, `MembersAccessResponse {members_can_edit: boolean, access: DatasetAccess}`; `members_can_edit` on `ShareTenancy`, `GetDatasetDetailsResponse` and the minimal list item |
+| Server call | `lib/share.ts` `setMembersAccess(context, datasetId, request)` → `PUT /datasets/{id}/members-access` |
+| BFF route | `PUT /api/datasets/[datasetId]/members-access` (`pages/api/datasets/[datasetId]/members-access.ts`, `bffRoute`, no tenancy required) |
+| Browser | `BFFAPI.setMembersAccess(datasetId, request)`, which emits the UI event `members_access_changed` (added to `UI_EVENTS`) |
+| Edit rights | unchanged: `canEditDataset` reads `access.can_edit` |
