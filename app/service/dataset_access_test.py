@@ -66,6 +66,48 @@ class TestDatasetAccessService(unittest.TestCase):
             AccessLevel.TENANCY,
         )
 
+    def test_a_tenancy_member_whose_role_refuses_get_has_no_level(self):
+        self.users.enforce.return_value = False
+        self.assertIsNone(
+            self.access.level_of(self.user_id, _dataset(), [TENANCY], NOW)
+        )
+        self.users.enforce.assert_called_with(
+            user_id=self.user_id,
+            resource="/api/v1/datasets/tenancy-scope",
+            action="GET",
+        )
+
+    def test_a_tenancy_member_whose_role_allows_get_is_tenancy(self):
+        self.users.enforce.side_effect = lambda user_id, resource, action: (
+            action == "GET"
+        )
+        self.assertEqual(
+            self.access.level_of(self.user_id, _dataset(), [TENANCY], NOW),
+            AccessLevel.TENANCY,
+        )
+
+    def test_the_owner_needs_no_role(self):
+        self.users.enforce.return_value = False
+        dataset = _dataset(owner_id=self.user_id)
+        self.assertEqual(
+            self.access.level_of(self.user_id, dataset, [TENANCY], NOW),
+            AccessLevel.OWNER,
+        )
+
+    def test_a_permission_holder_needs_no_role(self):
+        self.users.enforce.return_value = False
+        self._grant("write")
+        self.assertEqual(
+            self.access.level_of(self.user_id, _dataset(), [TENANCY], NOW),
+            AccessLevel.WRITE,
+        )
+
+    def test_reads_the_tenancy_follows_the_get_role(self):
+        self.users.enforce.return_value = False
+        self.assertFalse(self.access.reads_tenancy(self.user_id))
+        self.users.enforce.return_value = True
+        self.assertTrue(self.access.reads_tenancy(self.user_id))
+
     def test_a_tenancy_member_does_not_see_a_hidden_embargo(self):
         dataset = _dataset(until=NOW + timedelta(days=5), visible=False)
         self.assertIsNone(self.access.level_of(self.user_id, dataset, [TENANCY], NOW))

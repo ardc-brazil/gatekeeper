@@ -66,11 +66,20 @@ class DatasetAccessService:
             permission = self._permissions.fetch(dataset_id=dataset.id, user_id=user_id)
             if permission is not None:
                 return AccessLevel(permission.level)
-        if dataset.tenancy in tenancies and (
-            not self.embargo_active(dataset, now) or dataset.embargo_metadata_visible
+        if (
+            user_id is not None
+            and dataset.tenancy in tenancies
+            and (
+                not self.embargo_active(dataset, now)
+                or dataset.embargo_metadata_visible
+            )
+            and self.reads_tenancy(user_id)
         ):
             return AccessLevel.TENANCY
         return None
+
+    def reads_tenancy(self, user_id: UUID) -> bool:
+        return self._role_allows(user_id, "GET")
 
     def permits(
         self,

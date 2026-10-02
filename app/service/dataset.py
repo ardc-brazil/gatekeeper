@@ -527,6 +527,8 @@ class DatasetService:
         self, query: DatasetQuery, user_id: UUID, tenancies: list[str] = None
     ) -> PaginatedResult:
         allowed = self._determine_tenancies(user_id=user_id, tenancies=tenancies or [])
+        if not self._access.reads_tenancy(user_id):
+            allowed = []
         result: PaginatedResult = self._repository.search(
             query_params=query, tenancies=allowed, user_id=user_id
         )

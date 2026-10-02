@@ -309,6 +309,25 @@ class TestDatasetService(unittest.TestCase):
             query_params=query, tenancies=["tenancy1"], user_id=user_id
         )
 
+    def test_search_drops_the_tenancies_of_a_member_without_a_read_role(self):
+        user_id = uuid4()
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=True
+        )
+        self.dataset_access.reads_tenancy.return_value = False
+        query = DatasetQuery()
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[], total_count=0, page=1, page_size=10
+        )
+
+        self.dataset_service.search_datasets(query=query, user_id=user_id)
+
+        self.dataset_access.reads_tenancy.assert_called_once_with(user_id)
+        self.dataset_repository.search.assert_called_once_with(
+            query_params=query, tenancies=[], user_id=user_id
+        )
+
     def test_search_skips_an_item_the_rule_does_not_show(self):
         self.user_service.fetch_by_id.return_value = self.mock_user([])
         hidden = Mock(spec=DatasetDBModel)

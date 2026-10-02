@@ -415,6 +415,26 @@ class TestOwnerAndPermissions:
         assert of_the_tenancy["id"] not in _ids(response)
         assert shared_with_them["id"] in _ids(response)
 
+    def test_a_member_without_a_read_role_sees_only_what_was_shared(
+        self, http_client, owner
+    ):
+        of_the_tenancy = create_dataset(http_client, owner)
+        shared_with_them = create_dataset(http_client, owner)
+        user_id = create_user(http_client, [], [TENANCY])
+        grant(http_client, shared_with_them["id"], user_id, "read")
+        headers = headers_for(user_id, TENANCY)
+
+        hidden = http_client.get(f"/datasets/{of_the_tenancy['id']}", headers=headers)
+        shared = http_client.get(f"/datasets/{shared_with_them['id']}", headers=headers)
+        listing = http_client.get("/datasets/?page_size=100", headers=headers)
+
+        assert_status_code(hidden, 404)
+        assert_status_code(shared, 200)
+        assert shared.json()["access"]["level"] == "read"
+        assert_status_code(listing, 200)
+        assert of_the_tenancy["id"] not in _ids(listing)
+        assert shared_with_them["id"] in _ids(listing)
+
     def test_a_write_permission_cannot_delete(self, http_client, owner, outsider):
         dataset = create_dataset(http_client, owner)
         user_id, headers = outsider
