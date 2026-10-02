@@ -56,7 +56,7 @@ def share_state(
     "/{dataset_id}/share",
     status_code=201,
     response_model=GrantResultResponse,
-    response_model_exclude_none=True,
+    response_model_exclude_unset=True,
 )
 @inject
 def grant(

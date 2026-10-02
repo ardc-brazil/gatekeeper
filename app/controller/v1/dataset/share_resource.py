@@ -157,10 +157,13 @@ def adapt_share_state(state: ShareState) -> ShareStateResponse:
 
 
 def adapt_grant_result(result: GrantResult) -> GrantResultResponse:
+    if result.kind == "permission":
+        return GrantResultResponse(
+            kind="permission", permission=adapt_permission(result.permission)
+        )
     return GrantResultResponse(
-        kind=result.kind,
-        permission=adapt_permission(result.permission) if result.permission else None,
-        invitation=adapt_invitation(result.invitation) if result.invitation else None,
+        kind="invitation",
+        invitation=adapt_invitation(result.invitation),
         link=result.link,
     )
 

@@ -32,11 +32,13 @@ class TestAdapters(unittest.TestCase):
             GrantResult(
                 kind="invitation", invitation=invitation, link="https://x/invitations/t"
             )
-        ).model_dump(mode="json", exclude_none=True)
+        ).model_dump(mode="json", exclude_unset=True)
 
         self.assertEqual(body["kind"], "invitation")
         self.assertEqual(body["link"], "https://x/invitations/t")
         self.assertEqual(body["invitation"]["email"], "dora@ufam.edu.br")
+        self.assertIsNone(body["invitation"]["orcid"])
+        self.assertIsNone(body["invitation"]["accepted_at"])
         self.assertNotIn("permission", body)
 
     def test_an_active_anonymous_page_has_versions_with_file_summaries(self):
