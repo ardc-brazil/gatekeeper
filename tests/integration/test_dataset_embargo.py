@@ -15,6 +15,8 @@ from tests.integration.fixtures.embargo import (
     headers_for,
     make_findable,
     manual_doi,
+    permission_rows,
+    upsert_permission,
     set_embargo,
     until,
 )
@@ -445,6 +447,28 @@ class TestOwnerAndPermissions:
 
         assert_status_code(response, 403)
         assert_status_code(as_owner, 200)
+
+
+class TestPermissionGrant:
+    def test_granting_twice_at_once_leaves_one_row(self, http_client, owner):
+        dataset = create_dataset(http_client, owner)
+        user_id = create_user(http_client, [], [])
+
+        result = upsert_permission(dataset["id"], user_id, "read", concurrent=8)
+
+        assert result["errors"] == []
+        assert permission_rows(dataset["id"], user_id) == ["read"]
+
+    def test_granting_again_with_another_level_updates_it(self, http_client, owner):
+        dataset = create_dataset(http_client, owner)
+        user_id = create_user(http_client, [], [])
+
+        first = upsert_permission(dataset["id"], user_id, "read")
+        second = upsert_permission(dataset["id"], user_id, "write")
+
+        assert first == {"errors": [], "levels": ["read"]}
+        assert second == {"errors": [], "levels": ["write"]}
+        assert permission_rows(dataset["id"], user_id) == ["write"]
 
 
 class TestEmbargoRules:

@@ -2,6 +2,7 @@ from contextlib import AbstractContextManager
 from typing import Callable
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.model.db.dataset_access import DatasetPermission as DatasetPermissionDBModel
@@ -24,26 +25,24 @@ class PermissionRepository:
     def upsert(
         self, dataset_id: UUID, user_id: UUID, level: str, granted_by: UUID | None
     ) -> DatasetPermissionDBModel:
+        statement = insert(DatasetPermissionDBModel).values(
+            dataset_id=dataset_id, user_id=user_id, level=level, granted_by=granted_by
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=["dataset_id", "user_id"],
+            set_={
+                "level": statement.excluded.level,
+                "granted_by": statement.excluded.granted_by,
+            },
+        )
         with self._session_factory() as session:
-            permission = (
+            session.execute(statement)
+            session.commit()
+            return (
                 session.query(DatasetPermissionDBModel)
                 .filter_by(dataset_id=dataset_id, user_id=user_id)
-                .first()
+                .one()
             )
-            if permission is None:
-                permission = DatasetPermissionDBModel(
-                    dataset_id=dataset_id,
-                    user_id=user_id,
-                    level=level,
-                    granted_by=granted_by,
-                )
-                session.add(permission)
-            else:
-                permission.level = level
-                permission.granted_by = granted_by
-            session.commit()
-            session.refresh(permission)
-            return permission
 
     def delete(self, dataset_id: UUID, user_id: UUID) -> bool:
         with self._session_factory() as session:

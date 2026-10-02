@@ -1,3 +1,4 @@
+import json
 import subprocess
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -9,6 +10,7 @@ from tests.integration.fixtures.auth import AuthFixture
 from tests.integration.utils.http_client import HttpClient
 
 POSTGRES_CONTAINER = "datamap_postgres_test_integration"
+GATEKEEPER_CONTAINER = "datamap_gatekeeper_test_integration"
 TENANCY = config.tenancy
 
 
@@ -91,6 +93,81 @@ def grant(http_client: HttpClient, dataset_id: str, user_id: str, level: str) ->
         headers=AuthFixture.valid_headers(),
     )
     assert response.status_code == 200, response.text
+
+
+_UPSERT_SCRIPT = """
+import json, sys, threading
+from uuid import UUID
+from app.config import settings
+from app.database import Database
+from app.model.db import casbin_rule, client, dataset, dataset_access, doi, email, tenancy, user  # noqa
+from app.repository.permission import PermissionRepository
+
+dataset_id, user_id, level, concurrent = UUID(sys.argv[1]), UUID(sys.argv[2]), sys.argv[3], int(sys.argv[4])
+repository = PermissionRepository(session_factory=Database(db_url=settings.DATABASE_URL, log_enabled=False).session)
+barrier = threading.Barrier(concurrent)
+errors, levels = [], []
+
+def grant():
+    barrier.wait()
+    try:
+        levels.append(repository.upsert(dataset_id=dataset_id, user_id=user_id, level=level, granted_by=None).level)
+    except Exception as error:
+        errors.append(type(error).__name__)
+
+threads = [threading.Thread(target=grant) for _ in range(concurrent)]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+print(json.dumps({"errors": errors, "levels": sorted(set(levels))}))
+"""
+
+
+def upsert_permission(
+    dataset_id: str, user_id: str, level: str, concurrent: int = 1
+) -> dict:
+    completed = subprocess.run(
+        [
+            "docker",
+            "exec",
+            GATEKEEPER_CONTAINER,
+            "python3",
+            "-c",
+            _UPSERT_SCRIPT,
+            dataset_id,
+            user_id,
+            level,
+            str(concurrent),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout.strip().splitlines()[-1])
+
+
+def permission_rows(dataset_id: str, user_id: str) -> list[str]:
+    completed = subprocess.run(
+        [
+            "docker",
+            "exec",
+            POSTGRES_CONTAINER,
+            "psql",
+            "-U",
+            "gk_admin",
+            "-d",
+            "gatekeeper_db",
+            "-tA",
+            "-c",
+            "SELECT level FROM dataset_permissions "
+            f"WHERE dataset_id = '{dataset_id}' AND user_id = '{user_id}'",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.split()
 
 
 def create_dataset(http_client: HttpClient, headers: dict) -> dict:
