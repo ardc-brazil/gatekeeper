@@ -1,7 +1,9 @@
 import uuid
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from tests.integration.config import config
 from tests.integration.fixtures.auth import AuthFixture
 from tests.integration.fixtures.embargo import (
     TENANCY,
@@ -39,6 +41,39 @@ def outsider(http_client):
 
 def _ids(response) -> list[str]:
     return [item["id"] for item in response.json()["content"]]
+
+
+def _upload(
+    http_client, dataset: dict, user_id: str = config.user_id
+) -> tuple[str, str]:
+    payload = create_tus_payload(
+        user_id=user_id,
+        dataset_id=dataset["id"],
+        filename="data.nc",
+        file_size=10,
+        file_type="application/x-netcdf",
+    )
+    response = http_client.post(
+        "/tus/hooks", json=payload, headers=AuthFixture.valid_headers()
+    )
+    assert_status_code(response, 200)
+    version = dataset["current_version"]["name"]
+    body = http_client.get(
+        f"/datasets/{dataset['id']}", headers=headers_for(user_id, TENANCY)
+    ).json()
+    files = next(v for v in body["versions"] if v["name"] == version)["files_in"]
+    return version, files[0]["id"]
+
+
+def _download(http_client, dataset_id: str, version: str, file_id: str, headers):
+    return http_client.get(
+        f"/datasets/{dataset_id}/versions/{version}/files/{file_id}", headers=headers
+    )
+
+
+def _expires(response) -> list[str]:
+    assert_status_code(response, 200)
+    return parse_qs(urlparse(response.json()["url"]).query)["X-Amz-Expires"]
 
 
 class TestHiddenEmbargo:
@@ -129,6 +164,139 @@ class TestOpenEmbargo:
 
         assert_status_code(response, 403)
         assert response.json() == {"detail": "forbidden"}
+
+    def test_an_upload_from_the_tenancy_is_forbidden(self, http_client, owner, member):
+        dataset = create_dataset(http_client, owner)
+        set_embargo(http_client, dataset["id"], owner, visible=True)
+        user_id, _ = member
+
+        payload = create_tus_payload(
+            user_id=user_id,
+            dataset_id=dataset["id"],
+            filename="a.nc",
+            file_size=10,
+            file_type="application/x-netcdf",
+        )
+        response = http_client.post(
+            "/tus/hooks", json=payload, headers=AuthFixture.valid_headers()
+        )
+
+        assert_status_code(response, 403)
+        assert response.json().get("RejectUpload") is True
+        assert response.json()["HTTPResponse"]["StatusCode"] == 403
+
+    def test_switching_the_mode_changes_what_the_tenancy_sees(
+        self, http_client, owner, member
+    ):
+        dataset = create_dataset(http_client, owner)
+        set_embargo(http_client, dataset["id"], owner, visible=False)
+        _, headers = member
+
+        hidden = http_client.get(f"/datasets/{dataset['id']}", headers=headers)
+        opened = http_client.put(
+            f"/datasets/{dataset['id']}/embargo/mode",
+            json={"metadata_visible": True},
+            headers=owner,
+        )
+        visible = http_client.get(f"/datasets/{dataset['id']}", headers=headers)
+        closed = http_client.put(
+            f"/datasets/{dataset['id']}/embargo/mode",
+            json={"metadata_visible": False},
+            headers=owner,
+        )
+        hidden_again = http_client.get(f"/datasets/{dataset['id']}", headers=headers)
+
+        assert_status_code(hidden, 404)
+        assert_status_code(opened, 200)
+        assert opened.json()["metadata_visible"] is True
+        assert_status_code(visible, 200)
+        assert visible.json()["embargo"]["metadata_visible"] is True
+        assert_status_code(closed, 200)
+        assert closed.json()["metadata_visible"] is False
+        assert_status_code(hidden_again, 404)
+
+
+class TestDownloadUnderEmbargo:
+    def test_a_tenancy_member_is_forbidden_under_an_open_embargo(
+        self, http_client, owner, member
+    ):
+        dataset = create_dataset(http_client, owner)
+        version, file_id = _upload(http_client, dataset)
+        set_embargo(http_client, dataset["id"], owner, visible=True)
+        _, headers = member
+
+        response = _download(http_client, dataset["id"], version, file_id, headers)
+
+        assert_status_code(response, 403)
+
+    def test_a_tenancy_member_gets_404_under_a_hidden_embargo(
+        self, http_client, owner, member
+    ):
+        dataset = create_dataset(http_client, owner)
+        version, file_id = _upload(http_client, dataset)
+        set_embargo(http_client, dataset["id"], owner, visible=False)
+        _, headers = member
+
+        response = _download(http_client, dataset["id"], version, file_id, headers)
+
+        assert_status_code(response, 404)
+
+    def test_the_owner_link_lasts_an_hour_under_embargo_and_a_week_without(
+        self, http_client, owner
+    ):
+        dataset = create_dataset(http_client, owner)
+        version, file_id = _upload(http_client, dataset)
+
+        before = _download(http_client, dataset["id"], version, file_id, owner)
+        set_embargo(http_client, dataset["id"], owner, visible=False)
+        during = _download(http_client, dataset["id"], version, file_id, owner)
+
+        assert _expires(before) == ["604800"]
+        assert _expires(during) == ["3600"]
+
+
+class TestAdminWithoutOwnership:
+    @pytest.fixture
+    def dataset_of_a_member(self, http_client):
+        owner_id = create_user(http_client, ["datasets_write"], [TENANCY])
+        return create_dataset(http_client, headers_for(owner_id, TENANCY)), owner_id
+
+    def test_the_admin_does_not_see_a_hidden_embargo(
+        self, http_client, dataset_of_a_member
+    ):
+        dataset, owner_id = dataset_of_a_member
+        set_embargo(
+            http_client, dataset["id"], headers_for(owner_id, TENANCY), visible=False
+        )
+
+        response = http_client.get(
+            f"/datasets/{dataset['id']}", headers=AuthFixture.valid_headers()
+        )
+
+        assert_status_code(response, 404)
+
+    def test_the_admin_sees_only_the_badge_of_an_open_embargo(
+        self, http_client, dataset_of_a_member
+    ):
+        dataset, owner_id = dataset_of_a_member
+        _upload(http_client, dataset, owner_id)
+        set_embargo(
+            http_client, dataset["id"], headers_for(owner_id, TENANCY), visible=True
+        )
+
+        response = http_client.get(
+            f"/datasets/{dataset['id']}", headers=AuthFixture.valid_headers()
+        )
+
+        assert_status_code(response, 200)
+        body = response.json()
+        assert body["embargo"]["active"] is True
+        assert body["access"]["level"] == "tenancy"
+        assert body["access"]["can_manage_embargo"] is False
+        version = body["current_version"]
+        assert version["files_withheld"] is True
+        assert version["files_in"] == []
+        assert version["files_summary"]["count"] == 1
 
 
 class TestOwnerAndPermissions:
@@ -229,6 +397,33 @@ class TestOwnerAndPermissions:
 
         assert_status_code(refused, 403)
         assert_status_code(allowed, 200)
+
+    def test_shared_lists_only_what_was_shared_not_the_tenancy(
+        self, http_client, owner
+    ):
+        of_the_tenancy = create_dataset(http_client, owner)
+        shared_with_them = create_dataset(http_client, owner)
+        user_id = create_user(http_client, ["datasets_write"], [TENANCY])
+        grant(http_client, shared_with_them["id"], user_id, "read")
+
+        response = http_client.get(
+            "/datasets/?shared=true", headers=headers_for(user_id, TENANCY)
+        )
+
+        assert_status_code(response, 200)
+        assert of_the_tenancy["id"] not in _ids(response)
+        assert shared_with_them["id"] in _ids(response)
+
+    def test_a_write_permission_cannot_delete(self, http_client, owner, outsider):
+        dataset = create_dataset(http_client, owner)
+        user_id, headers = outsider
+        grant(http_client, dataset["id"], user_id, "write")
+
+        response = http_client.delete(f"/datasets/{dataset['id']}", headers=headers)
+        as_owner = http_client.get(f"/datasets/{dataset['id']}", headers=owner)
+
+        assert_status_code(response, 403)
+        assert_status_code(as_owner, 200)
 
 
 class TestEmbargoRules:
