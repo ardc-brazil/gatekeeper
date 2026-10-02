@@ -28,6 +28,16 @@ def upgrade() -> None:
             server_default=sa.true(),
         ),
     )
+    # Emails queued before this column existed render with the templates that now require the key.
+    op.execute(
+        """
+        UPDATE email_messages
+        SET context = context || '{"members_can_edit": true}'::jsonb
+        WHERE template IN ('embargo_reminder', 'embargo_ended')
+          AND status = 'pending'
+          AND NOT context ? 'members_can_edit'
+        """
+    )
 
 
 def downgrade() -> None:

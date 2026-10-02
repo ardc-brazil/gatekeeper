@@ -453,7 +453,7 @@ A per-dataset setting, the owner's alone: whether the members of the dataset's t
 
 "Write" is every route checked as `DatasetAction.WRITE`: metadata, versions, uploads (the TUS hook), DOIs, sharing and anonymous links (`can_share` follows `can_edit`), the access history. "Delete" is `DatasetAction.DELETE`. With `false`, writes stay with the owner and `write` permission holders, delete with the owner. A member who also holds a `read` permission is a member for this purpose: the permission gives no write, and the role gives none either. Search is unchanged.
 
-Storage: `datasets.members_can_edit boolean NOT NULL DEFAULT true`, migration `a7b8c9d0e1f2` (revises `f6a7b8c9d0e1`).
+Storage: `datasets.members_can_edit boolean NOT NULL DEFAULT true`, migration `a7b8c9d0e1f2` (revises `a8b9c0d1e2f3`, plan 03's token hint).
 
 The rule, in `DatasetAccessService._permits`, last branch (tenancy member, no active embargo):
 

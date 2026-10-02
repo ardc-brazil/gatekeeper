@@ -601,15 +601,21 @@ class TestMembersSentence(unittest.TestCase):
         )
 
     def test_the_collaborator_end_notice_names_the_owner(self):
-        email = self.render(
+        editable = self.render(EmailTemplate.EMBARGO_ENDED, COLLABORATOR_ENDED)
+        read_only = self.render(
             EmailTemplate.EMBARGO_ENDED,
             {**COLLABORATOR_ENDED, "members_can_edit": False},
         )
 
         self.assert_in_both(
+            "Members of Data Amazon can read and edit this dataset again; "
+            "the people Luciana Rizzo shared it with keep their access.",
+            editable,
+        )
+        self.assert_in_both(
             "Members of Data Amazon can read this dataset; "
             "editing stays with Luciana Rizzo and the people they shared it with.",
-            email,
+            read_only,
         )
 
     def test_an_end_by_manual_doi_says_it_too(self):

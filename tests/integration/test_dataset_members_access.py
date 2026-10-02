@@ -263,7 +263,10 @@ class TestWhoMayChangeIt:
         user_id, headers = outsider
         grant(http_client, dataset["id"], user_id, "write")
 
-        assert_status_code(_members(http_client, dataset["id"], headers, False), 403)
+        response = _members(http_client, dataset["id"], headers, False)
+
+        assert_status_code(response, 403)
+        assert response.json() == {"detail": "forbidden"}
 
     def test_a_member_who_cannot_see_the_dataset_gets_404(
         self, http_client, owner, editor

@@ -34,7 +34,7 @@ _OWNER_ONLY_ACTIONS = frozenset(
 
 
 def allows_member_edits(dataset: DatasetDBModel) -> bool:
-    # None is a row not flushed yet, whose column default is true; `not None` would read it as read-only.
+    # None is an unflushed row whose column default is true, not a read-only one.
     return dataset.members_can_edit is not False
 
 
