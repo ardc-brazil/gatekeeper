@@ -16,7 +16,7 @@
 
 ## Global Constraints
 
-- Migration revision id `a7b8c9d0e1f2`, `down_revision = "f6a7b8c9d0e1"` (plan 03's). The chain is 01 `d4e5f6a7b8c9` → 02 `e5f6a7b8c9d0` → 03 `f6a7b8c9d0e1` → 06 `a7b8c9d0e1f2`; never re-point it.
+- Migration revision id `a7b8c9d0e1f2`, `down_revision = "a8b9c0d1e2f3"` (plan 03's token hint, which followed its `f6a7b8c9d0e1`). The chain is 01 `d4e5f6a7b8c9` → 02 `e5f6a7b8c9d0` → 03 `f6a7b8c9d0e1` → `a8b9c0d1e2f3` → 06 `a7b8c9d0e1f2`; never re-point it.
 - Column: `datasets.members_can_edit boolean NOT NULL DEFAULT true`. `true` is today's behaviour, so every existing dataset keeps it.
 - The rule lives only in `DatasetAccessService._permits`: a tenancy member with no active embargo gets `READ_METADATA` and `READ_FILES` by role as today, and `WRITE` and `DELETE` by role only when `members_can_edit` is true. Nothing else reads the column to decide access. Search (`app/repository/dataset.py`) is unchanged.
 - The setting is inert while an embargo is active and decides what members get back when it ends. It never touches permissions given through Share: `write` holders keep writing, the owner keeps everything, delete stays with the owner (and, in the default mode only, with a tenancy role that allows `DELETE`).
@@ -111,7 +111,7 @@ The whole feature is one branch of the access rule. Everything that decides what
 - Test: `app/service/dataset_access_test.py` (the `_dataset` helper; append tests)
 
 **Interfaces:**
-- Consumes: plan 02's `DatasetAccessService`, `DatasetAction`, `AccessLevel`, `_ROLE_METHOD`; plan 03's migration `f6a7b8c9d0e1`.
+- Consumes: plan 02's `DatasetAccessService`, `DatasetAction`, `AccessLevel`, `_ROLE_METHOD`; plan 03's migrations `f6a7b8c9d0e1` and `a8b9c0d1e2f3`.
 - Produces: ORM `Dataset.members_can_edit: bool` (NOT NULL, default true); `allows_member_edits(dataset) -> bool` in `app/service/dataset_access.py`, which Tasks 2, 3 and 4 import.
 
 - [ ] **Step 1: Write the failing tests**
@@ -310,7 +310,7 @@ Expected: PASS — plan 02's tests and the 10 in `TestMembersAccess`.
 """Members of a dataset's tenancy may edit it, or only read it
 
 Revision ID: a7b8c9d0e1f2
-Revises: f6a7b8c9d0e1
+Revises: a8b9c0d1e2f3
 Create Date: 2026-10-02 12:00:00.000000
 
 """
@@ -322,7 +322,7 @@ import sqlalchemy as sa
 
 
 revision: str = "a7b8c9d0e1f2"
-down_revision: Union[str, None] = "f6a7b8c9d0e1"
+down_revision: Union[str, None] = "a8b9c0d1e2f3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -354,7 +354,7 @@ make ENV_FILE_PATH=local.env db-upgrade
 make ENV_FILE_PATH=local.env db-downgrade
 make ENV_FILE_PATH=local.env db-upgrade
 ```
-Expected: each command exits 0; the round trip shows `Running downgrade a7b8c9d0e1f2 -> f6a7b8c9d0e1` and `Running upgrade f6a7b8c9d0e1 -> a7b8c9d0e1f2`.
+Expected: each command exits 0; the round trip shows `Running downgrade a7b8c9d0e1f2 -> a8b9c0d1e2f3` and `Running upgrade a8b9c0d1e2f3 -> a7b8c9d0e1f2`.
 
 Then check autogenerate proposes nothing:
 ```bash
