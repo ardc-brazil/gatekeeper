@@ -4,11 +4,13 @@ from typing import Callable
 from uuid import UUID
 
 from app.exception.bad_request import BadRequestException, ErrorDetails
+from app.exception.conflict import ConflictException
 from app.exception.not_found import NotFoundException
 from app.logging_config import fields
 from app.model.db.sharing import DatasetInvitation
 from app.model.dataset_access import AccessEventType, DatasetAction, PermissionLevel
 from app.model.sharing import (
+    AcceptResult,
     GrantRequest,
     GrantResult,
     InvitationView,
@@ -376,3 +378,59 @@ class ShareService:
         if not self._invitations.replace_token(invitation_id, hash_token(token)):
             raise NotFoundException(f"not_found: {invitation_id}")
         return self.invitation_link(token)
+
+    def accept(self, token: str, user_id: UUID) -> AcceptResult:
+        invitation = self._invitations.fetch_by_token_hash(hash_token(token))
+        if invitation is None or invitation.revoked_at is not None:
+            raise NotFoundException("invitation_not_found")
+        if invitation.accepted_at is not None:
+            raise ConflictException("invitation_already_accepted")
+        user = self._user_service.fetch_by_id(user_id)
+        result = self._accept(invitation, user.id)
+        if result is None:
+            raise ConflictException("invitation_already_accepted")
+        return result
+
+    def claim(self, user_id: UUID) -> list[AcceptResult]:
+        user = self._user_service.fetch_by_id(user_id)
+        email = user.email.lower() if deliverable(user.email) else None
+        orcid = next(
+            (
+                provider.reference
+                for provider in (user.providers or [])
+                if provider.name == "orcid"
+            ),
+            None,
+        )
+        accepted = []
+        for invitation in self._invitations.list_pending_for(email, orcid):
+            result = self._accept(invitation, user.id)
+            if result is not None:
+                accepted.append(result)
+        return accepted
+
+    def _accept(self, invitation, user_id: UUID) -> AcceptResult | None:
+        if not self._invitations.mark_accepted(invitation.id, user_id, self._clock()):
+            return None
+        dataset = self._dataset_repository.fetch(
+            dataset_id=invitation.dataset_id, restrict_by_tenancy=False
+        )
+        if dataset is None:
+            raise NotFoundException(f"not_found: {invitation.dataset_id}")
+        if dataset.owner_id == user_id:
+            return AcceptResult(dataset_id=invitation.dataset_id, level="owner")
+
+        current = self._permissions.fetch(invitation.dataset_id, user_id)
+        if current is not None and (
+            current.level == PermissionLevel.WRITE.value
+            or current.level == invitation.level
+        ):
+            return AcceptResult(dataset_id=invitation.dataset_id, level=current.level)
+
+        self._permission_service.grant(
+            invitation.dataset_id,
+            user_id,
+            PermissionLevel(invitation.level),
+            getattr(invitation, "invited_by", None),
+        )
+        return AcceptResult(dataset_id=invitation.dataset_id, level=invitation.level)
