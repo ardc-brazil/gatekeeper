@@ -1,6 +1,7 @@
 import logging
 from uuid import UUID
 from app.exception.forbidden import ForbiddenException
+from app.exception.not_found import NotFoundException
 from app.model.dataset import DataFile
 from app.model.tus import TusResult
 from app.logging_config import fields
@@ -45,6 +46,13 @@ class TusService:
                 )
                 return TusResult(
                     status_code=403, body_msg="upload_not_allowed", reject_upload=True
+                )
+            except NotFoundException:
+                self._logger.warning(
+                    "upload refused", extra=fields(dataset_id=str(dataset_id))
+                )
+                return TusResult(
+                    status_code=404, body_msg="upload_not_allowed", reject_upload=True
                 )
 
             return TusResult(status_code=200, body_msg="")

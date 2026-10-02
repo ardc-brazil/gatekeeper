@@ -126,6 +126,7 @@ class TestHiddenEmbargo:
         )
 
         assert response.json().get("RejectUpload") is True
+        assert response.json()["HTTPResponse"]["StatusCode"] == 404
 
 
 class TestOpenEmbargo:

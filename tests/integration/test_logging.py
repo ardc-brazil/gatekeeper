@@ -84,9 +84,12 @@ class TestCredentialsNeverReachTheLog:
         the handler runs and this asserts nothing."""
         payload = create_tus_payload(
             user_id=SEEDED_USER_ID,
-            dataset_id=str(uuid.uuid4()),  # nonexistent: drives the failure path
+            dataset_id=str(uuid.uuid4()),
             filename="test.txt",
         )
+        # A missing dataset lookup is now a refusal (404), not a crash: drive the
+        # generic failure path with a malformed hook field instead.
+        del payload["Event"]["Upload"]["MetaData"]["filetype"]
         token = payload["Event"]["HTTPRequest"]["Header"]["X-User-Token"][0]
 
         response = http_client.post("/tus/hooks", json=payload, headers=valid_headers)
@@ -102,6 +105,7 @@ class TestCredentialsNeverReachTheLog:
         payload = create_tus_payload(
             user_id=SEEDED_USER_ID, dataset_id=dataset_id, filename="test.txt"
         )
+        del payload["Event"]["Upload"]["MetaData"]["filetype"]
 
         http_client.post("/tus/hooks", json=payload, headers=valid_headers)
 
