@@ -76,6 +76,7 @@ class EmbargoNotificationRepository:
                 .filter(
                     DatasetAccessEvent.dataset_id == dataset_id,
                     DatasetAccessEvent.event_type.in_(("created", "extended")),
+                    DatasetAccessEvent.new_value["until"].astext == until.isoformat(),
                 )
                 .order_by(DatasetAccessEvent.occurred_at.desc())
                 .first()

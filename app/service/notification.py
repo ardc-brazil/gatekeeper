@@ -65,21 +65,39 @@ class EmbargoNotificationService:
         queued = 0
         horizon = timedelta(days=max(REMINDER_OFFSETS_DAYS))
         for dataset in self._repository.datasets_with_reminders_due(now, horizon):
-            set_at = self._repository.embargo_set_at(dataset.id, dataset.embargo_until)
-            offset = due_offset(
-                dataset.embargo_until, set_at, now, REMINDER_OFFSETS_DAYS
-            )
-            if offset is not None:
-                queued += self._queue_for_people(dataset, "embargo_reminder", offset)
+            try:
+                set_at = self._repository.embargo_set_at(
+                    dataset.id, dataset.embargo_until
+                )
+                offset = due_offset(
+                    dataset.embargo_until, set_at, now, REMINDER_OFFSETS_DAYS
+                )
+                if offset is not None:
+                    queued += self._queue_for_people(
+                        dataset, "embargo_reminder", offset, now=now
+                    )
+            except Exception:
+                self._logger.exception(
+                    "embargo reminder pass failed",
+                    extra=fields(dataset_id=str(dataset.id), **{"pass": "reminders"}),
+                )
         for dataset in self._repository.datasets_expired_unannounced(now):
-            ending = self._repository.ending_event(dataset.id)
-            queued += self._queue_for_people(dataset, "embargo_ended", None, ending)
-            self._audit.record(
-                dataset_id=dataset.id,
-                event_type=AccessEventType.EXPIRED,
-                changed_by=None,
-                new_value={"embargo_until": dataset.embargo_until.isoformat()},
-            )
+            try:
+                ending = self._repository.ending_event(dataset.id)
+                queued += self._queue_for_people(
+                    dataset, "embargo_ended", None, now=now, ending=ending
+                )
+                self._audit.record(
+                    dataset_id=dataset.id,
+                    event_type=AccessEventType.EXPIRED,
+                    changed_by=None,
+                    new_value={"embargo_until": dataset.embargo_until.isoformat()},
+                )
+            except Exception:
+                self._logger.exception(
+                    "embargo ended pass failed",
+                    extra=fields(dataset_id=str(dataset.id), **{"pass": "ended"}),
+                )
         return queued
 
     def _any_user(self, user_id: UUID | None):
@@ -102,7 +120,12 @@ class EmbargoNotificationService:
         return owner, owner_active, holders
 
     def _queue_for_people(
-        self, dataset, template: str, offset: int | None, ending=None
+        self,
+        dataset,
+        template: str,
+        offset: int | None,
+        now: datetime,
+        ending=None,
     ) -> int:
         owner, owner_active, holders = self._people(dataset)
         owner_name = owner.name if owner is not None and owner.name else "the owner"
@@ -117,8 +140,9 @@ class EmbargoNotificationService:
             "dataset_url": f"{self._base_url}/app/datasets/{dataset.id}",
         }
         if template == "embargo_reminder":
+            days_remaining = max(0, (dataset.embargo_until - now).days)
             base.update(
-                days_remaining=offset,
+                days_remaining=days_remaining,
                 embargo_until_date=long_date(dataset.embargo_until),
                 embargo_until_short=short_date(dataset.embargo_until),
                 later_offsets=sorted(

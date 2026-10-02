@@ -123,7 +123,7 @@ class TestQueueDue(unittest.TestCase):
         self.assertTrue(owner["can_extend"])
         self.assertFalse(reader["is_owner"])
         self.assertFalse(reader["can_extend"])
-        self.assertEqual(owner["days_remaining"], 5)
+        self.assertEqual(owner["days_remaining"], 4)
         self.assertEqual(owner["later_offsets"], [1])
         self.assertTrue(owner["others_notified"])
         self.assertEqual(owner["people_with_access"], ["You", "Bruno"])
@@ -225,6 +225,93 @@ class TestQueueDue(unittest.TestCase):
         self.service.queue_due(NOW)
 
         self.assert_every_queued_message_renders(expected=3)
+
+    def test_a_dataset_raising_in_the_reminder_pass_does_not_stop_the_next_one(self):
+        other = SimpleNamespace(
+            id=uuid4(),
+            name="Rain",
+            owner_id=self.owner.id,
+            tenancy="datamap/production/data-amazon",
+            embargo_until=NOW + timedelta(days=4, hours=6),
+            versions=[],
+        )
+        self.repository.datasets_with_reminders_due.return_value = [
+            self.dataset,
+            other,
+        ]
+        self.repository.embargo_set_at.side_effect = [
+            RuntimeError("boom"),
+            NOW - timedelta(days=60),
+        ]
+
+        queued = self.service.queue_due(NOW)
+
+        self.assertEqual(queued, 2)
+        recipients = {
+            call.kwargs["recipient"] for call in self.email.enqueue.call_args_list
+        }
+        self.assertEqual(recipients, {"ana@usp.br", "bruno@inpa.gov.br"})
+
+    def test_a_dataset_raising_in_the_ended_pass_does_not_stop_the_next_one(self):
+        failing = self.ended()
+        ok = self.ended()
+        self.repository.datasets_with_reminders_due.return_value = []
+        self.repository.datasets_expired_unannounced.return_value = [failing, ok]
+        self.repository.ending_event.side_effect = [RuntimeError("boom"), None]
+
+        queued = self.service.queue_due(NOW)
+
+        self.assertEqual(queued, 2)
+        self.audit.record.assert_called_once()
+        self.assertEqual(self.audit.record.call_args.kwargs["dataset_id"], ok.id)
+
+    def test_a_late_reminder_reports_the_real_days_remaining_not_the_offset(self):
+        self.dataset.embargo_until = NOW + timedelta(days=3)
+
+        self.service.queue_due(NOW)
+
+        context = next(
+            call.kwargs["context"]
+            for call in self.email.enqueue.call_args_list
+            if call.kwargs["recipient"] == "ana@usp.br"
+        )
+        self.assertEqual(context["days_remaining"], 3)
+
+    def test_an_enqueue_failure_for_one_recipient_still_queues_the_other(self):
+        self.email.enqueue.side_effect = [RuntimeError("boom"), uuid4()]
+
+        queued = self.service.queue_due(NOW)
+
+        self.assertEqual(queued, 1)
+        recipients = [
+            call.kwargs["recipient"] for call in self.email.enqueue.call_args_list
+        ]
+        self.assertEqual(len(recipients), 2)
+
+    def test_queued_messages_carry_the_dataset_as_related_and_no_secret_fields(self):
+        doi = SimpleNamespace(identifier="10.5281/datamap.3f9c1e", state="REGISTERED")
+        ended = self.ended(
+            versions=[SimpleNamespace(created_at=NOW - timedelta(days=60), doi=doi)]
+        )
+        self.repository.datasets_expired_unannounced.return_value = [ended]
+
+        self.service.queue_due(NOW)
+
+        calls = [call.kwargs for call in self.email.enqueue.call_args_list]
+        self.assertTrue(calls)
+        for call in calls:
+            self.assertEqual(call["related_type"], "dataset")
+            self.assertNotIn("secret_fields", call)
+        reminder_ids = {
+            call["related_id"]
+            for call in calls
+            if call["template"] == "embargo_reminder"
+        }
+        ended_ids = {
+            call["related_id"] for call in calls if call["template"] == "embargo_ended"
+        }
+        self.assertEqual(reminder_ids, {self.dataset.id})
+        self.assertEqual(ended_ids, {ended.id})
 
     def test_every_end_variant_renders(self):
         doi = SimpleNamespace(identifier="10.5281/datamap.3f9c1e", state="REGISTERED")
