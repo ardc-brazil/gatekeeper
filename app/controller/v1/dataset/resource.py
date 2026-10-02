@@ -96,6 +96,9 @@ class DatasetGetResponse(BaseModel):
     visibility: Optional[str] = Field(None, title="Visibility status")
     embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
     access: Optional[AccessResponse] = Field(None, title="What the caller may do")
+    members_can_edit: bool = Field(
+        True, title="Members of the tenancy may edit when no embargo is active"
+    )
     owner: Optional[OwnerResponse] = Field(None, title="Owner")
 
 
@@ -131,6 +134,9 @@ class DatasetVersionGetResponse(BaseModel):
     visibility: Optional[str] = Field(None, title="Visibility status")
     embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
     access: Optional[AccessResponse] = Field(None, title="What the caller may do")
+    members_can_edit: bool = Field(
+        True, title="Members of the tenancy may edit when no embargo is active"
+    )
     owner: Optional[OwnerResponse] = Field(None, title="Owner")
 
 

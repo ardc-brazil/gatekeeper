@@ -53,6 +53,7 @@ class TenancyAccess:
     name: str
     path: str
     members: int
+    members_can_edit: bool = True
 
 
 @dataclass
