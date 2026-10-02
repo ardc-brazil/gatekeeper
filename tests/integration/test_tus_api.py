@@ -159,24 +159,24 @@ class TestTusHooksEndpoint:
         assert data["detail"] == "Internal server error"
         assert data["request_id"]
 
-    def test_post_finish_hook_invalid_dataset_id_500(self, http_client, valid_headers):
-        """Test post-finish hook with invalid dataset ID returns 500."""
+    def test_post_finish_hook_unknown_dataset_id_404(self, http_client, valid_headers):
+        """Test post-finish hook with an unknown dataset ID is refused, not a crash."""
         # Arrange
         user_id = "cbb0a683-630f-4b86-8b45-91b90a6fce1c"
-        invalid_dataset_id = str(uuid4())
+        unknown_dataset_id = str(uuid4())
 
         payload = create_tus_payload(
-            user_id=user_id, dataset_id=invalid_dataset_id, filename="test.txt"
+            user_id=user_id, dataset_id=unknown_dataset_id, filename="test.txt"
         )
 
         # Act
         response = http_client.post("/tus/hooks", json=payload, headers=valid_headers)
 
         # Assert
-        assert_status_code(response, 500)
+        assert_status_code(response, 404)
         data = assert_json_response(response)
         assert "HTTPResponse" in data
-        assert data["HTTPResponse"]["StatusCode"] == 500
+        assert data["HTTPResponse"]["StatusCode"] == 404
         assert "RejectUpload" in data
         assert data["RejectUpload"] is True
 

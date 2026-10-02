@@ -9,18 +9,25 @@ from app.gateway.email.smtp import SmtpSender
 from app.gateway.object_storage.http_client import build_http_client
 from app.service.health import DependencyHealthService
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
+from app.repository.access_event import AccessEventRepository
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
 from app.repository.email import EmailRepository
+from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 
 from app.service.dataset import DatasetService
 from app.service.dataset_collocation import DatasetCollocationService
+from app.service.dataset_access import DatasetAccessService
+from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.doi import DOIService
 from app.service.email import EmailService
 from app.service.email_template import EmailTemplateRenderer
+from app.service.embargo import EmbargoService
+from app.service.embargo_termination import EmbargoTermination
+from app.service.permission import PermissionService
 from app.service.tus import TusService
 from app.service.user import UserService
 
@@ -47,6 +54,8 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.dataset.dataset",
             "app.controller.v1.dataset.dataset_filter",
             "app.controller.v1.dataset.dataset_snapshot",
+            "app.controller.v1.dataset.embargo",
+            "app.controller.v1.dataset.embargo_status",
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
@@ -206,6 +215,39 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
+    dataset_collocation_service = providers.Factory(
+        DatasetCollocationService,
+        dataset_repository=dataset_repository,
+        datafile_repository=data_file_repository,
+    )
+
+    permission_repository = providers.Factory(
+        PermissionRepository,
+        session_factory=db.provided.session,
+    )
+
+    access_event_repository = providers.Factory(
+        AccessEventRepository,
+        session_factory=db.provided.session,
+    )
+
+    dataset_access_audit = providers.Factory(
+        DatasetAccessAudit,
+        event_repository=access_event_repository,
+    )
+
+    dataset_access_service = providers.Factory(
+        DatasetAccessService,
+        permission_repository=permission_repository,
+        user_service=user_service,
+    )
+
+    embargo_termination = providers.Factory(
+        EmbargoTermination,
+        repository=dataset_repository,
+        audit=dataset_access_audit,
+    )
+
     dataset_service = providers.Factory(
         DatasetService,
         repository=dataset_repository,
@@ -215,18 +257,30 @@ class Container(containers.DeclarativeContainer):
         doi_service=doi_service,
         minio_gateway=minio_gateway,
         tenancy_service=tenancy_service,
+        access_service=dataset_access_service,
+        embargo_termination=embargo_termination,
         dataset_bucket=config.MINIO_DATASET_BUCKET,
     )
 
-    dataset_collocation_service = providers.Factory(
-        DatasetCollocationService,
-        dataset_repository=dataset_repository,
-        datafile_repository=data_file_repository,
+    embargo_service = providers.Factory(
+        EmbargoService,
+        dataset_service=dataset_service,
+        repository=dataset_repository,
+        access_service=dataset_access_service,
+        audit=dataset_access_audit,
+        termination=embargo_termination,
     )
 
     tus_service = providers.Factory(
         TusService,
         dataset_service=dataset_service,
+    )
+
+    permission_service = providers.Factory(
+        PermissionService,
+        permission_repository=permission_repository,
+        user_service=user_service,
+        audit=dataset_access_audit,
     )
 
     email_repository = providers.Factory(

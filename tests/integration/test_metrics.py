@@ -67,6 +67,9 @@ class TestTheCountersMove:
             dataset_id=str(uuid.uuid4()),
             filename="test.txt",
         )
+        # A missing dataset lookup is now a refusal (404), not a crash: drive the
+        # generic failure path with a malformed hook field instead.
+        del payload["Event"]["Upload"]["MetaData"]["filetype"]
         assert_status_code(
             http_client.post("/tus/hooks", json=payload, headers=valid_headers), 500
         )

@@ -1,12 +1,15 @@
 from dataclasses import dataclass
 import datetime
+from datetime import timedelta
 import json
+from types import SimpleNamespace
 import unittest
 
 from prometheus_client import REGISTRY
 from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.exception.bad_request import BadRequestException
+from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
@@ -34,6 +37,10 @@ from app.model.db.dataset import (
 )
 from app.model.db.doi import DOI as DOIDBModel
 from app.service.dataset import DatasetService
+from app.model.dataset_access import AccessLevel, DatasetAccess, DatasetAction
+from app.service.dataset_access import DatasetAccessService
+from app.model.embargo import Embargo
+from app.service.embargo_termination import EmbargoTermination
 from app.model.user import User
 from app.model.doi import (
     DOI,
@@ -55,6 +62,21 @@ class TestDatasetService(unittest.TestCase):
         self.doi_service = Mock(spec=DOIService)
         self.minio_gateway = Mock(spec=ObjectStorageGateway)
         self.tenancy_service = Mock(spec=TenancyService)
+        self.dataset_access = Mock(spec=DatasetAccessService)
+        self.dataset_access.require.return_value = AccessLevel.TENANCY
+        self.dataset_access.level_of.return_value = AccessLevel.TENANCY
+        self.dataset_access.permits.return_value = True
+        self.dataset_access.embargo_active.return_value = False
+        self.dataset_access.embargo_of.return_value = None
+        self.dataset_access.access_flags.return_value = DatasetAccess(
+            level=AccessLevel.TENANCY,
+            can_edit=True,
+            can_share=True,
+            can_manage_embargo=False,
+            can_extend_embargo=False,
+            can_delete=True,
+        )
+        self.embargo_termination = Mock(spec=EmbargoTermination)
         self.dataset_service = DatasetService(
             repository=self.dataset_repository,
             version_repository=self.dataset_version_repository,
@@ -63,6 +85,8 @@ class TestDatasetService(unittest.TestCase):
             doi_service=self.doi_service,
             minio_gateway=self.minio_gateway,
             tenancy_service=self.tenancy_service,
+            access_service=self.dataset_access,
+            embargo_termination=self.embargo_termination,
             dataset_bucket="dataset_bucket",
         )
 
@@ -212,19 +236,19 @@ class TestDatasetService(unittest.TestCase):
 
     def test_disable_dataset_not_found(self):
         dataset_id = uuid4()
-        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException):
-            self.dataset_service.disable_dataset(dataset_id=dataset_id)
+            self.dataset_service.disable_dataset(dataset_id=dataset_id, user_id=uuid4())
 
     def test_enable_dataset_not_found(self):
         dataset_id = uuid4()
-        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
         self.dataset_repository.fetch.return_value = None
 
         with self.assertRaises(NotFoundException):
-            self.dataset_service.enable_dataset(dataset_id=dataset_id)
+            self.dataset_service.enable_dataset(dataset_id=dataset_id, user_id=uuid4())
 
     def test_enable_dataset_version_not_found(self):
         dataset_id = uuid4()
@@ -269,21 +293,98 @@ class TestDatasetService(unittest.TestCase):
             self.assertEqual(filters, {"filters": "data"})
 
     def test_search_datasets(self):
-        query = DatasetQuery(page=1, page_size=20, minimal=False)
         user_id = uuid4()
-        tenancies = ["tenancy1"]
-        self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=True
+        )
+        query = DatasetQuery(shared=True)
         self.dataset_repository.search.return_value = PaginatedResult(
             items=[], total_count=0, page=1, page_size=10
         )
 
-        result = self.dataset_service.search_datasets(
-            query=query, user_id=user_id, tenancies=tenancies
+        self.dataset_service.search_datasets(query=query, user_id=user_id)
+
+        self.dataset_repository.search.assert_called_once_with(
+            query_params=query, tenancies=["tenancy1"], user_id=user_id
         )
-        self.assertIsInstance(result, PaginatedResult)
-        self.assertEqual(result.total_count, 0)
-        self.assertEqual(result.page, 1)
-        self.dataset_repository.search.assert_called_once()
+
+    def test_search_drops_the_tenancies_of_a_member_without_a_read_role(self):
+        user_id = uuid4()
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        self.tenancy_service.fetch.side_effect = lambda name: self.mock_tenancy(
+            name, is_enabled=True
+        )
+        self.dataset_access.reads_tenancy.return_value = False
+        query = DatasetQuery()
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[], total_count=0, page=1, page_size=10
+        )
+
+        self.dataset_service.search_datasets(query=query, user_id=user_id)
+
+        self.dataset_access.reads_tenancy.assert_called_once_with(user_id)
+        self.dataset_repository.search.assert_called_once_with(
+            query_params=query, tenancies=[], user_id=user_id
+        )
+
+    def test_search_skips_an_item_the_rule_does_not_show(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        hidden = Mock(spec=DatasetDBModel)
+        hidden.versions = []
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[hidden], total_count=1, page=1, page_size=10
+        )
+        self.dataset_access.level_of.return_value = None
+
+        result = self.dataset_service.search_datasets(
+            query=DatasetQuery(), user_id=uuid4()
+        )
+
+        self.assertEqual(result.items, [])
+
+    def test_a_caller_with_no_tenancy_and_no_header_still_searches(self):
+        user_id = uuid4()
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[], total_count=0, page=1, page_size=10
+        )
+
+        self.dataset_service.search_datasets(
+            query=DatasetQuery(), user_id=user_id, tenancies=[]
+        )
+
+        self.dataset_repository.search.assert_called_once_with(
+            query_params=DatasetQuery(), tenancies=[], user_id=user_id
+        )
+
+    def test_minimal_items_carry_embargo_and_access(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        shared = Mock(spec=DatasetDBModel)
+        shared.versions = []
+        self.dataset_repository.search.return_value = PaginatedResult(
+            items=[shared], total_count=1, page=1, page_size=10
+        )
+        self.dataset_access.level_of.return_value = AccessLevel.READ
+        embargo = Embargo(
+            until=datetime.datetime(2026, 12, 1, tzinfo=datetime.timezone.utc),
+            active=True,
+            metadata_visible=False,
+        )
+        self.dataset_access.embargo_of.return_value = embargo
+        adapted = SimpleNamespace(versions=[], current_version=None, version=None)
+
+        with patch.object(
+            self.dataset_service, "_adapt_minimal_dataset", return_value=adapted
+        ):
+            result = self.dataset_service.search_datasets(
+                query=DatasetQuery(minimal=True), user_id=uuid4()
+            )
+
+        self.assertIs(result.items[0].embargo, embargo)
+        self.assertIs(
+            result.items[0].access, self.dataset_access.access_flags.return_value
+        )
 
     def test_create_data_file(self):
         file = Mock(spec=DataFile)
@@ -326,7 +427,13 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, is_enabled=True, tenancies=["tenancy1"]
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=["tenancy1"],
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
 
     def test_create_data_file_when_dataset_has_no_draft_version(self):
@@ -699,7 +806,12 @@ class TestDatasetService(unittest.TestCase):
 
         self.dataset_repository.fetch.assert_called_once_with(
             dataset_id=dataset_id,
+            is_enabled=True,
             tenancies=["tenant1"],
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         # Verify that the dataset was updated
         self.assertEqual(existing_dataset.name, "Updated Dataset")
@@ -712,7 +824,6 @@ class TestDatasetService(unittest.TestCase):
             },
         )
         self.assertEqual(existing_dataset.tenancy, ["tenant1"])
-        self.assertEqual(existing_dataset.owner_id, user_id)
 
         # Verify that DOI was updated
         expected_doi = DOI(
@@ -828,7 +939,12 @@ class TestDatasetService(unittest.TestCase):
 
         self.dataset_repository.fetch.assert_called_once_with(
             dataset_id=dataset_id,
+            is_enabled=True,
             tenancies=["tenant1"],
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
 
         expected_doi = DOI(
@@ -927,6 +1043,7 @@ class TestDatasetService(unittest.TestCase):
             latest_version=False,
             version_design_state=None,
             version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1110,7 +1227,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(result, expected_doi)
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1134,7 +1257,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
 
     def test_create_doi_version_not_found(self):
@@ -1172,7 +1301,13 @@ class TestDatasetService(unittest.TestCase):
             f"not_found: {version_name} for dataset {dataset_id}",
         )
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1234,7 +1369,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(str(context.exception.errors[0].code), "already_exists")
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1293,7 +1434,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(str(context.exception), "DOI service failure")
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1352,7 +1499,7 @@ class TestDatasetService(unittest.TestCase):
         # Verify dataset repository was called twice (DOI operation + publication)
         self.assertEqual(self.dataset_repository.fetch.call_count, 2)
         self.dataset_repository.fetch.assert_called_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id, restrict_by_tenancy=False
         )
         # Version repository is also called twice (DOI operation + publication)
         self.assertEqual(
@@ -1383,7 +1530,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
 
     def test_change_doi_state_version_not_found(self):
@@ -1423,7 +1576,13 @@ class TestDatasetService(unittest.TestCase):
             f"not_found: {version_name} for dataset {dataset_id}",
         )
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1483,7 +1642,13 @@ class TestDatasetService(unittest.TestCase):
             str(context.exception), f"not_found: DOI for version {version_name}"
         )
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1553,7 +1718,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(result, DOIAdapter.database_to_model(doi=existing_doi))
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1574,7 +1745,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
 
     def test_get_doi_version_not_found(self):
@@ -1611,7 +1788,13 @@ class TestDatasetService(unittest.TestCase):
             f"not_found: {version_name} for dataset {dataset_id}",
         )
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1668,7 +1851,13 @@ class TestDatasetService(unittest.TestCase):
             str(context.exception), f"not_found: DOI for version {version_name}"
         )
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1729,7 +1918,13 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_service.delete_doi(dataset_id, version_name, user_id, tenancies)
 
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1755,7 +1950,13 @@ class TestDatasetService(unittest.TestCase):
 
         self.assertEqual(str(context.exception), f"not_found: {dataset_id}")
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
 
     def test_delete_doi_version_not_found(self):
@@ -1794,7 +1995,13 @@ class TestDatasetService(unittest.TestCase):
             f"not_found: {version_name} for dataset {dataset_id}",
         )
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1853,7 +2060,13 @@ class TestDatasetService(unittest.TestCase):
             str(context.exception), f"not_found: DOI for version {version_name}"
         )
         self.dataset_repository.fetch.assert_called_once_with(
-            dataset_id=dataset_id, tenancies=tenancies
+            dataset_id=dataset_id,
+            is_enabled=True,
+            tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id, version_name=version_name
@@ -1941,7 +2154,12 @@ class TestDatasetService(unittest.TestCase):
 
         self.dataset_repository.fetch.assert_called_once_with(
             dataset_id=dataset_id,
+            is_enabled=True,
             tenancies=tenancies,
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
         )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once_with(
             dataset_id=dataset_id,
@@ -1958,7 +2176,8 @@ class TestDatasetService(unittest.TestCase):
             updated_at=now,
             design_state=DesignState.DRAFT,
             visibility=None,
-            owner_id=None,
+            owner_id=user_id,
+            access=self.dataset_access.access_flags.return_value,
             version=DatasetVersion(
                 id=existing_version_2.id,
                 name=existing_version_2.name,
@@ -2051,7 +2270,7 @@ class TestDatasetService(unittest.TestCase):
         )
 
         self.dataset_repository.search.assert_called_once_with(
-            query_params=query, tenancies=tenancies
+            query_params=query, tenancies=tenancies, user_id=user_id
         )
         self.assertEqual(len(result.items), 1)
         self.assertEqual(result.items[0].visibility, VisibilityStatus.PUBLIC)
@@ -2218,7 +2437,6 @@ class TestDatasetService(unittest.TestCase):
         # Arrange
         dataset_id = uuid4()
         version_name = "v1.0"
-        user_id = uuid4()
         tenancies = ["tenant1"]
 
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
@@ -2247,12 +2465,12 @@ class TestDatasetService(unittest.TestCase):
         mock_json_dumps.return_value = '{"test": "data"}'
 
         # Act
-        self.dataset_service._publish_dataset_snapshot(
-            dataset_id, version_name, user_id, tenancies
-        )
+        self.dataset_service._publish_dataset_snapshot(dataset_id, version_name)
 
         # Assert
-        self.dataset_repository.fetch.assert_called_once()
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset_id, restrict_by_tenancy=False
+        )
         self.dataset_version_repository.fetch_version_by_name.assert_called_once()
 
         # Verify dataset visibility was updated
@@ -2283,7 +2501,6 @@ class TestDatasetService(unittest.TestCase):
         # Arrange
         dataset_id = uuid4()
         version_name = "v1.0"
-        user_id = uuid4()
         tenancies = ["tenant1"]
 
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
@@ -2291,9 +2508,7 @@ class TestDatasetService(unittest.TestCase):
 
         # Act & Assert
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service._publish_dataset_snapshot(
-                dataset_id, version_name, user_id, tenancies
-            )
+            self.dataset_service._publish_dataset_snapshot(dataset_id, version_name)
 
         self.assertIn(str(dataset_id), str(context.exception))
 
@@ -2301,7 +2516,6 @@ class TestDatasetService(unittest.TestCase):
         # Arrange
         dataset_id = uuid4()
         version_name = "v1.0"
-        user_id = uuid4()
         tenancies = ["tenant1"]
 
         self.user_service.fetch_by_id.return_value = self.mock_user(tenancies)
@@ -2314,9 +2528,7 @@ class TestDatasetService(unittest.TestCase):
 
         # Act & Assert
         with self.assertRaises(NotFoundException) as context:
-            self.dataset_service._publish_dataset_snapshot(
-                dataset_id, version_name, user_id, tenancies
-            )
+            self.dataset_service._publish_dataset_snapshot(dataset_id, version_name)
 
         self.assertIn(version_name, str(context.exception))
 
@@ -2356,8 +2568,6 @@ class TestDatasetService(unittest.TestCase):
             mock_publish.assert_called_once_with(
                 dataset_id=dataset_id,
                 version_name=version_name,
-                user_id=user_id,
-                tenancies=tenancies,
                 doi_state=DOIState.FINDABLE.value,
             )
 
@@ -2438,8 +2648,6 @@ class TestDatasetService(unittest.TestCase):
             mock_publish.assert_called_once_with(
                 dataset_id=dataset_id,
                 version_name=version_name,
-                user_id=user_id,
-                tenancies=tenancies,
             )
             self.assertEqual(result, doi)
 
@@ -2577,8 +2785,6 @@ class TestDatasetService(unittest.TestCase):
             mock_publish.assert_called_once_with(
                 dataset_id=dataset_id,
                 version_name=version_name,
-                user_id=user_id,
-                tenancies=tenancies,
                 doi_state=DOIState.FINDABLE.value,
             )
 
@@ -2864,6 +3070,8 @@ class TestDatasetServiceMetrics(unittest.TestCase):
             dataset_bucket="datamap",
             doi_service=Mock(spec=DOIService),
             tenancy_service=Mock(spec=TenancyService),
+            access_service=Mock(spec=DatasetAccessService),
+            embargo_termination=Mock(spec=EmbargoTermination),
         )
 
     def test_creating_a_dataset_is_counted(self):
@@ -2893,6 +3101,275 @@ class TestDatasetServiceMetrics(unittest.TestCase):
         )
 
         self.assertEqual(_sample("datamap_search_total", **labels), before + 1)
+
+
+class TestDatasetServiceAuthorization(TestDatasetService):
+    def _fetched(self, **overrides):
+        dataset = Mock(spec=DatasetDBModel)
+        dataset.id = uuid4()
+        dataset.versions = []
+        for key, value in overrides.items():
+            setattr(dataset, key, value)
+        self.dataset_repository.fetch.return_value = dataset
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        return dataset
+
+    def test_fetch_authorized_looks_the_dataset_up_by_id_and_asks_the_rule(self):
+        dataset = self._fetched()
+        user_id = uuid4()
+
+        found, tenancies, level = self.dataset_service.fetch_authorized(
+            dataset_id=dataset.id,
+            user_id=user_id,
+            tenancies=None,
+            action=DatasetAction.WRITE,
+        )
+
+        self.assertIs(found, dataset)
+        self.assertEqual(tenancies, [])
+        self.assertEqual(level, AccessLevel.TENANCY)
+        self.dataset_repository.fetch.assert_called_once_with(
+            dataset_id=dataset.id,
+            is_enabled=True,
+            tenancies=[],
+            latest_version=False,
+            version_design_state=None,
+            version_is_enabled=True,
+            restrict_by_tenancy=False,
+        )
+        self.dataset_access.require.assert_called_once_with(
+            user_id=user_id, dataset=dataset, tenancies=[], action=DatasetAction.WRITE
+        )
+
+    def test_fetch_authorized_hides_a_missing_dataset(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user([])
+        self.dataset_repository.fetch.return_value = None
+
+        with self.assertRaises(NotFoundException):
+            self.dataset_service.fetch_authorized(
+                dataset_id=uuid4(),
+                user_id=uuid4(),
+                tenancies=None,
+                action=DatasetAction.READ_METADATA,
+            )
+
+    def test_fetch_dataset_answers_none_to_a_caller_who_cannot_see_it(self):
+        self._fetched()
+        self.dataset_access.require.side_effect = NotFoundException("hidden")
+
+        self.assertIsNone(
+            self.dataset_service.fetch_dataset(dataset_id=uuid4(), user_id=uuid4())
+        )
+
+    def test_update_does_not_change_the_owner(self):
+        owner = uuid4()
+        dataset = self._fetched(owner_id=owner, tenancy="t1", data={})
+        self.dataset_service._should_create_new_version = Mock(return_value=False)
+
+        self.dataset_service.update_dataset(
+            dataset_id=dataset.id,
+            dataset_request=Dataset(id=dataset.id, name="n", data={}, tenancy="t1"),
+            user_id=uuid4(),
+        )
+
+        self.assertEqual(dataset.owner_id, owner)
+
+    def test_a_permission_holder_cannot_move_the_dataset_to_another_tenancy(self):
+        self.dataset_access.require.return_value = AccessLevel.WRITE
+        dataset = self._fetched(owner_id=uuid4(), tenancy="t1", data={})
+        self.dataset_service._should_create_new_version = Mock(return_value=False)
+
+        self.dataset_service.update_dataset(
+            dataset_id=dataset.id,
+            dataset_request=Dataset(id=dataset.id, name="n", data={}, tenancy="t2"),
+            user_id=uuid4(),
+        )
+
+        self.assertEqual(dataset.tenancy, "t1")
+
+    def test_writes_are_refused_when_the_rule_forbids_them(self):
+        self._fetched()
+        self.dataset_access.require.side_effect = ForbiddenException("no")
+
+        with self.assertRaises(ForbiddenException):
+            self.dataset_service.publish_dataset_version(
+                dataset_id=uuid4(), user_id=uuid4(), version_name="1"
+            )
+
+    def test_deleting_asks_for_the_delete_action(self):
+        self._fetched()
+        user_id = uuid4()
+
+        self.dataset_service.disable_dataset(dataset_id=uuid4(), user_id=user_id)
+
+        self.assertEqual(
+            self.dataset_access.require.call_args.kwargs["action"],
+            DatasetAction.DELETE,
+        )
+
+    def test_files_are_withheld_when_the_rule_says_so(self):
+        dataset = self._fetched()
+        version = Mock(spec=DatasetVersionDBModel)
+        file = Mock(spec=DataFileDBModel)
+        file.size_bytes = 7
+        version.files = [file]
+        version.files_in = [file]
+        version.doi = None
+        version.design_state = DesignState.DRAFT
+        version.created_at = datetime.datetime(2026, 1, 1)
+        dataset.versions = [version]
+        self.dataset_access.permits.return_value = False
+
+        result = self.dataset_service.fetch_dataset(
+            dataset_id=dataset.id, user_id=uuid4()
+        )
+
+        self.assertEqual(result.versions[0].files_in, [])
+        self.assertTrue(result.versions[0].files_withheld)
+        self.assertEqual(result.versions[0].files_count, 1)
+        self.assertEqual(result.versions[0].files_size_in_bytes, 7)
+
+    def test_promoting_a_doi_to_findable_is_refused_under_embargo(self):
+        dataset = self._fetched()
+        self.dataset_access.embargo_active.return_value = True
+        version = Mock(spec=DatasetVersionDBModel)
+        version.doi = Mock()
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+
+        with self.assertRaises(BadRequestException) as raised:
+            self.dataset_service.change_doi_state(
+                dataset_id=dataset.id,
+                version_name="1",
+                new_state=DOIState.FINDABLE,
+                user_id=uuid4(),
+            )
+
+        self.assertEqual(raised.exception.errors[0].code, "embargo_active")
+        self.doi_service.change_state.assert_not_called()
+        self.minio_gateway.put_file.assert_not_called()
+
+    def test_registering_a_doi_is_allowed_under_embargo(self):
+        dataset = self._fetched()
+        self.dataset_access.embargo_active.return_value = True
+        version = Mock(spec=DatasetVersionDBModel)
+        version.doi = Mock()
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+
+        self.dataset_service.change_doi_state(
+            dataset_id=dataset.id,
+            version_name="1",
+            new_state=DOIState.REGISTERED,
+            user_id=uuid4(),
+        )
+
+        self.doi_service.change_state.assert_called_once()
+
+    def _manual_doi(self, embargoed: bool, level: AccessLevel):
+        dataset = self._fetched()
+        self.dataset_access.embargo_active.return_value = embargoed
+        self.dataset_access.require.return_value = level
+        version = Mock(spec=DatasetVersionDBModel)
+        version.doi = None
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.dataset_service._create_doi_model = Mock(
+            return_value=DOI(mode=DOIMode.MANUAL, identifier="10.1/x")
+        )
+        return dataset
+
+    def _create_manual(self, dataset, end_embargo: bool, user_id=None):
+        return self.dataset_service.create_doi(
+            dataset_id=dataset.id,
+            version_name="1",
+            doi=DOI(mode=DOIMode.MANUAL, identifier="10.1/x"),
+            user_id=user_id or uuid4(),
+            end_embargo=end_embargo,
+        )
+
+    def test_a_manual_doi_under_embargo_needs_the_embargo_to_end(self):
+        dataset = self._manual_doi(embargoed=True, level=AccessLevel.OWNER)
+
+        with self.assertRaises(BadRequestException) as raised:
+            self._create_manual(dataset, end_embargo=False)
+
+        self.assertEqual(
+            raised.exception.errors[0].code, "embargo_manual_doi_ends_embargo"
+        )
+        self.doi_service.create.assert_not_called()
+        self.embargo_termination.end.assert_not_called()
+
+    def test_only_the_owner_may_end_the_embargo_with_a_manual_doi(self):
+        dataset = self._manual_doi(embargoed=True, level=AccessLevel.WRITE)
+
+        with self.assertRaises(ForbiddenException):
+            self._create_manual(dataset, end_embargo=True)
+
+        self.doi_service.create.assert_not_called()
+        self.embargo_termination.end.assert_not_called()
+
+    def test_the_owner_ends_the_embargo_then_the_snapshot_is_published(self):
+        dataset = self._manual_doi(embargoed=True, level=AccessLevel.OWNER)
+        user_id = uuid4()
+        order = []
+        self.doi_service.create.side_effect = lambda doi: order.append("doi") or doi
+        self.embargo_termination.end.side_effect = lambda **kwargs: order.append("end")
+
+        with patch.object(
+            self.dataset_service,
+            "_publish_dataset_snapshot",
+            side_effect=lambda **kwargs: order.append("snapshot"),
+        ):
+            self._create_manual(dataset, end_embargo=True, user_id=user_id)
+
+        self.assertEqual(order, ["doi", "end", "snapshot"])
+        kwargs = self.embargo_termination.end.call_args.kwargs
+        self.assertIs(kwargs["dataset"], dataset)
+        self.assertEqual(kwargs["ended_by"], user_id)
+        self.assertEqual(kwargs["note"], "manual DOI")
+
+    def test_a_manual_doi_without_embargo_is_unchanged(self):
+        dataset = self._manual_doi(embargoed=False, level=AccessLevel.TENANCY)
+
+        with patch.object(self.dataset_service, "_publish_dataset_snapshot") as publish:
+            self._create_manual(dataset, end_embargo=False)
+
+        self.doi_service.create.assert_called_once()
+        publish.assert_called_once()
+        self.embargo_termination.end.assert_not_called()
+
+    def test_the_snapshot_writer_itself_refuses_an_embargoed_dataset(self):
+        self._fetched()
+        self.dataset_access.embargo_active.return_value = True
+
+        with self.assertRaises(BadRequestException) as raised:
+            self.dataset_service._publish_dataset_snapshot(
+                dataset_id=uuid4(), version_name="1"
+            )
+
+        self.assertEqual(raised.exception.errors[0].code, "embargo_active")
+        self.minio_gateway.put_file.assert_not_called()
+
+    def test_a_download_link_under_embargo_lives_one_hour(self):
+        dataset = self._fetched(tenancy="t1")
+        self.dataset_access.embargo_active.return_value = True
+        file = Mock(spec=DataFileDBModel)
+        file.id = uuid4()
+        file.name = "a.nc"
+        file.storage_path = "datamap/a"
+        file.extension = "nc"
+        file.size_bytes = 1
+        version = Mock(spec=DatasetVersionDBModel)
+        version.files_in = [file]
+        self.dataset_version_repository.fetch_version_by_name.return_value = version
+        self.minio_gateway.get_pre_signed_url.return_value = "https://x"
+
+        self.dataset_service.get_file_download_url(
+            dataset_id=dataset.id, version_name="1", file_id=file.id, user_id=uuid4()
+        )
+
+        self.assertEqual(
+            self.minio_gateway.get_pre_signed_url.call_args.kwargs["expires_in"],
+            timedelta(hours=1),
+        )
 
 
 if __name__ == "__main__":

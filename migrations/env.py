@@ -31,6 +31,7 @@ from app.model.db import dataset  # noqa: E402, F401
 from app.model.db import tenancy  # noqa: E402, F401
 from app.model.db import user  # noqa: E402, F401
 from app.model.db import doi  # noqa: E402, F401
+from app.model.db import dataset_access  # noqa: E402, F401
 from app.model.db import email  # noqa: E402, F401
 
 target_metadata = Base.metadata

@@ -4,6 +4,8 @@ import enum
 from uuid import UUID
 
 from app.model.doi import DOI
+from app.model.dataset_access import DatasetAccess
+from app.model.embargo import Embargo
 
 
 class DesignState(enum.Enum):
@@ -65,6 +67,7 @@ class DatasetVersion:
     files_size_in_bytes: int = None
     files_count: int = None
     doi: DOI = None
+    files_withheld: bool = False
 
 
 @dataclass
@@ -85,6 +88,8 @@ class Dataset:
     updated_at: datetime = None
     file_size_in_bytes: int = None
     file_count: int = None
+    embargo: Embargo | None = None
+    access: DatasetAccess | None = None
 
 
 @dataclass
@@ -100,6 +105,7 @@ class DatasetQuery:
     design_state: str = None
     visibility: str = None
     minimal: bool = False
+    shared: bool = False
     page: int = 1
     page_size: int = 10
 

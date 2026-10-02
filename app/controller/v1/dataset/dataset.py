@@ -10,6 +10,7 @@ from app.controller.interceptor.authorization import authorize
 from app.controller.interceptor.tenancy_parser import parse_tenancy_header
 from app.controller.interceptor.user_parser import parse_user_header
 from app.controller.v1.dataset.resource import (
+    AccessResponse,
     DOIChangeStateRequest,
     DOIChangeStateResponse,
     DOICreateRequest,
@@ -25,7 +26,9 @@ from app.controller.v1.dataset.resource import (
     DatasetVersionCreateResponse,
     DatasetVersionGetResponse,
     DatasetVersionResponse,
+    EmbargoResponse,
     PagedDatasetGetResponse,
+    VersionFilesSummaryResponse,
 )
 from app.model.dataset import (
     DataFile,
@@ -35,7 +38,9 @@ from app.model.dataset import (
     DesignState,
     PaginatedResult,
 )
+from app.model.dataset_access import DatasetAccess
 from app.model.doi import DOI, State as DOIState, Mode as DOIMode
+from app.model.embargo import Embargo
 from app.service.dataset import DatasetService
 
 
@@ -62,6 +67,37 @@ def _adapt_data_file(file: DataFile) -> DataFileResponse:
     )
 
 
+def _adapt_embargo(embargo: Embargo | None) -> EmbargoResponse | None:
+    if embargo is None:
+        return None
+    return EmbargoResponse(
+        until=embargo.until,
+        active=embargo.active,
+        metadata_visible=embargo.metadata_visible,
+        note=embargo.note,
+    )
+
+
+def _adapt_access(access: DatasetAccess | None) -> AccessResponse | None:
+    if access is None:
+        return None
+    return AccessResponse(
+        level=access.level.value,
+        can_edit=access.can_edit,
+        can_share=access.can_share,
+        can_manage_embargo=access.can_manage_embargo,
+        can_extend_embargo=access.can_extend_embargo,
+        can_delete=access.can_delete,
+    )
+
+
+def _files_summary(version: DatasetVersion) -> VersionFilesSummaryResponse:
+    return VersionFilesSummaryResponse(
+        count=version.files_count or 0,
+        total_size_bytes=version.files_size_in_bytes or 0,
+    )
+
+
 def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
     return DatasetVersionResponse(
         id=version.id,
@@ -81,6 +117,8 @@ def _adapt_dataset_version(version: DatasetVersion) -> DatasetVersionResponse:
         updated_at=version.updated_at,
         files_size_in_bytes=version.files_size_in_bytes,
         files_count=version.files_count,
+        files_withheld=version.files_withheld,
+        files_summary=_files_summary(version),
     )
 
 
@@ -101,6 +139,8 @@ def _adapt_minimal_dataset_version(version: DatasetVersion) -> DatasetVersionRes
         updated_at=version.updated_at,
         files_size_in_bytes=version.files_size_in_bytes,
         files_count=version.files_count,
+        files_withheld=version.files_withheld,
+        files_summary=_files_summary(version),
     )
 
 
@@ -125,6 +165,8 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         else None,
         design_state=dataset.design_state.name,
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
+        embargo=_adapt_embargo(dataset.embargo),
+        access=_adapt_access(dataset.access),
     )
 
 
@@ -145,6 +187,8 @@ def _adapt_minimal_dataset(dataset: Dataset) -> DatasetGetResponse:
         else None,
         design_state=dataset.design_state.name,
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
+        embargo=_adapt_embargo(dataset.embargo),
+        access=_adapt_access(dataset.access),
     )
 
 
@@ -160,6 +204,8 @@ def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetVersionGetRespon
         version=_adapt_dataset_version(dataset.version),
         design_state=dataset.design_state.name,
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
+        embargo=_adapt_embargo(dataset.embargo),
+        access=_adapt_access(dataset.access),
     )
 
 
@@ -178,6 +224,7 @@ def get_datasets(
     version: str = None,
     visibility: str = None,
     minimal: bool = False,
+    shared: bool = False,
     page: int = 1,
     page_size: int = 10,
     user_id: UUID = Depends(parse_user_header),
@@ -200,6 +247,7 @@ def get_datasets(
         design_state=design_state,
         visibility=visibility,
         minimal=minimal,
+        shared=shared,
         page=page,
         page_size=page_size,
     )
@@ -285,10 +333,11 @@ def update_dataset(
 @inject
 def delete_dataset(
     id: str,
+    user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> None:
-    service.disable_dataset(dataset_id=id, tenancies=tenancies)
+    service.disable_dataset(dataset_id=id, user_id=user_id, tenancies=tenancies)
     return {}
 
 
@@ -326,10 +375,11 @@ def create_dataset(
 @inject
 def enable_dataset(
     id: str,
+    user_id: UUID = Depends(parse_user_header),
     tenancies: list[str] = Depends(parse_tenancy_header),
     service: DatasetService = Depends(Provide[Container.dataset_service]),
 ) -> None:
-    service.enable_dataset(dataset_id=id, tenancies=tenancies)
+    service.enable_dataset(dataset_id=id, user_id=user_id, tenancies=tenancies)
     return {}
 
 
@@ -439,6 +489,7 @@ def create_doi(
         ),
         user_id=user_id,
         tenancies=tenancies,
+        end_embargo=create_doi_request.end_embargo,
     )
 
     return DOICreateResponse(

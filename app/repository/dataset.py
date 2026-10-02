@@ -1,7 +1,8 @@
 from uuid import UUID
 from app.model.dataset import DatasetQuery, FileCollocationStatus, PaginatedResult
 from app.model.db.dataset import DatasetVersion, Dataset, DesignState
-from sqlalchemy import and_, or_, func, text
+from app.model.db.dataset_access import DatasetPermission
+from sqlalchemy import and_, or_, func, text, not_, select
 from sqlalchemy.sql.expression import true
 from contextlib import AbstractContextManager
 from sqlalchemy.orm import Session
@@ -80,7 +81,10 @@ class DatasetRepository:
             raise ConflictException(f"dataset_already_exists: {dataset.id}")
 
     def search(
-        self, query_params: DatasetQuery, tenancies: list[str] = None
+        self,
+        query_params: DatasetQuery,
+        tenancies: list[str] = None,
+        user_id: UUID | None = None,
     ) -> PaginatedResult:
         """
         Search datasets with full-text search and pagination.
@@ -138,7 +142,30 @@ class DatasetRepository:
                     Dataset.versions.any(DatasetVersion.name == query_params.version)
                 )
 
-            query = query.filter(Dataset.tenancy.in_(tenancies))
+            permitted = select(DatasetPermission.dataset_id).where(
+                DatasetPermission.user_id == user_id
+            )
+            if query_params.shared:
+                query = query.filter(Dataset.id.in_(permitted))
+            else:
+                under_embargo = and_(
+                    Dataset.embargo_until.isnot(None),
+                    Dataset.embargo_until > func.now(),
+                )
+                visible_to_tenancy = and_(
+                    Dataset.tenancy.in_(tenancies),
+                    or_(
+                        not_(under_embargo),
+                        Dataset.embargo_metadata_visible.is_(True),
+                    ),
+                )
+                query = query.filter(
+                    or_(
+                        Dataset.owner_id == user_id,
+                        Dataset.id.in_(permitted),
+                        visible_to_tenancy,
+                    )
+                )
 
             # Full-text search with relevance ranking
             if query_params.full_text is not None and query_params.full_text.strip():

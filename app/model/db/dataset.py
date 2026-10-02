@@ -11,6 +11,7 @@ from sqlalchemy import (
     BigInteger,
     UniqueConstraint,
     Table,
+    Text,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -68,6 +69,14 @@ class Dataset(Base):
         nullable=True,
     )
     search_vector = Column(String, nullable=True)
+    embargo_until = Column(DateTime(timezone=True), nullable=True)
+    embargo_metadata_visible = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=sqlalchemy.false(),
+    )
+    embargo_note = Column(Text, nullable=True)
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
 
