@@ -5,7 +5,7 @@ from casbin import SyncedEnforcer
 from minio import Minio
 
 from app.gateway.doi.doi import DOIGateway
-from app.gateway.email.smtp import SmtpSender
+from app.gateway.email.smtp import SmtpSender, public_hostname
 from app.gateway.object_storage.http_client import build_http_client
 from app.service.health import DependencyHealthService
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
@@ -322,6 +322,7 @@ class Container(containers.DeclarativeContainer):
         password=config.SMTP_PASSWORD,
         starttls=config.SMTP_STARTTLS,
         timeout_seconds=config.SMTP_TIMEOUT_SECONDS,
+        local_hostname=providers.Callable(public_hostname, config.PUBLIC_BASE_URL),
     )
 
     email_service = providers.Factory(

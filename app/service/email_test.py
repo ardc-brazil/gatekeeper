@@ -231,6 +231,7 @@ class TestDispatch(EmailServiceTestCase):
         self.assertEqual(sent["From"], "DataMap <datamap.pcs@gmail.com>")
         self.assertEqual(sent["Subject"], "DataMap test message")
         self.assertTrue(sent["Message-ID"].endswith("@gmail.com>"))
+        self.assertEqual(sent["Date"], "Wed, 30 Sep 2026 12:00:00 +0000")
         self.assertEqual(
             sent.get_body(("plain",)).get_content().strip(), record.body_text
         )

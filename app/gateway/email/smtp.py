@@ -1,6 +1,7 @@
 import smtplib
 import ssl
 from email.message import EmailMessage
+from urllib.parse import urlparse
 
 from app.metrics import metrics
 
@@ -31,6 +32,10 @@ def _refusal_summary(
     return f"{type(e).__name__} {','.join(str(code) for code in codes)}"
 
 
+def public_hostname(base_url: str) -> str | None:
+    return urlparse(base_url).hostname
+
+
 class SmtpSender:
     def __init__(
         self,
@@ -41,6 +46,7 @@ class SmtpSender:
         starttls: bool,
         timeout_seconds: float = 10.0,
         smtp_factory=smtplib.SMTP,
+        local_hostname: str | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -49,6 +55,7 @@ class SmtpSender:
         self._starttls = starttls
         self._timeout = timeout_seconds
         self._smtp_factory = smtp_factory
+        self._local_hostname = local_hostname
 
     def send(self, message: EmailMessage) -> None:
         with metrics.external_call("smtp", "send"):
@@ -57,7 +64,10 @@ class SmtpSender:
     def _send(self, message: EmailMessage) -> None:
         try:
             connection = self._smtp_factory(
-                self._host, self._port, timeout=self._timeout
+                self._host,
+                self._port,
+                timeout=self._timeout,
+                local_hostname=self._local_hostname,
             )
         except (OSError, smtplib.SMTPException) as e:
             raise DefiniteSendFailure(f"connect: {e}") from e
