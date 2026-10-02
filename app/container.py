@@ -17,6 +17,7 @@ from app.repository.dataset_invitation import DatasetInvitationRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
 from app.repository.email import EmailRepository
+from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 
@@ -30,6 +31,7 @@ from app.service.email import EmailService
 from app.service.email_template import EmailTemplateRenderer
 from app.service.embargo import EmbargoService
 from app.service.embargo_termination import EmbargoTermination
+from app.service.notification import EmbargoNotificationService
 from app.service.permission import PermissionService
 from app.service.share import ShareService
 from app.service.tus import TusService
@@ -354,5 +356,21 @@ class Container(containers.DeclarativeContainer):
         anonymous_link_repository=dataset_anonymous_link_repository,
         dataset_repository=dataset_repository,
         audit=dataset_access_audit,
+        public_base_url=config.PUBLIC_BASE_URL,
+    )
+
+    embargo_notification_repository = providers.Factory(
+        EmbargoNotificationRepository,
+        session_factory=db.provided.session,
+    )
+
+    embargo_notification_service = providers.Factory(
+        EmbargoNotificationService,
+        notification_repository=embargo_notification_repository,
+        permission_repository=permission_repository,
+        user_repository=user_repository,
+        anonymous_link_repository=dataset_anonymous_link_repository,
+        audit=dataset_access_audit,
+        email_service=email_service,
         public_base_url=config.PUBLIC_BASE_URL,
     )
