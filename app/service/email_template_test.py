@@ -256,6 +256,7 @@ CONTEXTS[EmailTemplate.EMBARGO_REMINDER] = {
     "embargo_until_date": "December 15, 2026",
     "embargo_until_short": "December 15",
     "tenancy_name": "Data Amazon",
+    "members_can_edit": True,
     "owner_name": "Luciana Rizzo",
     "owner_email": "luciana.rizzo@usp.br",
     "people_with_access": ["You", "Alan Calheiros", "Caio Maia", "Fernanda Lima"],
@@ -269,6 +270,7 @@ CONTEXTS[EmailTemplate.EMBARGO_ENDED] = {
     "is_owner": True,
     "ended_on_date": "December 15, 2026",
     "tenancy_name": "Data Amazon",
+    "members_can_edit": True,
     "owner_name": "Luciana Rizzo",
     "owner_email": "luciana.rizzo@usp.br",
     "doi": "10.5281/datamap.3f9c1e",
@@ -529,3 +531,122 @@ class TestEmbargoTemplates(unittest.TestCase):
 
         with self.assertRaises(UndefinedError):
             self.render(EmailTemplate.EMBARGO_REMINDER, context)
+
+
+class TestMembersSentence(unittest.TestCase):
+    def setUp(self):
+        self.renderer = EmailTemplateRenderer(site_url=SITE_URL)
+
+    def render(self, template, context):
+        return self.renderer.render(template, context)
+
+    def assert_in_both(self, sentence, email):
+        self.assertIn(sentence, email.html)
+        self.assertIn(sentence, email.text)
+
+    def test_the_owner_reminder_says_members_can_edit_again(self):
+        email = self.render(EmailTemplate.EMBARGO_REMINDER, REMINDER)
+
+        self.assert_in_both(
+            "When the embargo ends, members of Data Amazon can read and edit this dataset again; "
+            "the people you shared it with keep their access.",
+            email,
+        )
+
+    def test_the_owner_reminder_says_editing_stays_with_the_people_shared_with(self):
+        email = self.render(
+            EmailTemplate.EMBARGO_REMINDER, {**REMINDER, "members_can_edit": False}
+        )
+
+        self.assert_in_both(
+            "When the embargo ends, members of Data Amazon can read this dataset; "
+            "editing stays with the people you shared it with.",
+            email,
+        )
+        self.assertNotIn("can read and edit", email.text)
+
+    def test_the_collaborator_reminder_names_the_owner(self):
+        editable = self.render(EmailTemplate.EMBARGO_REMINDER, COLLABORATOR_REMINDER)
+        read_only = self.render(
+            EmailTemplate.EMBARGO_REMINDER,
+            {**COLLABORATOR_REMINDER, "members_can_edit": False},
+        )
+
+        self.assert_in_both(
+            "When the embargo ends, members of Data Amazon can read and edit this dataset again; "
+            "the people Luciana Rizzo shared it with keep their access.",
+            editable,
+        )
+        self.assert_in_both(
+            "When the embargo ends, members of Data Amazon can read this dataset; "
+            "editing stays with Luciana Rizzo and the people they shared it with.",
+            read_only,
+        )
+
+    def test_the_owner_end_notice_says_what_members_got_back(self):
+        editable = self.render(EmailTemplate.EMBARGO_ENDED, ENDED)
+        read_only = self.render(
+            EmailTemplate.EMBARGO_ENDED, {**ENDED, "members_can_edit": False}
+        )
+
+        self.assert_in_both(
+            "Members of Data Amazon can read and edit this dataset again; "
+            "the people you shared it with keep their access.",
+            editable,
+        )
+        self.assert_in_both(
+            "Members of Data Amazon can read this dataset; "
+            "editing stays with the people you shared it with.",
+            read_only,
+        )
+
+    def test_the_collaborator_end_notice_names_the_owner(self):
+        email = self.render(
+            EmailTemplate.EMBARGO_ENDED,
+            {**COLLABORATOR_ENDED, "members_can_edit": False},
+        )
+
+        self.assert_in_both(
+            "Members of Data Amazon can read this dataset; "
+            "editing stays with Luciana Rizzo and the people they shared it with.",
+            email,
+        )
+
+    def test_an_end_by_manual_doi_says_it_too(self):
+        email = self.render(
+            EmailTemplate.EMBARGO_ENDED,
+            {
+                **ENDED,
+                "doi": "10.1029/2026JD041877",
+                "ended_early": True,
+                "ended_by_manual_doi": True,
+            },
+        )
+
+        self.assert_in_both(
+            "Members of Data Amazon can read and edit this dataset again; "
+            "the people you shared it with keep their access.",
+            email,
+        )
+
+    def test_the_sentence_is_a_paragraph_of_its_own_in_the_text(self):
+        reminder = self.render(EmailTemplate.EMBARGO_REMINDER, REMINDER).text
+        ended = self.render(EmailTemplate.EMBARGO_ENDED, COLLABORATOR_ENDED).text
+
+        self.assertIn("\n\nWhen the embargo ends, members of Data Amazon", reminder)
+        self.assertIn("keep their access.\n\n", reminder)
+        self.assertIn("\n\nMembers of Data Amazon can read and edit", ended)
+
+    def test_a_context_without_the_setting_fails_here_not_in_an_inbox(self):
+        for template, context in (
+            (EmailTemplate.EMBARGO_REMINDER, REMINDER),
+            (EmailTemplate.EMBARGO_ENDED, ENDED),
+        ):
+            with self.subTest(template=template):
+                partial = {
+                    key: value
+                    for key, value in context.items()
+                    if key != "members_can_edit"
+                }
+                with self.assertRaises(UndefinedError):
+                    self.render(template, partial)

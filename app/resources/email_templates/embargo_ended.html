@@ -7,6 +7,7 @@
 {{ m.heading("Your embargo has ended" if is_owner else "An embargo has ended") }}
 {% if ended_by_manual_doi %}
 {% call m.paragraph() %}Registering the external DOI {{ m.strong(doi) }} ended the embargo on the dataset below today, {{ m.strong(ended_on_date) }}. Its files are now available to every member of {{ m.strong(tenancy_name) }}, and its public page is published.{% if not is_owner %} Your own access doesn't change.{% endif %}{% endcall %}
+{% call m.paragraph() %}{% if members_can_edit %}Members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}Members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}Members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}{% endcall %}
 {{ m.details([
   {"label": "Dataset", "value": dataset_name},
   {"label": "Files", "value": "Now available to every member of " ~ tenancy_name},
@@ -19,6 +20,7 @@
 {% endif %}
 {% elif is_owner %}
 {% call m.paragraph() %}{% if ended_early %}You ended the embargo on the dataset below early, today, {{ m.strong(ended_on_date) }}.{% else %}The embargo on the dataset below ended today, {{ m.strong(ended_on_date) }}.{% endif %}{% endcall %}
+{% call m.paragraph() %}{% if members_can_edit %}Members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}Members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}Members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}{% endcall %}
 {{ m.details([
   {"label": "Dataset", "value": dataset_name},
   {"label": "Files", "value": "Now available to every member of " ~ tenancy_name},
@@ -40,6 +42,7 @@
 {% endif %}
 {% else %}
 {% call m.paragraph() %}{% if ended_early %}{{ owner_name }} ended the embargo on the dataset below early, today, {{ m.strong(ended_on_date) }}.{% else %}The embargo on the dataset below ended today, {{ m.strong(ended_on_date) }}.{% endif %} Its files are now available to every member of {{ m.strong(tenancy_name) }}. Your own access doesn't change.{% endcall %}
+{% call m.paragraph() %}{% if members_can_edit %}Members of {{ tenancy_name }} can read and edit this dataset again; the people {{ "you" if is_owner else owner_name }} shared it with keep their access.{% elif is_owner %}Members of {{ tenancy_name }} can read this dataset; editing stays with the people you shared it with.{% else %}Members of {{ tenancy_name }} can read this dataset; editing stays with {{ owner_name }} and the people they shared it with.{% endif %}{% endcall %}
 {% set rows = [{"label": "Dataset", "value": dataset_name}, {"label": "Owner", "value": owner_name ~ (" · " ~ owner_email if owner_email else "")}] %}
 {% if doi_registered %}{% set rows = rows + [{"label": "DOI", "value": doi ~ " · registered, not findable"}] %}{% endif %}
 {{ m.details(rows) }}
