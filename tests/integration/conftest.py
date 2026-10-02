@@ -9,6 +9,7 @@ from tests.integration.config import config
 from tests.integration.utils.http_client import HttpClient
 from tests.integration.fixtures.auth import AuthFixture
 from tests.integration.fixtures.dataset import DatasetFixture
+from tests.integration.fixtures.sharing import embargoed_dataset  # noqa: F401
 
 
 @pytest.fixture(scope="session")
