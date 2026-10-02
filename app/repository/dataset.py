@@ -152,19 +152,14 @@ class DatasetRepository:
                     Dataset.embargo_until.isnot(None),
                     Dataset.embargo_until > func.now(),
                 )
-                visible_to_tenancy = and_(
-                    Dataset.tenancy.in_(tenancies),
-                    or_(
-                        not_(under_embargo),
-                        Dataset.embargo_metadata_visible.is_(True),
-                    ),
-                )
                 query = query.filter(
+                    Dataset.tenancy.in_(tenancies),
                     or_(
                         Dataset.owner_id == user_id,
                         Dataset.id.in_(permitted),
-                        visible_to_tenancy,
-                    )
+                        not_(under_embargo),
+                        Dataset.embargo_metadata_visible.is_(True),
+                    ),
                 )
 
             # Full-text search with relevance ranking
