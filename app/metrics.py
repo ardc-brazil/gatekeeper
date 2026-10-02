@@ -224,6 +224,18 @@ class Metrics:
             ["outcome"],
             registry=self.registry,
         )
+        self._anonymous_link_views = Counter(
+            "datamap_anonymous_link_views_total",
+            "Anonymous link pages served",
+            ["tenancy", "outcome"],
+            registry=self.registry,
+        )
+        self._anonymous_links_created = Counter(
+            "datamap_anonymous_links_created_total",
+            "Anonymous links created",
+            ["tenancy"],
+            registry=self.registry,
+        )
         self._dataset_access_events = Counter(
             "datamap_dataset_access_events_total",
             "Sharing and embargo decisions recorded in the access audit trail",
@@ -336,6 +348,14 @@ class Metrics:
 
     def snapshot_published(self, success: bool) -> None:
         self._snapshots.labels(outcome="success" if success else "error").inc()
+
+    def anonymous_link_viewed(self, tenancy: str | None, outcome: str) -> None:
+        self._anonymous_link_views.labels(
+            tenancy=tenancy or "none", outcome=outcome
+        ).inc()
+
+    def anonymous_link_created(self, tenancy: str | None) -> None:
+        self._anonymous_links_created.labels(tenancy=tenancy or "none").inc()
 
     def dataset_access_event(self, event: str) -> None:
         self._dataset_access_events.labels(event=event).inc()
