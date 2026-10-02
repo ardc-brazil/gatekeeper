@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -140,7 +141,9 @@ class EmbargoNotificationService:
             "dataset_url": f"{self._base_url}/app/datasets/{dataset.id}",
         }
         if template == "embargo_reminder":
-            days_remaining = max(0, (dataset.embargo_until - now).days)
+            days_remaining = max(
+                1, math.ceil((dataset.embargo_until - now) / timedelta(days=1))
+            )
             base.update(
                 days_remaining=days_remaining,
                 embargo_until_date=long_date(dataset.embargo_until),

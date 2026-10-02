@@ -69,10 +69,10 @@ class TestEmbargoReminders:
         dispatch(http_client)
 
         messages = Mailpit().wait_for(reader["email"], count=2)
-        reminders = with_subject(messages, "ends in 4 days")
+        reminders = with_subject(messages, "ends in 5 days")
         assert len(reminders) == 1
         text = Mailpit().message(reminders[0]["ID"])["Text"]
-        assert "An embargo ends in 4 days." in text
+        assert "An embargo ends in 5 days." in text
         assert (
             "Integration Test User, the owner, is the person who can do that." in text
         )

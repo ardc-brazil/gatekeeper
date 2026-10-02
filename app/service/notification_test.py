@@ -123,7 +123,7 @@ class TestQueueDue(unittest.TestCase):
         self.assertTrue(owner["can_extend"])
         self.assertFalse(reader["is_owner"])
         self.assertFalse(reader["can_extend"])
-        self.assertEqual(owner["days_remaining"], 4)
+        self.assertEqual(owner["days_remaining"], 5)
         self.assertEqual(owner["later_offsets"], [1])
         self.assertTrue(owner["others_notified"])
         self.assertEqual(owner["people_with_access"], ["You", "Bruno"])
@@ -276,6 +276,18 @@ class TestQueueDue(unittest.TestCase):
             if call.kwargs["recipient"] == "ana@usp.br"
         )
         self.assertEqual(context["days_remaining"], 3)
+
+    def test_the_last_reminder_never_says_zero_days(self):
+        self.dataset.embargo_until = NOW + timedelta(hours=20)
+
+        self.service.queue_due(NOW)
+
+        context = next(
+            call.kwargs["context"]
+            for call in self.email.enqueue.call_args_list
+            if call.kwargs["recipient"] == "ana@usp.br"
+        )
+        self.assertEqual(context["days_remaining"], 1)
 
     def test_an_enqueue_failure_for_one_recipient_still_queues_the_other(self):
         self.email.enqueue.side_effect = [RuntimeError("boom"), uuid4()]
