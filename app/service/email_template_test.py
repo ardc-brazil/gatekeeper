@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 from jinja2 import UndefinedError
 
@@ -171,3 +173,60 @@ class TestEmailTemplateRenderer(unittest.TestCase):
 
         self.assertNotIn("cdn.example.org", without.html)
         self.assertIn('src="https://cdn.example.org/notebooks.png"', with_image.html)
+
+
+class TestPlainTextPart(unittest.TestCase):
+    def setUp(self):
+        self.renderer = EmailTemplateRenderer(site_url=SITE_URL)
+
+    def test_a_template_without_a_text_file_gets_text_derived_from_its_html(self):
+        email = self.renderer.render(
+            EmailTemplate.NOTIFICATION, CONTEXTS[EmailTemplate.NOTIFICATION]
+        )
+
+        self.assertIn("André Maia approved your request.", email.text)
+        self.assertIn(
+            "Open dataset (https://datamap.example.org/datasets/7b21d4)", email.text
+        )
+        self.assertNotIn("<", email.text)
+        self.assertNotIn("You now have access to Manaus", email.text)
+
+    def test_a_text_file_beside_the_html_is_used_unescaped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "notification.html").write_text(
+                "{% block title %}{{ title }}{% endblock %}<p>{{ title }}</p>"
+            )
+            (root / "notification.txt").write_text(
+                "Plain: {{ title }} at {{ site_url }}"
+            )
+            renderer = EmailTemplateRenderer(site_url=SITE_URL, templates_dir=root)
+
+            email = renderer.render(EmailTemplate.NOTIFICATION, {"title": "A & B"})
+
+        self.assertEqual(email.text, "Plain: A & B at https://datamap.example.org")
+        self.assertIn("A &amp; B", email.html)
+
+    def test_a_missing_variable_in_the_text_file_raises(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "notification.html").write_text("{% block title %}t{% endblock %}")
+            (root / "notification.txt").write_text("{{ nowhere }}")
+            renderer = EmailTemplateRenderer(site_url=SITE_URL, templates_dir=root)
+
+            with self.assertRaises(UndefinedError):
+                renderer.render(EmailTemplate.NOTIFICATION, {})
+
+    def test_the_site_url_is_exposed_without_a_trailing_slash(self):
+        self.assertEqual(self.renderer.site_url, "https://datamap.example.org")
+
+    def test_the_subject_is_plain_text_not_html(self):
+        context = {
+            **CONTEXTS[EmailTemplate.NOTIFICATION],
+            "title": "Ozone & CO2 — Ana's data",
+        }
+
+        email = self.renderer.render(EmailTemplate.NOTIFICATION, context)
+
+        self.assertEqual(email.subject, "Ozone & CO2 — Ana's data")
+        self.assertIn("Ozone &amp; CO2", email.html)

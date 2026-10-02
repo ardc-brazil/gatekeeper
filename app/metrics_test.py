@@ -428,6 +428,28 @@ class TestAuthFailures(MetricsTestCase):
         )
 
 
+class TestEmail(MetricsTestCase):
+    def test_each_outcome_is_counted_per_template(self):
+        self.metrics.email_outcome("invitation", "sent")
+        self.metrics.email_outcome("invitation", "sent")
+        self.metrics.email_outcome("invitation", "failed")
+
+        self.assertEqual(
+            self.value("datamap_emails_total", template="invitation", outcome="sent"),
+            2.0,
+        )
+        self.assertEqual(
+            self.value("datamap_emails_total", template="invitation", outcome="failed"),
+            1.0,
+        )
+
+    def test_the_pending_gauge_shows_the_last_count(self):
+        self.metrics.email_pending(7)
+        self.metrics.email_pending(3)
+
+        self.assertEqual(self.value("datamap_email_pending"), 3.0)
+
+
 class TestExposition(MetricsTestCase):
     def test_it_renders_in_the_prometheus_text_format(self):
         self.metrics.tus_hook("post-finish", 500)

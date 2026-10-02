@@ -60,7 +60,9 @@ def _record(conn, statement: str, outcome: str) -> None:
 class Database:
     def __init__(self, db_url: PostgresDsn, log_enabled: bool) -> None:
         self._logger = logging.getLogger("database")
-        self._engine = create_engine(db_url.unicode_string(), echo=log_enabled)
+        self._engine = create_engine(
+            db_url.unicode_string(), echo=log_enabled, hide_parameters=True
+        )
         instrument_engine(self._engine)
         self._session_factory = orm.scoped_session(
             orm.sessionmaker(

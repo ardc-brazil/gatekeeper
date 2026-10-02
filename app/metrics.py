@@ -229,6 +229,17 @@ class Metrics:
             "Datasets waiting for their files to be collocated",
             registry=self.registry,
         )
+        self._emails = Counter(
+            "datamap_emails_total",
+            "Email messages by what became of them",
+            ["template", "outcome"],
+            registry=self.registry,
+        )
+        self._email_pending = Gauge(
+            "datamap_email_pending",
+            "Email messages waiting to be sent",
+            registry=self.registry,
+        )
 
     def request(
         self,
@@ -322,6 +333,12 @@ class Metrics:
 
     def collocation_pending(self, count: int) -> None:
         self._collocation_pending.set(count)
+
+    def email_outcome(self, template: str, outcome: str) -> None:
+        self._emails.labels(template=template, outcome=outcome).inc()
+
+    def email_pending(self, count: int) -> None:
+        self._email_pending.set(count)
 
     def render(self) -> bytes:
         return generate_latest(self.registry)

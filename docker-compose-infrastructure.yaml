@@ -8,7 +8,10 @@ x-logging: &logging
 
 services:
   gatekeeper:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
     image: gatekeeper
     container_name: datamap_gatekeeper
     restart: always

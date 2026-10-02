@@ -67,6 +67,27 @@ class Config(BaseSettings):
         9095, description="Port the Prometheus metrics are served on"
     )
 
+    EMAIL_ENABLED: bool = Field(
+        False, description="Send queued email; when false it stays pending"
+    )
+    EMAIL_FROM_NAME: str = Field("DataMap", description="Sender display name")
+    EMAIL_FROM_ADDRESS: str = Field(
+        "no-reply@datamap.pcs.usp.br", description="Sender address"
+    )
+    EMAIL_REPLY_TO: Optional[str] = Field(None, description="Reply-To address")
+    SMTP_HOST: str = Field("localhost", description="SMTP server host")
+    SMTP_PORT: int = Field(587, description="SMTP server port")
+    SMTP_USERNAME: Optional[str] = Field(None, description="SMTP user")
+    SMTP_PASSWORD: Optional[str] = Field(None, description="SMTP password")
+    SMTP_STARTTLS: bool = Field(
+        True, description="Upgrade the connection with STARTTLS"
+    )
+    SMTP_TIMEOUT_SECONDS: float = Field(10, description="SMTP socket timeout")
+    PUBLIC_BASE_URL: str = Field(
+        "https://datamap.pcs.usp.br", description="Origin of links in messages"
+    )
+    BUILD_COMMIT: str = Field("unknown", description="Commit the image was built from")
+
     @field_validator("DATABASE_URL", mode="before")
     def build_database_url(cls, value: Optional[str], values: ValidationInfo) -> str:
         if isinstance(value, str):
