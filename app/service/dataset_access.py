@@ -29,6 +29,11 @@ _PERMISSION_ACTIONS = {
 }
 
 
+def allows_member_edits(dataset: DatasetDBModel) -> bool:
+    # None is a row not flushed yet, whose column default is true; `not None` would read it as read-only.
+    return dataset.members_can_edit is not False
+
+
 class DatasetAccessService:
     def __init__(
         self, permission_repository: PermissionRepository, user_service: UserService
@@ -174,6 +179,11 @@ class DatasetAccessService:
                 and bool(dataset.embargo_metadata_visible)
                 and self._role_allows(user_id, "GET")
             )
+        if action in (
+            DatasetAction.WRITE,
+            DatasetAction.DELETE,
+        ) and not allows_member_edits(dataset):
+            return False
         return self._role_allows(user_id, _ROLE_METHOD[action])
 
     def _role_allows(self, user_id: UUID, method: str) -> bool:
