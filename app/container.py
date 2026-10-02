@@ -32,6 +32,7 @@ from app.service.email import EmailService
 from app.service.email_template import EmailTemplateRenderer
 from app.service.embargo import EmbargoService
 from app.service.embargo_termination import EmbargoTermination
+from app.service.members_access import MembersAccessService
 from app.service.notification import EmbargoNotificationService
 from app.service.permission import PermissionService
 from app.service.share import ShareService
@@ -63,6 +64,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.dataset.dataset_snapshot",
             "app.controller.v1.dataset.embargo",
             "app.controller.v1.dataset.embargo_status",
+            "app.controller.v1.dataset.members_access",
             "app.controller.v1.dataset.share",
             "app.controller.v1.dataset.anonymous_link",
             "app.controller.v1.invitation.invitation",
@@ -280,6 +282,14 @@ class Container(containers.DeclarativeContainer):
         access_service=dataset_access_service,
         audit=dataset_access_audit,
         termination=embargo_termination,
+    )
+
+    members_access_service = providers.Factory(
+        MembersAccessService,
+        dataset_service=dataset_service,
+        repository=dataset_repository,
+        access_service=dataset_access_service,
+        audit=dataset_access_audit,
     )
 
     tus_service = providers.Factory(

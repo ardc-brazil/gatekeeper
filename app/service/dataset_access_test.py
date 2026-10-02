@@ -406,3 +406,13 @@ class TestMembersAccess(unittest.TestCase):
         self.assertTrue(allows_member_edits(dataset))
         self.assertTrue(self._permits(dataset, DatasetAction.WRITE))
         self.assertFalse(allows_member_edits(_dataset(members_can_edit=False)))
+
+    def test_only_the_owner_changes_what_members_can_do(self):
+        dataset = _dataset(owner_id=self.user_id)
+        self.assertTrue(self._permits(dataset, DatasetAction.MANAGE_MEMBERS_ACCESS))
+
+        self._grant("write")
+        others = _dataset(owner_id=uuid4())
+
+        self.assertFalse(self._permits(others, DatasetAction.MANAGE_MEMBERS_ACCESS))
+        self.users.enforce.assert_not_called()

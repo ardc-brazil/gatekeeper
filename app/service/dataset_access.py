@@ -28,6 +28,10 @@ _PERMISSION_ACTIONS = {
     ),
 }
 
+_OWNER_ONLY_ACTIONS = frozenset(
+    {DatasetAction.MANAGE_EMBARGO, DatasetAction.MANAGE_MEMBERS_ACCESS}
+)
+
 
 def allows_member_edits(dataset: DatasetDBModel) -> bool:
     # None is a row not flushed yet, whose column default is true; `not None` would read it as read-only.
@@ -162,7 +166,7 @@ class DatasetAccessService:
             return False
         if level == AccessLevel.OWNER:
             return True
-        if action == DatasetAction.MANAGE_EMBARGO:
+        if action in _OWNER_ONLY_ACTIONS:
             return False
         active = self.embargo_active(dataset, now)
         if action == DatasetAction.EXTEND_EMBARGO:

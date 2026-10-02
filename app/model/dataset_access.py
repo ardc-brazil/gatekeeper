@@ -25,6 +25,7 @@ class DatasetAction(enum.Enum):
     DELETE = "delete"
     EXTEND_EMBARGO = "extend_embargo"
     MANAGE_EMBARGO = "manage_embargo"
+    MANAGE_MEMBERS_ACCESS = "manage_members_access"
 
 
 class AccessEventType(str, enum.Enum):
@@ -40,6 +41,7 @@ class AccessEventType(str, enum.Enum):
     INVITATION_REVOKED = "invitation_revoked"
     ANONYMOUS_LINK_CREATED = "anonymous_link_created"
     ANONYMOUS_LINK_REVOKED = "anonymous_link_revoked"
+    MEMBERS_ACCESS_CHANGED = "members_access_changed"
 
 
 def utcnow() -> datetime:
@@ -63,3 +65,9 @@ class DatasetPermission:
     level: PermissionLevel
     granted_by: UUID | None = None
     created_at: datetime | None = None
+
+
+@dataclass
+class MembersAccess:
+    members_can_edit: bool
+    access: DatasetAccess
