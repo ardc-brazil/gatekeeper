@@ -1,0 +1,50 @@
+{% extends "_transactional.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{% if is_owner %}The embargo on your dataset has ended{% if not ended_by_manual_doi %} — one step left{% endif %}{% else %}The embargo on a dataset you have access to has ended{% endif %}{% endblock %}
+{% block preheader %}{% if ended_by_manual_doi %}Registering the external DOI {{ doi }} ended the embargo. The public page is published.{% elif is_owner %}The files are open to {{ tenancy_name }}. Nothing is public yet{% if doi_registered %}: the DOI is registered but not findable until you promote it{% endif %}.{% else %}The files of "{{ dataset_name }}" are now open to the members of {{ tenancy_name }}.{% endif %}{% endblock %}
+{% block label %}Embargo ended{% endblock %}
+{% block content %}
+{{ m.heading("Your embargo has ended" if is_owner else "An embargo has ended") }}
+{% if ended_by_manual_doi %}
+{% call m.paragraph() %}Registering the external DOI {{ m.strong(doi) }} ended the embargo on the dataset below today, {{ m.strong(ended_on_date) }}. Its files are now available to every member of {{ m.strong(tenancy_name) }}, and its public page is published.{% if not is_owner %} Your own access doesn't change.{% endif %}{% endcall %}
+{{ m.details([
+  {"label": "Dataset", "value": dataset_name},
+  {"label": "Files", "value": "Now available to every member of " ~ tenancy_name},
+  {"label": "Public page", "value": "Published, with the authors"},
+]) }}
+{{ m.button("Open the dataset", dataset_url) }}
+{% if anonymous_link_count and is_owner %}
+{{ m.spacer(16) }}
+{% call m.note() %}Anonymous links now lead to the public page.{% endcall %}
+{% endif %}
+{% elif is_owner %}
+{% call m.paragraph() %}{% if ended_early %}You ended the embargo on the dataset below early, today, {{ m.strong(ended_on_date) }}.{% else %}The embargo on the dataset below ended today, {{ m.strong(ended_on_date) }}.{% endif %}{% endcall %}
+{{ m.details([
+  {"label": "Dataset", "value": dataset_name},
+  {"label": "Files", "value": "Now available to every member of " ~ tenancy_name},
+  {"label": "DOI", "value": (doi ~ " · registered, not findable") if doi_registered else (doi ~ " · not registered yet" if doi else "None yet")},
+]) }}
+{% call m.paragraph(bottom=4) %}{{ m.strong("Nothing has been made public.") }}{% endcall %}
+{% if doi_registered %}
+{% call m.paragraph() %}Your DOI is {{ m.strong("registered but not findable") }}. That means it resolves &mdash; anyone with the number lands on DataMap &mdash; but DataCite doesn't index it: the dataset won't appear in DataCite search, in Google Dataset Search or in any service that harvests from them, and it has no public page yet.{% endcall %}
+{% call m.paragraph() %}To publish it, make the DOI findable from the dataset page. That creates the public page with the authors. {{ m.strong("Nothing will do this for you.") }}{% endcall %}
+{{ m.button("Make the DOI findable", dataset_url) }}
+{% else %}
+{% call m.paragraph() %}To publish it, create a DOI from the dataset page and make it findable. That creates the public page with the authors. {{ m.strong("Nothing will do this for you.") }}{% endcall %}
+{{ m.button("Open the dataset", dataset_url) }}
+{% endif %}
+{{ m.spacer(16) }}
+{% call m.amber_note() %}Not ready to publish? Leave it as it is. The files stay available to {{ tenancy_name }} members and to the people you shared with. This reminder stays on the dataset page until you decide.{% endcall %}
+{% if anonymous_link_count %}
+{% call m.note() %}Anonymous links keep showing the anonymised page until you publish; then they lead to the public page.{% endcall %}
+{% endif %}
+{% else %}
+{% call m.paragraph() %}{% if ended_early %}{{ owner_name }} ended the embargo on the dataset below early, today, {{ m.strong(ended_on_date) }}.{% else %}The embargo on the dataset below ended today, {{ m.strong(ended_on_date) }}.{% endif %} Its files are now available to every member of {{ m.strong(tenancy_name) }}. Your own access doesn't change.{% endcall %}
+{% set rows = [{"label": "Dataset", "value": dataset_name}, {"label": "Owner", "value": owner_name ~ (" · " ~ owner_email if owner_email else "")}] %}
+{% if doi_registered %}{% set rows = rows + [{"label": "DOI", "value": doi ~ " · registered, not findable"}] %}{% endif %}
+{{ m.details(rows) }}
+{% call m.paragraph() %}Nothing has been made public yet. The dataset gets its public page when {{ m.strong(owner_name) }} makes the DOI findable &mdash; a manual step only the owner can take. If you're co-author, this may be a good moment to check with them.{% endcall %}
+{{ m.button("Open the dataset", dataset_url) }}
+{% endif %}
+{% endblock %}
+{% block reason %}{% if is_owner %}You received this email because you own this dataset.{% else %}You received this email because {{ shared_by_name or owner_name }} shared this dataset with you.{% endif %}{% endblock %}

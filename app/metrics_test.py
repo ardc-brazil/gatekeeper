@@ -472,3 +472,36 @@ class TestDatasetAccessEvents(MetricsTestCase):
         self.assertEqual(
             self.value("datamap_dataset_access_events_total", event="extended"), 1.0
         )
+
+
+class TestAnonymousLinks(MetricsTestCase):
+    def test_views_are_counted_by_outcome_and_tenancy(self):
+        self.metrics.anonymous_link_viewed("datamap/production/data-amazon", "shown")
+        self.metrics.anonymous_link_viewed(None, "not_found")
+
+        self.assertEqual(
+            self.value(
+                "datamap_anonymous_link_views_total",
+                tenancy="datamap/production/data-amazon",
+                outcome="shown",
+            ),
+            1.0,
+        )
+        self.assertEqual(
+            self.value(
+                "datamap_anonymous_link_views_total",
+                tenancy="none",
+                outcome="not_found",
+            ),
+            1.0,
+        )
+
+    def test_created_links_are_counted_by_tenancy(self):
+        self.metrics.anonymous_link_created("datamap/production/data-amazon")
+        self.assertEqual(
+            self.value(
+                "datamap_anonymous_links_created_total",
+                tenancy="datamap/production/data-amazon",
+            ),
+            1.0,
+        )

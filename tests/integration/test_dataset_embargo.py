@@ -632,9 +632,97 @@ class TestEmbargoStatus:
         )
 
         assert_status_code(response, 200)
-        assert response.json() == {"embargoed": False, "until": None}
+        assert response.json() == {"embargoed": False, "until": None, "doi": None}
+
+    def test_it_names_the_versions_doi_while_embargoed(self, http_client, owner):
+        dataset = create_dataset(http_client, owner)
+        set_embargo(http_client, dataset["id"], owner, visible=False)
+        doi = auto_doi(http_client, dataset, owner)
+        assert doi.status_code in (200, 201), doi.text
+        version = dataset["current_version"]["name"]
+
+        response = http_client.get(
+            f"/datasets/{dataset['id']}/embargo-status?version={version}",
+            headers=client_headers(),
+        )
+
+        assert_status_code(response, 200)
+        assert response.json()["doi"] == doi.json()["identifier"]
 
     def test_it_needs_client_credentials(self, http_client):
         response = http_client.get(f"/datasets/{uuid.uuid4()}/embargo-status")
 
         assert_status_code(response, 401)
+
+
+class TestWhatTheDesignAdds:
+    def test_the_owner_extends_with_a_reason_edits_the_note_and_reads_the_history(
+        self, http_client, owner
+    ):
+        dataset = create_dataset(http_client, owner)
+        set_embargo(http_client, dataset["id"], owner, visible=False)
+
+        extended = http_client.post(
+            f"/datasets/{dataset['id']}/embargo/extend",
+            json={"until": until(80), "reason": "Second review round"},
+            headers=owner,
+        )
+        assert_status_code(extended, 200)
+
+        note = http_client.put(
+            f"/datasets/{dataset['id']}/embargo/note",
+            json={"note": "Accepted with revisions"},
+            headers=owner,
+        )
+        assert_status_code(note, 200)
+        assert note.json()["note"] == "Accepted with revisions"
+
+        history = http_client.get(
+            f"/datasets/{dataset['id']}/access-events", headers=owner
+        )
+
+        assert_status_code(history, 200)
+        types = [item["event_type"] for item in history.json()["items"]]
+        assert types[:3] == ["note_changed", "extended", "created"]
+        assert history.json()["items"][1]["note"] == "Second review round"
+
+    def test_the_detail_payload_names_the_owner(self, http_client, owner):
+        dataset = create_dataset(http_client, owner)
+
+        detail = http_client.get(f"/datasets/{dataset['id']}", headers=owner)
+
+        assert_status_code(detail, 200)
+        assert detail.json()["owner"]["id"] == config.user_id
+        assert detail.json()["owner"]["name"] == "Integration Test User"
+
+        listed = http_client.get(
+            "/datasets/", params={"full_text": dataset["name"]}, headers=owner
+        )
+
+        assert_status_code(listed, 200)
+        items = listed.json()["content"]
+        assert len(items) == 1
+        assert items[0]["owner"] is None
+
+    def test_a_tenancy_member_cannot_read_the_history(self, http_client, owner, member):
+        dataset = create_dataset(http_client, owner)
+        set_embargo(http_client, dataset["id"], owner, visible=True)
+        _, headers = member
+
+        response = http_client.get(
+            f"/datasets/{dataset['id']}/access-events", headers=headers
+        )
+
+        assert_status_code(response, 403)
+
+    def test_a_tenancy_editor_cannot_read_the_history_without_an_embargo(
+        self, http_client, owner, member
+    ):
+        dataset = create_dataset(http_client, owner)
+        _, headers = member
+
+        response = http_client.get(
+            f"/datasets/{dataset['id']}/access-events", headers=headers
+        )
+
+        assert_status_code(response, 403)

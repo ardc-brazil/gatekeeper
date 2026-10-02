@@ -1,9 +1,13 @@
+import io
+import json
+import logging
 import unittest
 
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from prometheus_client import REGISTRY, generate_latest
 
+from app.logging_config import setup_logging
 from app.setup import is_probe, setup_middleware
 
 
@@ -98,3 +102,29 @@ class TestRequestMetrics(unittest.TestCase):
         self.assertEqual(
             _sample("datamap_http_response_size_bytes_count", **labels), before + 1
         )
+
+
+class TestAccessLog(unittest.TestCase):
+    def tearDown(self):
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+
+    def test_a_token_in_the_path_never_reaches_the_access_line(self):
+        app = FastAPI(root_path="/api")
+        setup_middleware(app)
+
+        @app.get("/v1/anonymous/{token}")
+        def anonymous(token: str):
+            return {}
+
+        stream = io.StringIO()
+        setup_logging(stream=stream)
+
+        TestClient(app).get("/api/v1/anonymous/sometoken")
+
+        lines = [json.loads(line) for line in stream.getvalue().splitlines()]
+        access = [line for line in lines if line.get("logger") == "http.access"]
+        self.assertEqual(len(access), 1)
+        self.assertEqual(access[0]["path"], "/api/v1/anonymous/{token}")
+        self.assertNotIn("sometoken", json.dumps(access))

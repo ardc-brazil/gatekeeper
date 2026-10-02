@@ -33,6 +33,7 @@ class AccessEventType(str, enum.Enum):
     ENDED_EARLY = "ended_early"
     EXPIRED = "expired"
     METADATA_MODE_CHANGED = "metadata_mode_changed"
+    NOTE_CHANGED = "note_changed"
     PERMISSION_GRANTED = "permission_granted"
     PERMISSION_REVOKED = "permission_revoked"
     INVITATION_CREATED = "invitation_created"

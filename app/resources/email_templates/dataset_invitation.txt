@@ -1,0 +1,22 @@
+{% extends "_transactional.txt" %}
+{% block content %}
+{{ inviter_name }}{% if inviter_email %} ({{ inviter_email }}){% endif %} gave you access to a dataset on DataMap.{% if embargo_until_date %} It is under embargo: until it ends, only the owner and the people they share it with can see its files.{% endif %}
+
+
+Dataset: {{ dataset_name }}
+Access: {{ "Read, download and edit" if level == "write" else "Read and download" }}
+{% if embargo_until_date %}
+Embargo ends: {{ embargo_until_date }}
+{% endif %}
+{% if note %}
+Note from {{ inviter_name.split()[0] }}: {{ note }}
+{% endif %}
+
+Open the dataset: {{ link }}
+
+Sign in with any account — ORCID or GitHub. The link works once, for whoever opens it; {{ inviter_name.split()[0] }} will see which account accepted.{% if embargo_until_date %} Your access stays after the embargo ends.{% endif %}
+
+
+If you weren't expecting this, you can ignore this email.
+{% endblock %}
+{% block why %}You received this email because {{ inviter_email or inviter_name }} invited {{ invited_address }} to a dataset on DataMap.{% endblock %}

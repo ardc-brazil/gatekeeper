@@ -12,12 +12,17 @@ from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.repository.access_event import AccessEventRepository
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
+from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
+from app.repository.dataset_invitation import DatasetInvitationRepository
 from app.repository.dataset_version import DatasetVersionRepository
 from app.repository.doi import DOIRepository
 from app.repository.email import EmailRepository
+from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 
+from app.service.anonymous_link import AnonymousLinkService
+from app.service.access_history import AccessHistoryService
 from app.service.dataset import DatasetService
 from app.service.dataset_collocation import DatasetCollocationService
 from app.service.dataset_access import DatasetAccessService
@@ -27,7 +32,9 @@ from app.service.email import EmailService
 from app.service.email_template import EmailTemplateRenderer
 from app.service.embargo import EmbargoService
 from app.service.embargo_termination import EmbargoTermination
+from app.service.notification import EmbargoNotificationService
 from app.service.permission import PermissionService
+from app.service.share import ShareService
 from app.service.tus import TusService
 from app.service.user import UserService
 
@@ -56,6 +63,10 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.dataset.dataset_snapshot",
             "app.controller.v1.dataset.embargo",
             "app.controller.v1.dataset.embargo_status",
+            "app.controller.v1.dataset.share",
+            "app.controller.v1.dataset.anonymous_link",
+            "app.controller.v1.invitation.invitation",
+            "app.controller.v1.anonymous.anonymous",
             "app.controller.v1.user.user",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
@@ -313,4 +324,63 @@ class Container(containers.DeclarativeContainer):
         from_address=config.EMAIL_FROM_ADDRESS,
         reply_to=config.EMAIL_REPLY_TO,
         template_version=config.BUILD_COMMIT,
+    )
+
+    dataset_invitation_repository = providers.Factory(
+        DatasetInvitationRepository,
+        session_factory=db.provided.session,
+    )
+
+    dataset_anonymous_link_repository = providers.Factory(
+        DatasetAnonymousLinkRepository,
+        session_factory=db.provided.session,
+    )
+
+    access_history_service = providers.Factory(
+        AccessHistoryService,
+        dataset_service=dataset_service,
+        event_repository=access_event_repository,
+        user_repository=user_repository,
+        invitation_repository=dataset_invitation_repository,
+        anonymous_link_repository=dataset_anonymous_link_repository,
+    )
+
+    share_service = providers.Factory(
+        ShareService,
+        dataset_service=dataset_service,
+        dataset_repository=dataset_repository,
+        permission_repository=permission_repository,
+        permission_service=permission_service,
+        invitation_repository=dataset_invitation_repository,
+        anonymous_link_repository=dataset_anonymous_link_repository,
+        user_repository=user_repository,
+        user_service=user_service,
+        audit=dataset_access_audit,
+        email_service=email_service,
+        public_base_url=config.PUBLIC_BASE_URL,
+    )
+
+    anonymous_link_service = providers.Factory(
+        AnonymousLinkService,
+        dataset_service=dataset_service,
+        anonymous_link_repository=dataset_anonymous_link_repository,
+        dataset_repository=dataset_repository,
+        audit=dataset_access_audit,
+        public_base_url=config.PUBLIC_BASE_URL,
+    )
+
+    embargo_notification_repository = providers.Factory(
+        EmbargoNotificationRepository,
+        session_factory=db.provided.session,
+    )
+
+    embargo_notification_service = providers.Factory(
+        EmbargoNotificationService,
+        notification_repository=embargo_notification_repository,
+        permission_repository=permission_repository,
+        user_repository=user_repository,
+        anonymous_link_repository=dataset_anonymous_link_repository,
+        audit=dataset_access_audit,
+        email_service=email_service,
+        public_base_url=config.PUBLIC_BASE_URL,
     )

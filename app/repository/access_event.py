@@ -35,11 +35,18 @@ class AccessEventRepository:
             )
             session.commit()
 
-    def list_for_dataset(self, dataset_id: UUID) -> list[DatasetAccessEvent]:
+    def list_for_dataset(
+        self, dataset_id: UUID, limit: int | None = None
+    ) -> list[DatasetAccessEvent]:
         with self._session_factory() as session:
-            return (
+            query = (
                 session.query(DatasetAccessEvent)
                 .filter_by(dataset_id=dataset_id)
-                .order_by(DatasetAccessEvent.occurred_at.desc())
-                .all()
+                .order_by(
+                    DatasetAccessEvent.occurred_at.desc(),
+                    DatasetAccessEvent.id.desc(),
+                )
             )
+            if limit is not None:
+                query = query.limit(limit)
+            return query.all()

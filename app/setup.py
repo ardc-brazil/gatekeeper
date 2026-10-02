@@ -5,7 +5,12 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 
-from app.logging_config import fields, request_id_var, setup_logging  # noqa: F401
+from app.logging_config import (  # noqa: F401
+    fields,
+    mask_path_tokens,
+    request_id_var,
+    setup_logging,
+)
 from app.metrics import metrics
 from app.controller.v1.admin.email import router as admin_email_router
 from app.controller.v1.client.client import router as client_router
@@ -20,6 +25,10 @@ from app.controller.v1.dataset.dataset import router as dataset_router
 from app.controller.v1.dataset.dataset_snapshot import router as dataset_snapshot_router
 from app.controller.v1.dataset.embargo import router as embargo_router
 from app.controller.v1.dataset.embargo_status import router as embargo_status_router
+from app.controller.v1.dataset.share import router as share_router
+from app.controller.v1.dataset.anonymous_link import router as anonymous_link_router
+from app.controller.v1.invitation.invitation import router as invitation_router
+from app.controller.v1.anonymous.anonymous import router as anonymous_router
 from app.controller.v1.internal.dataset_collocation import (
     router as internal_dataset_collocation_router,
 )
@@ -168,7 +177,7 @@ def _log_access(
     )
     entry = fields(
         method=request.method,
-        path=request.url.path,
+        path=mask_path_tokens(request.url.path),
         route=route,
         client=client,
         status_code=status_code,
@@ -186,6 +195,10 @@ def _log_access(
 def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(dataset_filter_router, prefix="/v1")
     fastAPIApp.include_router(dataset_router, prefix="/v1")
+    fastAPIApp.include_router(share_router, prefix="/v1")
+    fastAPIApp.include_router(anonymous_link_router, prefix="/v1")
+    fastAPIApp.include_router(invitation_router, prefix="/v1")
+    fastAPIApp.include_router(anonymous_router, prefix="/v1")
     fastAPIApp.include_router(dataset_snapshot_router, prefix="/v1")
     fastAPIApp.include_router(embargo_router, prefix="/v1")
     fastAPIApp.include_router(embargo_status_router, prefix="/v1")

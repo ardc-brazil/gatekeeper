@@ -3,7 +3,7 @@ import json
 import logging
 import unittest
 
-from app.logging_config import Redactor, fields, setup_logging
+from app.logging_config import Redactor, fields, mask_path_tokens, setup_logging
 
 
 def _capture(logger_name: str = "test", **kwargs) -> dict:
@@ -134,3 +134,60 @@ class TestReservedAttributes(unittest.TestCase):
 
     def test_an_ordinary_name_is_untouched(self):
         self.assertEqual(fields(dataset_id="d"), {"dataset_id": "d"})
+
+
+class TestPathTokenMasking(unittest.TestCase):
+    def tearDown(self):
+        root = logging.getLogger()
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+
+    def test_an_anonymous_link_token_is_masked(self):
+        self.assertEqual(
+            mask_path_tokens("/api/v1/anonymous/s3cr3t-T0ken"),
+            "/api/v1/anonymous/{token}",
+        )
+
+    def test_an_invitation_token_is_masked(self):
+        self.assertEqual(
+            mask_path_tokens("/api/v1/invitations/s3cr3t-T0ken"),
+            "/api/v1/invitations/{token}",
+        )
+
+    def test_the_path_without_the_root_prefix_is_masked_too(self):
+        self.assertEqual(
+            mask_path_tokens("/v1/anonymous/s3cr3t"), "/v1/anonymous/{token}"
+        )
+
+    def test_a_full_link_is_masked(self):
+        self.assertEqual(
+            mask_path_tokens("https://datamap.pcs.usp.br/invitations/s3cr3t?x=1"),
+            "https://datamap.pcs.usp.br/invitations/{token}?x=1",
+        )
+
+    def test_the_accept_route_is_left_alone(self):
+        self.assertEqual(
+            mask_path_tokens("/api/v1/invitations/accept"),
+            "/api/v1/invitations/accept",
+        )
+
+    def test_the_claim_route_is_left_alone(self):
+        path = "/api/v1/users/7a9b5d5e/invitations/claim"
+        self.assertEqual(mask_path_tokens(path), path)
+
+    def test_an_invitation_id_under_a_dataset_is_left_alone(self):
+        path = "/api/v1/datasets/7a9b5d5e/share/invitations/0c1d2e3f"
+        self.assertEqual(mask_path_tokens(path), path)
+        self.assertEqual(mask_path_tokens(path + "/link"), path + "/link")
+
+    def test_an_unrelated_path_is_left_alone(self):
+        self.assertEqual(mask_path_tokens("/api/v1/datasets"), "/api/v1/datasets")
+
+    def test_a_path_field_on_any_line_is_masked(self):
+        entry = _capture(
+            extra={"path": "/api/v1/anonymous/leaked", "url": "/v1/invitations/leaked"}
+        )
+
+        self.assertNotIn("leaked", json.dumps(entry))
+        self.assertEqual(entry["path"], "/api/v1/anonymous/{token}")
+        self.assertEqual(entry["url"], "/v1/invitations/{token}")

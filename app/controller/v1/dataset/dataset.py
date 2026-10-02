@@ -27,6 +27,7 @@ from app.controller.v1.dataset.resource import (
     DatasetVersionGetResponse,
     DatasetVersionResponse,
     EmbargoResponse,
+    OwnerResponse,
     PagedDatasetGetResponse,
     VersionFilesSummaryResponse,
 )
@@ -89,6 +90,12 @@ def _adapt_access(access: DatasetAccess | None) -> AccessResponse | None:
         can_extend_embargo=access.can_extend_embargo,
         can_delete=access.can_delete,
     )
+
+
+def _adapt_owner(dataset: Dataset) -> OwnerResponse | None:
+    if dataset.owner_id is None or not dataset.owner_name:
+        return None
+    return OwnerResponse(id=dataset.owner_id, name=dataset.owner_name)
 
 
 def _files_summary(version: DatasetVersion) -> VersionFilesSummaryResponse:
@@ -167,6 +174,7 @@ def _adapt_dataset(dataset: Dataset) -> DatasetGetResponse:
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
         embargo=_adapt_embargo(dataset.embargo),
         access=_adapt_access(dataset.access),
+        owner=_adapt_owner(dataset),
     )
 
 
@@ -206,6 +214,7 @@ def _adapt_dataset_specific_version(dataset: Dataset) -> DatasetVersionGetRespon
         visibility=dataset.visibility.name if dataset.visibility is not None else None,
         embargo=_adapt_embargo(dataset.embargo),
         access=_adapt_access(dataset.access),
+        owner=_adapt_owner(dataset),
     )
 
 

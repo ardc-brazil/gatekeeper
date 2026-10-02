@@ -319,9 +319,23 @@ class DatasetService:
         except NotFoundException:
             return None
 
-        return self._view(
+        viewed = self._view(
             self._adapt_dataset(dataset=dataset), dataset, user_id, allowed, level
         )
+        viewed.owner_name = self._owner_name(dataset.owner_id)
+        return viewed
+
+    def _owner_name(self, owner_id: UUID | None) -> str | None:
+        if owner_id is None:
+            return None
+        for enabled in (True, False):
+            try:
+                return self._user_service.fetch_by_id(
+                    id=owner_id, is_enabled=enabled
+                ).name
+            except NotFoundException:
+                continue
+        return None
 
     def update_dataset(
         self,
@@ -942,13 +956,15 @@ class DatasetService:
                 f"not_found: {version_name} for dataset {dataset_id}"
             )
 
-        return self._view(
+        viewed = self._view(
             self._adapt_dataset_version(dataset=dataset, dataset_version=version),
             dataset,
             user_id,
             allowed,
             level,
         )
+        viewed.owner_name = self._owner_name(dataset.owner_id)
+        return viewed
 
     def _get_latest_published_version(
         self, dataset: DatasetDBModel

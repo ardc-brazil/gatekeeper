@@ -90,6 +90,7 @@ class Dataset:
     file_count: int = None
     embargo: Embargo | None = None
     access: DatasetAccess | None = None
+    owner_name: str | None = None
 
 
 @dataclass
