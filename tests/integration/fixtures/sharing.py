@@ -26,8 +26,13 @@ def create_user(http_client: HttpClient, providers: list[dict] | None = None) ->
     return {"id": response.json()["id"], "email": email}
 
 
-def set_embargo(http_client: HttpClient, dataset_id: str, delta: timedelta) -> str:
-    until = (datetime.now(timezone.utc) + delta).isoformat()
+def set_embargo(
+    http_client: HttpClient,
+    dataset_id: str,
+    delta: timedelta,
+    tz: timezone = timezone.utc,
+) -> str:
+    until = (datetime.now(tz) + delta).isoformat()
     response = http_client.put(
         f"/datasets/{dataset_id}/embargo",
         json={"until": until, "metadata_visible": False, "note": None},

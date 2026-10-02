@@ -1,5 +1,5 @@
 import time
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from tests.integration.fixtures.embargo import manual_doi
 from tests.integration.fixtures.sharing import (
@@ -45,7 +45,12 @@ class TestEmbargoReminders:
     ):
         dataset = dataset_fixture.create_test_dataset()
         reader = share_with_a_reader(http_client, dataset["id"])
-        set_embargo(http_client, dataset["id"], timedelta(days=4, hours=12))
+        set_embargo(
+            http_client,
+            dataset["id"],
+            timedelta(days=4, hours=12),
+            tz=timezone(timedelta(hours=-3)),
+        )
 
         dispatch(http_client)
 

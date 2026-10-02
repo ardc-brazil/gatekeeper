@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Callable
 from uuid import UUID
 
-from sqlalchemy import and_, exists
+from sqlalchemy import DateTime, and_, cast, exists
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import true
 
@@ -76,7 +76,11 @@ class EmbargoNotificationRepository:
                 .filter(
                     DatasetAccessEvent.dataset_id == dataset_id,
                     DatasetAccessEvent.event_type.in_(("created", "extended")),
-                    DatasetAccessEvent.new_value["until"].astext == until.isoformat(),
+                    cast(
+                        DatasetAccessEvent.new_value["until"].astext,
+                        DateTime(timezone=True),
+                    )
+                    == until,
                 )
                 .order_by(DatasetAccessEvent.occurred_at.desc())
                 .first()
