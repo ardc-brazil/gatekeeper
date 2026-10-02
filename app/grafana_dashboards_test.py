@@ -46,7 +46,7 @@ def declared_metrics() -> set[str]:
     repository.users.return_value = []
     repository.dois.return_value = []
     registry.register(PlatformStateCollector(repository))
-    names = {base_name(family.name) for family in registry.collect()}
+    names = {family.name for family in registry.collect()}
     for line in EXTERNAL_METRICS.read_text().splitlines():
         line = line.split("#", 1)[0].strip()
         if line:
