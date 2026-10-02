@@ -16,7 +16,9 @@ router = APIRouter(prefix="/datasets", tags=["embargo"])
 @inject
 def get_embargo_status(
     dataset_id: UUID,
+    version: str | None = None,
     service: EmbargoService = Depends(Provide[Container.embargo_service]),
 ) -> EmbargoStatusResponse:
     embargoed, until = service.status(dataset_id=dataset_id)
-    return EmbargoStatusResponse(embargoed=embargoed, until=until)
+    doi = service.doi_for(dataset_id, version) if embargoed and version else None
+    return EmbargoStatusResponse(embargoed=embargoed, until=until, doi=doi)

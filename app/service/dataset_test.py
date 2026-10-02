@@ -2177,6 +2177,7 @@ class TestDatasetService(unittest.TestCase):
             design_state=DesignState.DRAFT,
             visibility=None,
             owner_id=user_id,
+            owner_name=self.user_service.fetch_by_id.return_value.name,
             access=self.dataset_access.access_flags.return_value,
             version=DatasetVersion(
                 id=existing_version_2.id,

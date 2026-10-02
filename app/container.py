@@ -22,6 +22,7 @@ from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 
 from app.service.anonymous_link import AnonymousLinkService
+from app.service.access_history import AccessHistoryService
 from app.service.dataset import DatasetService
 from app.service.dataset_collocation import DatasetCollocationService
 from app.service.dataset_access import DatasetAccessService
@@ -333,6 +334,15 @@ class Container(containers.DeclarativeContainer):
     dataset_anonymous_link_repository = providers.Factory(
         DatasetAnonymousLinkRepository,
         session_factory=db.provided.session,
+    )
+
+    access_history_service = providers.Factory(
+        AccessHistoryService,
+        dataset_service=dataset_service,
+        event_repository=access_event_repository,
+        user_repository=user_repository,
+        invitation_repository=dataset_invitation_repository,
+        anonymous_link_repository=dataset_anonymous_link_repository,
     )
 
     share_service = providers.Factory(

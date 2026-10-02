@@ -35,6 +35,11 @@ class EmbargoResponse(BaseModel):
     note: Optional[str] = Field(None, title="Note")
 
 
+class OwnerResponse(BaseModel):
+    id: UUID = Field(..., title="Owner's user id")
+    name: str = Field(..., title="Owner's name")
+
+
 class AccessResponse(BaseModel):
     level: str = Field(..., title="owner, write, read or tenancy")
     can_edit: bool = Field(..., title="May change the dataset")
@@ -91,6 +96,7 @@ class DatasetGetResponse(BaseModel):
     visibility: Optional[str] = Field(None, title="Visibility status")
     embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
     access: Optional[AccessResponse] = Field(None, title="What the caller may do")
+    owner: Optional[OwnerResponse] = Field(None, title="Owner")
 
 
 class MinimalDatasetGetResponse(BaseModel):
@@ -125,6 +131,7 @@ class DatasetVersionGetResponse(BaseModel):
     visibility: Optional[str] = Field(None, title="Visibility status")
     embargo: Optional[EmbargoResponse] = Field(None, title="Embargo")
     access: Optional[AccessResponse] = Field(None, title="What the caller may do")
+    owner: Optional[OwnerResponse] = Field(None, title="Owner")
 
 
 class PagedDatasetGetResponse(BaseModel):
@@ -276,6 +283,7 @@ class EmbargoSetRequest(BaseModel):
 
 class EmbargoExtendRequest(BaseModel):
     until: datetime = Field(..., title="New embargo end, at most 90 days ahead")
+    reason: Optional[str] = Field(None, title="Why it is extended", max_length=500)
 
 
 class EmbargoModeRequest(BaseModel):
@@ -285,3 +293,27 @@ class EmbargoModeRequest(BaseModel):
 class EmbargoStatusResponse(BaseModel):
     embargoed: bool = Field(..., title="Whether the dataset is under embargo now")
     until: Optional[datetime] = Field(None, title="Embargo end")
+    doi: Optional[str] = Field(None, title="The version's DOI, while embargoed")
+
+
+class EmbargoNoteRequest(BaseModel):
+    note: Optional[str] = Field(None, title="Note", max_length=2000)
+
+
+class AccessHistoryUserResponse(BaseModel):
+    id: UUID
+    name: str
+
+
+class AccessHistoryEntryResponse(BaseModel):
+    event_type: str
+    occurred_at: datetime
+    actor: Optional[AccessHistoryUserResponse] = None
+    subject: Optional[str] = None
+    old_value: Optional[dict] = None
+    new_value: Optional[dict] = None
+    note: Optional[str] = None
+
+
+class AccessHistoryResponse(BaseModel):
+    items: list[AccessHistoryEntryResponse]

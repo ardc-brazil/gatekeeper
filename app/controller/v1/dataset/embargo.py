@@ -9,12 +9,17 @@ from app.controller.interceptor.authorization import authorize
 from app.controller.interceptor.tenancy_parser import parse_tenancy_header
 from app.controller.interceptor.user_parser import parse_user_header
 from app.controller.v1.dataset.resource import (
+    AccessHistoryEntryResponse,
+    AccessHistoryResponse,
+    AccessHistoryUserResponse,
     EmbargoExtendRequest,
     EmbargoModeRequest,
+    EmbargoNoteRequest,
     EmbargoResponse,
     EmbargoSetRequest,
 )
 from app.model.embargo import Embargo
+from app.service.access_history import AccessHistoryEntry, AccessHistoryService
 from app.service.embargo import EmbargoService
 
 router = APIRouter(
@@ -23,6 +28,20 @@ router = APIRouter(
     dependencies=[Depends(authenticate), Depends(authorize)],
     responses={404: {"description": "Not found"}},
 )
+
+
+def _adapt_entry(entry: AccessHistoryEntry) -> AccessHistoryEntryResponse:
+    return AccessHistoryEntryResponse(
+        event_type=entry.event_type,
+        occurred_at=entry.occurred_at,
+        actor=AccessHistoryUserResponse(id=entry.actor.id, name=entry.actor.name)
+        if entry.actor
+        else None,
+        subject=entry.subject,
+        old_value=entry.old_value,
+        new_value=entry.new_value,
+        note=entry.note,
+    )
 
 
 def _adapt(embargo: Embargo) -> EmbargoResponse:
@@ -72,6 +91,7 @@ def extend_embargo(
             user_id=user_id,
             tenancies=tenancies,
             until=request.until,
+            reason=request.reason,
         )
     )
 
@@ -107,4 +127,43 @@ def set_embargo_mode(
             tenancies=tenancies,
             metadata_visible=request.metadata_visible,
         )
+    )
+
+
+# PUT /datasets/{dataset_id}/embargo/note
+@router.put("/{dataset_id}/embargo/note")
+@inject
+def set_embargo_note(
+    dataset_id: UUID,
+    request: EmbargoNoteRequest,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: EmbargoService = Depends(Provide[Container.embargo_service]),
+) -> EmbargoResponse:
+    return _adapt(
+        service.set_note(
+            dataset_id=dataset_id,
+            user_id=user_id,
+            tenancies=tenancies,
+            note=request.note,
+        )
+    )
+
+
+# GET /datasets/{dataset_id}/access-events
+@router.get("/{dataset_id}/access-events")
+@inject
+def access_events(
+    dataset_id: UUID,
+    user_id: UUID = Depends(parse_user_header),
+    tenancies: list[str] = Depends(parse_tenancy_header),
+    service: AccessHistoryService = Depends(Provide[Container.access_history_service]),
+) -> AccessHistoryResponse:
+    return AccessHistoryResponse(
+        items=[
+            _adapt_entry(entry)
+            for entry in service.list(
+                dataset_id=dataset_id, user_id=user_id, tenancies=tenancies
+            )
+        ]
     )
