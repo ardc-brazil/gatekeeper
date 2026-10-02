@@ -43,13 +43,22 @@ class TestSmtpSender(unittest.TestCase):
 
         self.sender().send(message)
 
-        self.factory.assert_called_once_with("smtp.example.com", 587, timeout=7)
+        self.factory.assert_called_once_with(
+            "smtp.example.com", 587, timeout=7, local_hostname=None
+        )
         self.connection.starttls.assert_called_once()
         self.connection.login.assert_called_once_with(
             "datamap@example.com", "app-password"
         )
         self.connection.send_message.assert_called_once_with(message)
         self.connection.quit.assert_called_once()
+
+    def test_it_greets_the_server_with_the_public_hostname(self):
+        self.sender(local_hostname="datamap.pcs.usp.br").send(_message())
+
+        self.factory.assert_called_once_with(
+            "smtp.example.com", 587, timeout=7, local_hostname="datamap.pcs.usp.br"
+        )
 
     def test_without_credentials_it_does_not_log_in(self):
         self.sender(username=None, password=None, starttls=False).send(_message())

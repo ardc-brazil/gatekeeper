@@ -2,7 +2,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage as MimeMessage
-from email.utils import formataddr, getaddresses, make_msgid
+from email.utils import formataddr, formatdate, getaddresses, make_msgid
 from typing import Callable
 from uuid import UUID, uuid4
 
@@ -315,6 +315,7 @@ class EmailService:
         if self._reply_to:
             message["Reply-To"] = self._reply_to
         message["Message-ID"] = make_msgid(domain=self._from_address.rsplit("@", 1)[-1])
+        message["Date"] = formatdate(self._clock().timestamp(), usegmt=True)
         message.set_content(record.body_text)
         message.add_alternative(html, subtype="html")
         return message
