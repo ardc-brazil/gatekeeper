@@ -14,7 +14,10 @@ from app.controller.interceptor.authorization import (
     authorize,
     authorize_self_or_policy,
 )
+from app.exception.illegal_state import IllegalStateException
+from app.exception.unauthorized import UnauthorizedException
 from app.model.user import User
+from app.service.account import AccountService
 from app.service.user import UserService
 
 CREATED = datetime(2026, 10, 3, 14, 5, tzinfo=timezone.utc)
@@ -96,6 +99,79 @@ class TestProfileFields(UserRoutesTestCase):
             for route in self.client.app.routes
             if getattr(route, "path", None) == "/v1/users/{id}"
             and "GET" in route.methods
+        )
+        guards = {dependency.call for dependency in route.dependant.dependencies}
+
+        self.assertIn(authorize_self_or_policy, guards)
+        self.assertNotIn(authorize, guards)
+
+
+class TestChangePasswordRoute(UserRoutesTestCase):
+    def setUp(self):
+        super().setUp()
+        self.accounts = Mock(spec=AccountService)
+        self.container.account_service.override(providers.Object(self.accounts))
+
+    def tearDown(self):
+        self.container.account_service.reset_override()
+        super().tearDown()
+
+    def put(self, user_id, acting_as):
+        return self.client.put(
+            f"/v1/users/{user_id}/password",
+            json={
+                "current_password": "correct horse battery",
+                "new_password": "a brand new password",
+            },
+            headers={"X-User-Id": str(acting_as)},
+        )
+
+    def test_a_user_changes_their_own_password(self):
+        user_id = uuid4()
+
+        response = self.put(user_id, acting_as=user_id)
+
+        self.assertEqual(response.status_code, 204)
+        self.accounts.change_password.assert_called_once_with(
+            user_id=user_id,
+            current_password="correct horse battery",
+            new_password="a brand new password",
+        )
+
+    def test_nobody_changes_another_users_password(self):
+        response = self.put(uuid4(), acting_as=uuid4())
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"detail": "invalid_credentials"})
+        self.accounts.change_password.assert_not_called()
+
+    def test_a_wrong_current_password_is_401(self):
+        user_id = uuid4()
+        self.accounts.change_password.side_effect = UnauthorizedException(
+            "invalid_credentials"
+        )
+
+        response = self.put(user_id, acting_as=user_id)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"detail": "invalid_credentials"})
+
+    def test_a_new_password_out_of_policy_is_400(self):
+        user_id = uuid4()
+        self.accounts.change_password.side_effect = IllegalStateException(
+            "invalid_password"
+        )
+
+        response = self.put(user_id, acting_as=user_id)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "invalid_password"})
+
+    def test_the_password_route_asks_for_self_or_policy(self):
+        route = next(
+            route
+            for route in self.client.app.routes
+            if getattr(route, "path", None) == "/v1/users/{id}/password"
         )
         guards = {dependency.call for dependency in route.dependant.dependencies}
 

@@ -10,6 +10,7 @@ from app.gateway.object_storage.http_client import build_http_client
 from app.service.health import DependencyHealthService
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.repository.access_event import AccessEventRepository
+from app.repository.auth_challenge import AuthChallengeRepository
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
@@ -21,6 +22,7 @@ from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 
+from app.service.account import AccountService
 from app.service.anonymous_link import AnonymousLinkService
 from app.service.access_history import AccessHistoryService
 from app.service.dataset import DatasetService
@@ -34,6 +36,7 @@ from app.service.embargo import EmbargoService
 from app.service.embargo_termination import EmbargoTermination
 from app.service.members_access import MembersAccessService
 from app.service.notification import EmbargoNotificationService
+from app.service.password import PasswordHasher
 from app.service.permission import PermissionService
 from app.service.share import ShareService
 from app.service.tus import TusService
@@ -58,6 +61,7 @@ class Container(containers.DeclarativeContainer):
             # only when its own module is wired.
             "app.controller.interceptor.authentication",
             "app.controller.interceptor.authorization",
+            "app.controller.v1.auth.auth",
             "app.controller.v1.client.client",
             "app.controller.v1.dataset.dataset",
             "app.controller.v1.dataset.dataset_filter",
@@ -395,5 +399,27 @@ class Container(containers.DeclarativeContainer):
         anonymous_link_repository=dataset_anonymous_link_repository,
         audit=dataset_access_audit,
         email_service=email_service,
+        public_base_url=config.PUBLIC_BASE_URL,
+    )
+
+    password_hasher = providers.Singleton(
+        PasswordHasher,
+        pepper=config.AUTH_PASSWORD_PEPPER,
+    )
+
+    auth_challenge_repository = providers.Factory(
+        AuthChallengeRepository,
+        session_factory=db.provided.session,
+    )
+
+    account_service = providers.Factory(
+        AccountService,
+        users=user_repository,
+        user_service=user_service,
+        challenges=auth_challenge_repository,
+        emails=email_repository,
+        email_service=email_service,
+        hasher=password_hasher,
+        challenge_pepper=config.AUTH_CHALLENGE_PEPPER,
         public_base_url=config.PUBLIC_BASE_URL,
     )

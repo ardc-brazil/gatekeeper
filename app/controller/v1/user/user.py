@@ -1,10 +1,11 @@
 from typing import Union
 from uuid import UUID
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
 from app.controller.interceptor.authorization import authorize, authorize_self_or_policy
+from app.controller.interceptor.user_parser import parse_user_header
 from app.controller.v1.user.resource import (
     UserCreateResponse,
     UserEnforceRequest,
@@ -14,9 +15,12 @@ from app.controller.v1.user.resource import (
     UserGetResponse,
     UserProvider,
     UserTenanciesRequest,
+    UserPasswordChangeRequest,
     UserUpdateRequest,
 )
+from app.exception.unauthorized import UnauthorizedException
 from app.model.user import User, UserQuery
+from app.service.account import AccountService
 from app.service.user import UserService
 from dependency_injector.wiring import inject, Provide
 
@@ -127,6 +131,29 @@ def enable(
 ) -> None:
     service.enable(id=id)
     return {}
+
+
+# PUT /users/{id}/password
+@router.put(
+    "/{id}/password",
+    status_code=204,
+    dependencies=[Depends(authenticate), Depends(authorize_self_or_policy)],
+)
+@inject
+def change_password(
+    id: UUID,
+    payload: UserPasswordChangeRequest,
+    user_id: UUID = Depends(parse_user_header),
+    service: AccountService = Depends(Provide[Container.account_service]),
+) -> Response:
+    if user_id != id:
+        raise UnauthorizedException("invalid_credentials")
+    service.change_password(
+        user_id=id,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    return Response(status_code=204)
 
 
 # PUT /users/{id}/roles

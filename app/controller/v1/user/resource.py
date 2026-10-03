@@ -58,3 +58,8 @@ class UserEnforceRequest(BaseModel):
 
 class UserEnforceResponse(BaseModel):
     allow: bool = Field(..., description="Allow access")
+
+
+class UserPasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., description="The account's current password")
+    new_password: str = Field(..., description="New password, 10 to 128 characters")
