@@ -39,6 +39,20 @@ class Config(BaseSettings):
         min_length=16,
         description="Server-side key the stored client secret hashes are derived from",
     )
+    AUTH_PASSWORD_PEPPER: str = Field(
+        ...,
+        min_length=16,
+        description="Server-side key every password hash is derived from; changing it invalidates every password",
+    )
+    AUTH_CHALLENGE_PEPPER: str = Field(
+        ...,
+        min_length=16,
+        description="Server-side key the stored confirmation code hashes are derived from",
+    )
+    ADMIN_NOTIFICATION_EMAILS: str = Field(
+        "",
+        description="Comma-separated addresses told about every new account; empty sends nothing",
+    )
     CASBIN_MODEL_FILE: str = Field(..., description="Casbin model file")
 
     DOI_BASE_URL: str = Field(..., description="Base URL for DOI service")
