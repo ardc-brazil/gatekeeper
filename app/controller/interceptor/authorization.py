@@ -33,6 +33,28 @@ def authorize(
         raise
 
 
+def _is_self(request: Request, user_id: UUID) -> bool:
+    try:
+        return UUID(request.path_params.get("id", "")) == user_id
+    except ValueError:
+        return False
+
+
+@inject
+def authorize_self_or_policy(
+    request: Request,
+    user_id: UUID = Depends(parse_user_header),
+    auth_service: AuthService = Depends(Provide[Container.auth_service]),
+):
+    if _is_self(request, user_id):
+        return
+    try:
+        auth_service.authorize_user(user_id, request.url.path, request.method)
+    except UnauthorizedException as e:
+        metrics.auth_failure("authz", str(e))
+        raise
+
+
 def _adapt_tus_response(res: TusResult):
     return {
         "HTTPResponse": {

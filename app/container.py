@@ -126,6 +126,39 @@ class Container(containers.DeclarativeContainer):
         casbin_adapter,
     )
 
+    email_repository = providers.Factory(
+        EmailRepository,
+        session_factory=db.provided.session,
+    )
+
+    email_renderer = providers.Singleton(
+        EmailTemplateRenderer,
+        site_url=config.PUBLIC_BASE_URL,
+    )
+
+    smtp_sender = providers.Factory(
+        SmtpSender,
+        host=config.SMTP_HOST,
+        port=config.SMTP_PORT,
+        username=config.SMTP_USERNAME,
+        password=config.SMTP_PASSWORD,
+        starttls=config.SMTP_STARTTLS,
+        timeout_seconds=config.SMTP_TIMEOUT_SECONDS,
+        local_hostname=providers.Callable(public_hostname, config.PUBLIC_BASE_URL),
+    )
+
+    email_service = providers.Factory(
+        EmailService,
+        repository=email_repository,
+        renderer=email_renderer,
+        sender=smtp_sender,
+        enabled=config.EMAIL_ENABLED,
+        from_name=config.EMAIL_FROM_NAME,
+        from_address=config.EMAIL_FROM_ADDRESS,
+        reply_to=config.EMAIL_REPLY_TO,
+        template_version=config.BUILD_COMMIT,
+    )
+
     user_repository = providers.Factory(
         UserRepository,
         session_factory=db.provided.session,
@@ -136,6 +169,8 @@ class Container(containers.DeclarativeContainer):
         repository=user_repository,
         tenancy_repository=tenancy_repository,
         casbin_enforcer=casbin_enforcer,
+        email_service=email_service,
+        admin_emails=config.ADMIN_NOTIFICATION_EMAILS,
     )
 
     auth_service = providers.Factory(
@@ -302,39 +337,6 @@ class Container(containers.DeclarativeContainer):
         permission_repository=permission_repository,
         user_service=user_service,
         audit=dataset_access_audit,
-    )
-
-    email_repository = providers.Factory(
-        EmailRepository,
-        session_factory=db.provided.session,
-    )
-
-    email_renderer = providers.Singleton(
-        EmailTemplateRenderer,
-        site_url=config.PUBLIC_BASE_URL,
-    )
-
-    smtp_sender = providers.Factory(
-        SmtpSender,
-        host=config.SMTP_HOST,
-        port=config.SMTP_PORT,
-        username=config.SMTP_USERNAME,
-        password=config.SMTP_PASSWORD,
-        starttls=config.SMTP_STARTTLS,
-        timeout_seconds=config.SMTP_TIMEOUT_SECONDS,
-        local_hostname=providers.Callable(public_hostname, config.PUBLIC_BASE_URL),
-    )
-
-    email_service = providers.Factory(
-        EmailService,
-        repository=email_repository,
-        renderer=email_renderer,
-        sender=smtp_sender,
-        enabled=config.EMAIL_ENABLED,
-        from_name=config.EMAIL_FROM_NAME,
-        from_address=config.EMAIL_FROM_ADDRESS,
-        reply_to=config.EMAIL_REPLY_TO,
-        template_version=config.BUILD_COMMIT,
     )
 
     dataset_invitation_repository = providers.Factory(

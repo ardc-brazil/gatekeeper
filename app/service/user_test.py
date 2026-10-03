@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import Mock
 from uuid import uuid4
 from app.exception.not_found import NotFoundException
@@ -7,7 +8,8 @@ from app.model.db.user import User as UserDBModel, Provider as ProviderDBModel
 from app.model.db.tenancy import Tenancy as TenancyDBModel
 from app.repository.tenancy import TenancyRepository
 from app.repository.user import UserRepository
-from app.service.user import UserService
+from app.service.email import EmailService
+from app.service.user import UserService, admin_addresses
 from casbin import SyncedEnforcer
 
 
@@ -311,3 +313,190 @@ class TestUserService(unittest.TestCase):
             self.user_service.add_provider(user_id, provider_name, reference)
 
         self.assertEqual(str(context.exception), f"not_found: {user_id}")
+
+
+CREATED = datetime(2026, 10, 3, 14, 5, tzinfo=timezone.utc)
+BCRYPT_LIKE = "$2b$10$" + "x" * 53
+
+
+class TestNewAccountNotification(unittest.TestCase):
+    def setUp(self):
+        self.user_repository = Mock(spec=UserRepository)
+        self.tenancy_repository = Mock(spec=TenancyRepository)
+        self.casbin_enforcer = Mock(spec=SyncedEnforcer)
+        self.email_service = Mock(spec=EmailService)
+        self.user_id = uuid4()
+        persisted = Mock(spec=UserDBModel)
+        persisted.id = self.user_id
+        persisted.created_at = CREATED
+        self.user_repository.upsert.return_value = persisted
+
+    def service(self, admin_emails: str) -> UserService:
+        return UserService(
+            self.user_repository,
+            self.tenancy_repository,
+            self.casbin_enforcer,
+            email_service=self.email_service,
+            admin_emails=admin_emails,
+        )
+
+    def orcid_user(self) -> User:
+        return User(
+            name="Ana Souza",
+            email="ana.souza@usp.br",
+            providers=[UserProvider(name="orcid", reference="0000-0002-1825-0097")],
+            roles=[],
+        )
+
+    def sent(self) -> list[dict]:
+        return [call.kwargs for call in self.email_service.enqueue.call_args_list]
+
+    def test_every_admin_is_told_about_a_new_account(self):
+        self.service("admin.one@usp.br, admin.two@usp.br").create(self.orcid_user())
+
+        self.assertEqual(
+            [kwargs["recipient"] for kwargs in self.sent()],
+            ["admin.one@usp.br", "admin.two@usp.br"],
+        )
+
+    def test_the_message_names_the_account_and_how_it_signs_in(self):
+        self.service("admin.one@usp.br").create(self.orcid_user())
+
+        (kwargs,) = self.sent()
+        self.assertEqual(kwargs["template"], "new_account_pending")
+        self.assertEqual(
+            kwargs["context"],
+            {
+                "name": "Ana Souza",
+                "email": "ana.souza@usp.br",
+                "sign_in_method": "ORCID",
+                "created_at": "October 3, 2026 at 14:05 UTC",
+            },
+        )
+        self.assertEqual(kwargs["related_type"], "user")
+        self.assertEqual(kwargs["related_id"], self.user_id)
+        self.assertTrue(
+            kwargs["dedup_key"].startswith(f"new_account_pending:{self.user_id}:")
+        )
+        self.assertLessEqual(len(kwargs["dedup_key"]), 256)
+
+    def test_each_admin_has_a_dedup_key_of_its_own(self):
+        self.service("admin.one@usp.br,admin.two@usp.br").create(self.orcid_user())
+
+        keys = {kwargs["dedup_key"] for kwargs in self.sent()}
+        self.assertEqual(len(keys), 2)
+
+    def test_an_account_created_with_a_password_is_stored_confirmed_and_says_so(self):
+        self.service("admin.one@usp.br").create(
+            User(name="Ana Souza", email="ana.souza@usp.br", providers=[], roles=[]),
+            password_hash=BCRYPT_LIKE,
+            email_verified_at=CREATED,
+        )
+
+        created = self.user_repository.upsert.call_args.kwargs["user"]
+        self.assertEqual(created.password_hash, BCRYPT_LIKE)
+        self.assertEqual(created.email_verified_at, CREATED)
+        self.assertEqual(
+            self.sent()[0]["context"]["sign_in_method"], "Email and password"
+        )
+
+    def test_an_account_created_through_the_api_without_a_provider_says_so(self):
+        self.service("admin.one@usp.br").create(
+            User(name="Ana Souza", email="ana.souza@usp.br", providers=[], roles=[])
+        )
+
+        self.assertEqual(
+            self.sent()[0]["context"]["sign_in_method"], "Created through the API"
+        )
+
+    def test_nobody_is_told_when_the_list_is_empty(self):
+        self.service("").create(self.orcid_user())
+
+        self.email_service.enqueue.assert_not_called()
+
+    def test_a_failure_to_queue_does_not_undo_the_account(self):
+        self.email_service.enqueue.side_effect = RuntimeError("database gone")
+
+        with self.assertLogs("service:UserService", level="ERROR"):
+            user_id = self.service("admin.one@usp.br").create(self.orcid_user())
+
+        self.assertEqual(user_id, self.user_id)
+
+
+class TestAdminAddresses(unittest.TestCase):
+    def test_a_comma_separated_list_is_split_and_trimmed(self):
+        self.assertEqual(
+            admin_addresses(" a@usp.br , b@usp.br,, "), ["a@usp.br", "b@usp.br"]
+        )
+
+    def test_an_empty_value_is_nobody(self):
+        self.assertEqual(admin_addresses(""), [])
+
+
+class TestCredentialFields(unittest.TestCase):
+    def setUp(self):
+        self.user_repository = Mock(spec=UserRepository)
+        self.casbin_enforcer = Mock(spec=SyncedEnforcer)
+        self.casbin_enforcer.get_roles_for_user.return_value = []
+        self.service = UserService(
+            self.user_repository, Mock(spec=TenancyRepository), self.casbin_enforcer
+        )
+
+    def test_a_user_says_whether_it_has_a_password_and_when_its_email_was_confirmed(
+        self,
+    ):
+        user_id = uuid4()
+        self.user_repository.fetch_by_id.return_value = UserDBModel(
+            id=user_id,
+            name="Ana Souza",
+            email="ana.souza@usp.br",
+            is_enabled=True,
+            password_hash=BCRYPT_LIKE,
+            email_verified_at=CREATED,
+        )
+
+        user = self.service.fetch_by_id(user_id)
+
+        self.assertTrue(user.has_password)
+        self.assertEqual(user.email_verified_at, CREATED)
+
+    def test_an_account_without_either_says_so(self):
+        user_id = uuid4()
+        self.user_repository.fetch_by_id.return_value = UserDBModel(
+            id=user_id, name="Ana Souza", email="ana.souza@usp.br", is_enabled=True
+        )
+
+        user = self.service.fetch_by_id(user_id)
+
+        self.assertFalse(user.has_password)
+        self.assertIsNone(user.email_verified_at)
+
+    def test_a_new_address_is_no_longer_confirmed(self):
+        db_user = UserDBModel(
+            id=uuid4(),
+            name="Ana Souza",
+            email="ana.souza@usp.br",
+            is_enabled=True,
+            email_verified_at=CREATED,
+        )
+        self.user_repository.fetch_by_id.return_value = db_user
+        self.user_repository.upsert.return_value = db_user
+
+        self.service.update(db_user.id, name="Ana Souza", email="ana@ufam.edu.br")
+
+        self.assertIsNone(db_user.email_verified_at)
+
+    def test_the_same_address_in_another_case_stays_confirmed(self):
+        db_user = UserDBModel(
+            id=uuid4(),
+            name="Ana Souza",
+            email="ana.souza@usp.br",
+            is_enabled=True,
+            email_verified_at=CREATED,
+        )
+        self.user_repository.fetch_by_id.return_value = db_user
+        self.user_repository.upsert.return_value = db_user
+
+        self.service.update(db_user.id, name="Ana Souza", email="Ana.Souza@USP.br")
+
+        self.assertEqual(db_user.email_verified_at, CREATED)

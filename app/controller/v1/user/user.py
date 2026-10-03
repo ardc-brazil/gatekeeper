@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
-from app.controller.interceptor.authorization import authorize
+from app.controller.interceptor.authorization import authorize, authorize_self_or_policy
 from app.controller.v1.user.resource import (
     UserCreateResponse,
     UserEnforceRequest,
@@ -40,6 +40,8 @@ def _adapt_get_response(user: User) -> UserGetResponse:
             for provider in user.providers
         ],
         tenancies=user.tenancies,
+        email_verified_at=user.email_verified_at,
+        has_password=user.has_password,
     )
 
 
@@ -61,7 +63,9 @@ def search(
 
 
 # GET /users/{id}
-@router.get("/{id}", dependencies=[Depends(authenticate), Depends(authorize)])
+@router.get(
+    "/{id}", dependencies=[Depends(authenticate), Depends(authorize_self_or_policy)]
+)
 @inject
 def get(
     id: UUID,
