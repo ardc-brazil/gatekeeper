@@ -403,7 +403,9 @@ class TestConfirmEmailVerification(AccountServiceTestCase):
 
         self.assertEqual(self.confirm(), orcid_account.id)
 
-        self.users.fetch_by_provider_any.assert_called_once_with("orcid", ORCID)
+        self.users.fetch_by_provider_any.assert_called_once_with(
+            provider_name="orcid", reference=ORCID
+        )
         self.users.fetch_by_provider.assert_not_called()
         self.users.verify_email.assert_called_once_with(
             orcid_account.id, "ana.souza@usp.br", NOW
@@ -498,6 +500,16 @@ class TestConfirmEmailVerification(AccountServiceTestCase):
         self.users.fetch_by_email_any.return_value = disabled
 
         self.assert_conflict_changes_nothing()
+
+    def test_a_disabled_holder_found_beside_an_enabled_one_conflicts(self):
+        disabled_holder = account(is_enabled=False)
+        self.users.fetch_by_provider_any.return_value = disabled_holder
+        self.users.fetch_by_email_any.return_value = account(email="ana.souza@usp.br")
+
+        self.assert_conflict_changes_nothing()
+        self.users.fetch_by_provider_any.assert_called_once_with(
+            provider_name="orcid", reference=ORCID
+        )
 
     def test_a_sign_up_challenge_is_not_found(self):
         other = challenge(kind=ChallengeKind.SIGN_UP)

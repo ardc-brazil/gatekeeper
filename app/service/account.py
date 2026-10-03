@@ -157,7 +157,9 @@ class AccountService:
     def confirm_email_verification(self, challenge_id: UUID, code: str) -> UUID:
         challenge = self._redeem(challenge_id, ChallengeKind.EMAIL_VERIFICATION, code)
         orcid, email, now = challenge.payload["orcid"], challenge.email, self._clock()
-        by_orcid = self._users.fetch_by_provider_any(ORCID_PROVIDER, orcid)
+        by_orcid = self._users.fetch_by_provider_any(
+            provider_name=ORCID_PROVIDER, reference=orcid
+        )
         by_email = self._users.fetch_by_email_any(email)
 
         if by_orcid is not None:

@@ -9,7 +9,7 @@ from app.model.db.user import (
     user_tenancy_association,
 )
 from sqlalchemy import case, func, or_, update
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import Query, aliased
 from sqlalchemy.sql.expression import true
 from typing import Callable
 from contextlib import AbstractContextManager
@@ -21,6 +21,22 @@ from sqlalchemy.exc import IntegrityError
 def like_pattern(term: str) -> str:
     escaped = term.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
+
+
+def _by_provider(session: Session, provider_name: str, reference: str) -> Query:
+    provider_alias = aliased(Provider)
+    return (
+        session.query(User)
+        .join(user_provider_association)
+        .join(
+            provider_alias,
+            provider_alias.id == user_provider_association.c.provider_id,
+        )
+        .filter(
+            provider_alias.name == provider_name,
+            provider_alias.reference == reference,
+        )
+    )
 
 
 class UserRepository:
@@ -44,40 +60,19 @@ class UserRepository:
     def fetch_by_provider(
         self, provider_name: str, reference: str, is_enabled: bool = True
     ) -> User:
-        provider_alias = aliased(Provider)
         with self._session_factory() as session:
-            user = (
-                session.query(User)
-                .join(user_provider_association)
-                .join(
-                    provider_alias,
-                    provider_alias.id == user_provider_association.c.provider_id,
-                )
-                .filter(
-                    provider_alias.name == provider_name,
-                    provider_alias.reference == reference,
-                    User.is_enabled == is_enabled,
-                )
+            return (
+                _by_provider(session, provider_name, reference)
+                .filter(User.is_enabled == is_enabled)
                 .first()
             )
 
-        return user
-
     def fetch_by_provider_any(self, provider_name: str, reference: str) -> User | None:
-        provider_alias = aliased(Provider)
         with self._session_factory() as session:
+            # A disabled holder must come first so it blocks reuse of the reference.
             return (
-                session.query(User)
-                .join(user_provider_association)
-                .join(
-                    provider_alias,
-                    provider_alias.id == user_provider_association.c.provider_id,
-                )
-                .filter(
-                    provider_alias.name == provider_name,
-                    provider_alias.reference == reference,
-                )
-                .order_by(User.is_enabled.desc())
+                _by_provider(session, provider_name, reference)
+                .order_by(User.is_enabled.asc())
                 .first()
             )
 

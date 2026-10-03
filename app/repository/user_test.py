@@ -42,21 +42,45 @@ class TestFailedLogins(unittest.TestCase):
         recorder.session.commit.assert_called_once()
 
 
+def compiled_lookup(call) -> str:
+    @contextmanager
+    def session_factory():
+        yield Session()
+
+    with patch.object(Query, "first", autospec=True) as first:
+        call(UserRepository(session_factory))
+
+    query = first.call_args.args[0]
+    return str(query.statement.compile(dialect=postgresql.dialect()))
+
+
+class TestFetchByProvider(unittest.TestCase):
+    def test_only_accounts_in_the_asked_state_are_found(self):
+        sql = compiled_lookup(
+            lambda users: users.fetch_by_provider("orcid", "0000-0002-1825-0097")
+        )
+
+        where = sql.split("WHERE", 1)[1]
+        self.assertIn("providers_1.name =", where)
+        self.assertIn("providers_1.reference =", where)
+        self.assertIn("users.is_enabled =", where)
+        self.assertNotIn("ORDER BY", sql)
+
+
 class TestFetchByProviderAny(unittest.TestCase):
     def test_the_lookup_ignores_whether_the_account_is_enabled(self):
-        @contextmanager
-        def session_factory():
-            yield Session()
+        sql = compiled_lookup(
+            lambda users: users.fetch_by_provider_any("orcid", "0000-0002-1825-0097")
+        )
 
-        with patch.object(Query, "first", autospec=True) as first:
-            UserRepository(session_factory).fetch_by_provider_any(
-                "orcid", "0000-0002-1825-0097"
-            )
-
-        query = first.call_args.args[0]
-        sql = str(query.statement.compile(dialect=postgresql.dialect()))
         where = sql.split("WHERE", 1)[1]
         self.assertIn("providers_1.name =", where)
         self.assertIn("providers_1.reference =", where)
         self.assertNotIn("is_enabled", where.split("ORDER BY", 1)[0])
-        self.assertIn("ORDER BY users.is_enabled DESC", sql)
+
+    def test_a_disabled_holder_of_a_shared_reference_comes_first(self):
+        sql = compiled_lookup(
+            lambda users: users.fetch_by_provider_any("orcid", "0000-0002-1825-0097")
+        )
+
+        self.assertIn("ORDER BY users.is_enabled ASC", sql)
