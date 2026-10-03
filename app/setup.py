@@ -43,6 +43,7 @@ from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
 from app.exception.conflict import ConflictException
 from app.exception.illegal_state import IllegalStateException
+from app.exception.too_many_requests import TooManyRequestsException
 from app.controller.interceptor.exception_handler import (
     bad_request_exception_handler,
     conflict_exception_handler,
@@ -50,6 +51,7 @@ from app.controller.interceptor.exception_handler import (
     generic_exception_handler,
     illegal_state_exception_handler,
     not_found_exception_handler,
+    too_many_requests_exception_handler,
     unauthorized_exception_handler,
 )
 
@@ -226,4 +228,7 @@ def setup_error_handlers(fastAPIApp: FastAPI) -> None:
         IllegalStateException, illegal_state_exception_handler
     )
     fastAPIApp.add_exception_handler(BadRequestException, bad_request_exception_handler)
+    fastAPIApp.add_exception_handler(
+        TooManyRequestsException, too_many_requests_exception_handler
+    )
     fastAPIApp.add_exception_handler(Exception, generic_exception_handler)

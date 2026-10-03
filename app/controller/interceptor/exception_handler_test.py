@@ -12,6 +12,7 @@ from app.controller.interceptor.exception_handler import (
 )
 from app.exception.bad_request import BadRequestException, ErrorDetails
 from app.exception.forbidden import ForbiddenException
+from app.exception.too_many_requests import TooManyRequestsException
 
 
 class TestExceptionHandler(unittest.IsolatedAsyncioTestCase):
@@ -95,6 +96,21 @@ class TestForbiddenHandler(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json(), {"detail": "forbidden"})
+
+
+class TestTooManyRequestsHandler(unittest.TestCase):
+    def test_a_refused_retry_answers_429_with_its_code(self):
+        app = FastAPI()
+        setup.setup_error_handlers(app)
+
+        @app.post("/again")
+        def again():
+            raise TooManyRequestsException("resend_too_soon")
+
+        response = TestClient(app, raise_server_exceptions=False).post("/again")
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json(), {"detail": "resend_too_soon"})
 
 
 if __name__ == "__main__":

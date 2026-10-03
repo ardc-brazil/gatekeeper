@@ -7,6 +7,7 @@ from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
+from app.exception.too_many_requests import TooManyRequestsException
 from app.exception import conflict
 from app.logging_config import fields, request_id_var
 
@@ -31,6 +32,13 @@ async def unauthorized_exception_handler(request: Request, exc: UnauthorizedExce
 async def forbidden_exception_handler(request: Request, exc: ForbiddenException):
     logger.info(f"Forbidden exception: {exc}")
     return JSONResponse(status_code=403, content={"detail": "forbidden"})
+
+
+async def too_many_requests_exception_handler(
+    request: Request, exc: TooManyRequestsException
+):
+    logger.info(f"Too many requests exception: {exc}")
+    return JSONResponse(status_code=429, content={"detail": str(exc)})
 
 
 async def illegal_state_exception_handler(request: Request, exc: IllegalStateException):
