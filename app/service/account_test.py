@@ -7,6 +7,7 @@ from app.exception.conflict import ConflictException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.too_many_requests import TooManyRequestsException
+from app.exception.unauthorized import UnauthorizedException
 from app.model.auth_challenge import ChallengeKind
 from app.model.db.auth_challenge import AuthChallenge
 from app.model.db.user import User as UserDBModel
@@ -18,6 +19,7 @@ from app.service.account import AccountService
 from app.service.challenge_code import code_hash
 from app.service.email import EmailService
 from app.service.password import PasswordHasher
+from app.service.share_token import hash_token
 from app.service.user import UserService
 
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
@@ -635,3 +637,259 @@ class TestResend(AccountServiceTestCase):
         self.challenges.touch.assert_called_once_with(pending.id, NOW)
         self.challenges.reissue.assert_not_called()
         self.email_service.enqueue.assert_not_called()
+
+
+class TestLogin(AccountServiceTestCase):
+    def with_password(self, **overrides) -> UserDBModel:
+        found = account(password_hash=self.hasher.hash(PASSWORD), **overrides)
+        self.users.fetch_by_email_any.return_value = found
+        return found
+
+    def assert_invalid_credentials(self, email: str, password: str) -> None:
+        with self.assertRaises(UnauthorizedException) as raised:
+            self.service.login(email, password)
+        self.assertEqual(str(raised.exception), "invalid_credentials")
+
+    def test_the_right_password_signs_in_and_clears_the_failures(self):
+        found = self.with_password(failed_login_count=3)
+
+        self.assertEqual(self.service.login(" Ana.Souza@USP.br ", PASSWORD), found.id)
+
+        self.users.fetch_by_email_any.assert_called_once_with("ana.souza@usp.br")
+        self.users.clear_failed_logins.assert_called_once_with(found.id)
+
+    def test_a_clean_sign_in_writes_nothing(self):
+        self.with_password()
+
+        self.service.login("ana.souza@usp.br", PASSWORD)
+
+        self.users.clear_failed_logins.assert_not_called()
+
+    def test_a_wrong_password_is_counted_toward_the_lock(self):
+        found = self.with_password()
+
+        self.assert_invalid_credentials("ana.souza@usp.br", "not the password")
+
+        self.users.record_failed_login.assert_called_once_with(
+            found.id, 10, NOW + timedelta(minutes=15)
+        )
+
+    def test_an_unknown_email_still_runs_bcrypt(self):
+        with patch.object(self.hasher, "burn") as burn:
+            self.assert_invalid_credentials("nobody@usp.br", PASSWORD)
+
+        burn.assert_called_once_with(PASSWORD)
+        self.users.record_failed_login.assert_not_called()
+
+    def test_a_malformed_email_is_answered_like_an_unknown_one(self):
+        with patch.object(self.hasher, "burn") as burn:
+            self.assert_invalid_credentials("not-an-email", PASSWORD)
+
+        burn.assert_called_once_with(PASSWORD)
+        self.users.fetch_by_email_any.assert_not_called()
+
+    def test_an_account_without_a_password_is_refused_after_bcrypt(self):
+        self.users.fetch_by_email_any.return_value = account(password_hash=None)
+
+        with patch.object(self.hasher, "burn") as burn:
+            self.assert_invalid_credentials("ana.souza@usp.br", PASSWORD)
+
+        burn.assert_called_once_with(PASSWORD)
+
+    def test_a_locked_account_is_refused_even_with_the_right_password(self):
+        self.with_password(locked_until=NOW + timedelta(minutes=1))
+
+        with patch.object(self.hasher, "burn") as burn:
+            self.assert_invalid_credentials("ana.souza@usp.br", PASSWORD)
+
+        burn.assert_called_once_with(PASSWORD)
+        self.users.record_failed_login.assert_not_called()
+        self.users.clear_failed_logins.assert_not_called()
+
+    def test_an_expired_lock_lets_the_right_password_in(self):
+        found = self.with_password(
+            failed_login_count=10, locked_until=NOW - timedelta(seconds=1)
+        )
+
+        self.assertEqual(self.service.login("ana.souza@usp.br", PASSWORD), found.id)
+
+        self.users.clear_failed_logins.assert_called_once_with(found.id)
+
+    def test_an_unconfirmed_email_is_refused(self):
+        self.with_password(email_verified_at=None)
+
+        self.assert_invalid_credentials("ana.souza@usp.br", PASSWORD)
+
+        self.users.clear_failed_logins.assert_not_called()
+
+    def test_a_disabled_account_is_refused(self):
+        self.with_password(is_enabled=False)
+
+        self.assert_invalid_credentials("ana.souza@usp.br", PASSWORD)
+
+
+class TestRequestPasswordReset(AccountServiceTestCase):
+    def test_a_confirmed_account_gets_a_link_valid_for_an_hour(self):
+        found = account()
+        self.users.fetch_by_email_any.return_value = found
+
+        self.service.request_password_reset(" Ana.Souza@usp.br ")
+
+        stored = self.stored()
+        self.assertEqual(stored.kind, "password_reset")
+        self.assertEqual(stored.email, "ana.souza@usp.br")
+        self.assertEqual(stored.user_id, found.id)
+        self.assertEqual(stored.expires_at, NOW + timedelta(hours=1))
+        self.assertEqual(stored.issued_at, NOW)
+        sent = self.sent()
+        prefix = "https://datamap.example.org/account/reset-password/"
+        link = sent["context"]["link"]
+        self.assertEqual(sent["template"], "password_reset")
+        self.assertEqual(sent["recipient"], "ana.souza@usp.br")
+        self.assertEqual(sent["context"]["name"], "Ana Souza")
+        self.assertEqual(sent["secret_fields"], frozenset({"link"}))
+        self.assertEqual(sent["related_id"], stored.id)
+        self.assertTrue(link.startswith(prefix))
+        self.assertEqual(stored.secret_hash, hash_token(link[len(prefix) :]))
+
+    def test_an_account_without_a_password_can_ask_for_one(self):
+        self.users.fetch_by_email_any.return_value = account(password_hash=None)
+
+        self.service.request_password_reset("ana.souza@usp.br")
+
+        self.email_service.enqueue.assert_called_once()
+
+    def test_an_unknown_email_gets_nothing(self):
+        self.service.request_password_reset("nobody@usp.br")
+
+        self.challenges.replace.assert_not_called()
+        self.email_service.enqueue.assert_not_called()
+
+    def test_an_unconfirmed_email_gets_nothing(self):
+        self.users.fetch_by_email_any.return_value = account(email_verified_at=None)
+
+        self.service.request_password_reset("ana.souza@usp.br")
+
+        self.email_service.enqueue.assert_not_called()
+
+    def test_a_disabled_account_gets_nothing(self):
+        self.users.fetch_by_email_any.return_value = account(is_enabled=False)
+
+        self.service.request_password_reset("ana.souza@usp.br")
+
+        self.email_service.enqueue.assert_not_called()
+
+    def test_a_malformed_email_gets_nothing_and_no_error(self):
+        self.assertIsNone(self.service.request_password_reset("not-an-email"))
+
+        self.users.fetch_by_email_any.assert_not_called()
+
+    def test_past_the_hourly_cap_nothing_is_sent(self):
+        self.users.fetch_by_email_any.return_value = account()
+        self.emails.count_recent.return_value = 5
+
+        self.service.request_password_reset("ana.souza@usp.br")
+
+        self.challenges.replace.assert_not_called()
+        self.email_service.enqueue.assert_not_called()
+
+
+class TestConfirmPasswordReset(AccountServiceTestCase):
+    def pending(self, **overrides) -> AuthChallenge:
+        pending = challenge(
+            kind=ChallengeKind.PASSWORD_RESET,
+            secret_hash=hash_token("tok"),
+            user_id=uuid4(),
+            **overrides,
+        )
+        self.challenges.fetch_open_by_secret.return_value = pending
+        return pending
+
+    def test_a_valid_token_sets_the_password_and_retires_every_open_link(self):
+        pending = self.pending()
+
+        self.service.confirm_password_reset("tok", "a brand new password")
+
+        self.challenges.fetch_open_by_secret.assert_called_once_with(
+            hash_token("tok"), ChallengeKind.PASSWORD_RESET
+        )
+        user_id, stored_hash = self.users.set_password.call_args.args
+        self.assertEqual(user_id, pending.user_id)
+        self.assertTrue(self.hasher.verify("a brand new password", stored_hash))
+        self.challenges.consume_open_for_user.assert_called_once_with(
+            pending.user_id, ChallengeKind.PASSWORD_RESET, NOW
+        )
+
+    def test_an_unknown_or_used_token_is_invalid(self):
+        self.challenges.fetch_open_by_secret.return_value = None
+
+        self.assert_refused(
+            "token_invalid",
+            self.service.confirm_password_reset,
+            "tok",
+            "a brand new password",
+        )
+        self.users.set_password.assert_not_called()
+
+    def test_an_expired_token_is_invalid(self):
+        self.pending(expires_at=NOW)
+
+        self.assert_refused(
+            "token_invalid",
+            self.service.confirm_password_reset,
+            "tok",
+            "a brand new password",
+        )
+        self.users.set_password.assert_not_called()
+
+    def test_a_short_password_is_refused_before_the_token_is_looked_at(self):
+        self.assert_refused(
+            "invalid_password", self.service.confirm_password_reset, "tok", "too short"
+        )
+
+        self.challenges.fetch_open_by_secret.assert_not_called()
+
+
+class TestChangePassword(AccountServiceTestCase):
+    def test_the_current_password_lets_a_new_one_in(self):
+        found = account(password_hash=self.hasher.hash(PASSWORD))
+        self.users.fetch_by_id.return_value = found
+
+        self.service.change_password(found.id, PASSWORD, "a brand new password")
+
+        self.users.fetch_by_id.assert_called_once_with(id=found.id)
+        user_id, stored_hash = self.users.set_password.call_args.args
+        self.assertEqual(user_id, found.id)
+        self.assertTrue(self.hasher.verify("a brand new password", stored_hash))
+
+    def test_a_wrong_current_password_is_refused(self):
+        found = account(password_hash=self.hasher.hash(PASSWORD))
+        self.users.fetch_by_id.return_value = found
+
+        with self.assertRaises(UnauthorizedException) as raised:
+            self.service.change_password(
+                found.id, "not the password", "a brand new password"
+            )
+
+        self.assertEqual(str(raised.exception), "invalid_credentials")
+        self.users.set_password.assert_not_called()
+        self.users.record_failed_login.assert_not_called()
+
+    def test_an_account_without_a_password_is_refused(self):
+        self.users.fetch_by_id.return_value = account(password_hash=None)
+
+        with self.assertRaises(UnauthorizedException) as raised:
+            self.service.change_password(uuid4(), PASSWORD, "a brand new password")
+
+        self.assertEqual(str(raised.exception), "invalid_credentials")
+
+    def test_a_short_new_password_is_refused(self):
+        self.assert_refused(
+            "invalid_password",
+            self.service.change_password,
+            uuid4(),
+            PASSWORD,
+            "too short",
+        )
+
+        self.users.fetch_by_id.assert_not_called()

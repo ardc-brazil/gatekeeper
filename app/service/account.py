@@ -9,9 +9,11 @@ from app.exception.conflict import ConflictException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.too_many_requests import TooManyRequestsException
+from app.exception.unauthorized import UnauthorizedException
 from app.logging_config import fields
 from app.model.auth_challenge import ChallengeKind
 from app.model.db.auth_challenge import AuthChallenge
+from app.model.db.user import User as UserDBModel
 from app.model.user import User, UserProvider
 from app.repository.auth_challenge import AuthChallengeRepository
 from app.repository.email import EmailRepository
@@ -21,7 +23,7 @@ from app.service.email import EmailService
 from app.service.email_template import EmailTemplate
 from app.service.password import PasswordHasher, password_is_acceptable
 from app.service.share_identity import normalise_email, normalise_orcid
-from app.service.share_token import new_token
+from app.service.share_token import hash_token, new_token
 from app.service.user import UserService
 
 CODE_LIFETIME_MINUTES = 15
@@ -30,6 +32,10 @@ MAX_CODE_ATTEMPTS = 5
 RESEND_COOLDOWN = timedelta(seconds=90)
 CODES_PER_HOUR = 5
 CAP_WINDOW = timedelta(hours=1)
+RESET_LIFETIME = timedelta(hours=1)
+MAX_FAILED_LOGINS = 10
+LOCK_DURATION = timedelta(minutes=15)
+INVALID_CREDENTIALS = "invalid_credentials"
 MAX_NAME_LENGTH = 256
 ORCID_PROVIDER = "orcid"
 CHALLENGE_NOT_FOUND = "challenge_not_found"
@@ -210,6 +216,112 @@ class AccountService:
         kind = ChallengeKind(challenge.kind)
         self._send_code(kind, challenge.email, challenge.id, code, challenge.payload)
         self._log_issue(challenge.id, challenge.kind, "resent")
+
+    def login(self, email: str, password: str) -> UUID:
+        now = self._clock()
+        password = password or ""
+        found = self._account_for_login(email)
+        if found is None or found.password_hash is None:
+            self._hasher.burn(password)
+            raise self._refused("unknown" if found is None else "no_password", found)
+        if found.locked_until is not None and found.locked_until > now:
+            self._hasher.burn(password)
+            raise self._refused("locked", found)
+        if not self._hasher.verify(password, found.password_hash):
+            self._users.record_failed_login(
+                found.id, MAX_FAILED_LOGINS, now + LOCK_DURATION
+            )
+            raise self._refused("wrong_password", found)
+        if not found.is_enabled:
+            raise self._refused("disabled", found)
+        if found.email_verified_at is None:
+            raise self._refused("unverified", found)
+        if found.failed_login_count or found.locked_until is not None:
+            self._users.clear_failed_logins(found.id)
+        return found.id
+
+    def request_password_reset(self, email: str) -> None:
+        try:
+            address = normalise_email(email)
+        except BadRequestException:
+            return
+        found = self._users.fetch_by_email_any(address)
+        if found is None or not found.is_enabled or found.email_verified_at is None:
+            return
+        now = self._clock()
+        if self._capped(address, now):
+            self._log_issue(None, ChallengeKind.PASSWORD_RESET.value, "capped")
+            return
+        token, challenge_id = new_token(), uuid4()
+        self._challenges.replace(
+            AuthChallenge(
+                id=challenge_id,
+                kind=ChallengeKind.PASSWORD_RESET.value,
+                email=address,
+                secret_hash=hash_token(token),
+                attempts=0,
+                expires_at=now + RESET_LIFETIME,
+                issued_at=now,
+                user_id=found.id,
+                payload={},
+            )
+        )
+        self._queue(
+            EmailTemplate.PASSWORD_RESET,
+            address,
+            {"name": found.name, "link": self.reset_link(token)},
+            frozenset({"link"}),
+            challenge_id,
+        )
+        self._log_issue(challenge_id, ChallengeKind.PASSWORD_RESET.value, "sent")
+
+    def reset_link(self, token: str) -> str:
+        return f"{self._base_url}/account/reset-password/{token}"
+
+    def confirm_password_reset(self, token: str, password: str) -> None:
+        _password(password)
+        now = self._clock()
+        challenge = self._challenges.fetch_open_by_secret(
+            hash_token(token or ""), ChallengeKind.PASSWORD_RESET
+        )
+        if (
+            challenge is None
+            or challenge.user_id is None
+            or challenge.expires_at <= now
+        ):
+            raise _invalid("token_invalid")
+        self._users.set_password(challenge.user_id, self._hasher.hash(password))
+        self._challenges.consume_open_for_user(
+            challenge.user_id, ChallengeKind.PASSWORD_RESET, now
+        )
+
+    def change_password(
+        self, user_id: UUID, current_password: str, new_password: str
+    ) -> None:
+        _password(new_password)
+        current_password = current_password or ""
+        found = self._users.fetch_by_id(id=user_id)
+        if found is None or found.password_hash is None:
+            self._hasher.burn(current_password)
+            raise self._refused("unknown" if found is None else "no_password", found)
+        if not self._hasher.verify(current_password, found.password_hash):
+            raise self._refused("wrong_password", found)
+        self._users.set_password(found.id, self._hasher.hash(new_password))
+
+    def _account_for_login(self, email: str) -> UserDBModel | None:
+        try:
+            return self._users.fetch_by_email_any(normalise_email(email))
+        except BadRequestException:
+            return None
+
+    def _refused(self, reason: str, found: UserDBModel | None) -> UnauthorizedException:
+        self._logger.info(
+            "password check refused",
+            extra=fields(
+                reason=reason, user_id=str(found.id) if found is not None else None
+            ),
+        )
+        return UnauthorizedException(INVALID_CREDENTIALS)
 
     def _redeem(
         self, challenge_id: UUID, kind: ChallengeKind, code: str
