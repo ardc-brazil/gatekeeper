@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Confirm your email to sign in with ORCID{% endblock %}
+{% block preheader %}Your code expires in {{ expires_in_minutes }} minutes.{% endblock %}
+{% block label %}Sign-in{% endblock %}
+{% block content %}
+{{ m.heading("Confirm your email") }}
+{% call m.paragraph() %}Hi {{ name }}, enter this code on DataMap to confirm this address and link it to your ORCID iD.{% endcall %}
+{{ m.details([{"label": "Your code", "value": code}, {"label": "ORCID iD", "value": orcid}, {"label": "Expires in", "value": expires_in_minutes ~ " minutes"}]) }}
+{% call m.note(bottom=16) %}If you didn't sign in to DataMap with this ORCID iD, ignore this email. Nothing is linked without the code.{% endcall %}
+{% endblock %}
+{% block reason %}You received this email because someone signing in to DataMap with ORCID gave this address.{% endblock %}

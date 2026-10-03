@@ -1,0 +1,13 @@
+{% extends "base.txt" %}
+{% block content %}
+Hi {{ name }},
+
+Enter this code on the DataMap screen where you created your account.
+
+Your DataMap code: {{ code }}
+
+It expires in {{ expires_in_minutes }} minutes.
+
+If this wasn't you, ignore this email. Nobody can use this address on DataMap without the code.
+{% endblock %}
+{% block reason %}You received this email because someone used this address to create a DataMap account.{% endblock %}

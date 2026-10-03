@@ -656,3 +656,114 @@ class TestMembersSentence(unittest.TestCase):
                 }
                 with self.assertRaises(UndefinedError):
                     self.render(template, partial)
+
+
+CONTEXTS[EmailTemplate.SIGN_UP_CODE] = {
+    "name": "Ana Souza",
+    "code": "042917",
+    "expires_in_minutes": 15,
+}
+CONTEXTS[EmailTemplate.EMAIL_VERIFICATION_CODE] = {
+    "name": "Ana Souza",
+    "code": "042917",
+    "orcid": "0000-0002-1825-0097",
+    "expires_in_minutes": 15,
+}
+CONTEXTS[EmailTemplate.PASSWORD_RESET] = {
+    "name": "Ana Souza",
+    "link": "https://datamap.example.org/account/reset-password/tok-123",
+}
+CONTEXTS[EmailTemplate.NEW_ACCOUNT_PENDING] = {
+    "name": "Ana Souza",
+    "email": "ana.souza@usp.br",
+    "sign_in_method": "Email and password",
+    "created_at": "October 3, 2026 at 14:05 UTC",
+}
+
+ACCOUNT = frozenset(
+    {
+        EmailTemplate.SIGN_UP_CODE,
+        EmailTemplate.EMAIL_VERIFICATION_CODE,
+        EmailTemplate.PASSWORD_RESET,
+        EmailTemplate.NEW_ACCOUNT_PENDING,
+    }
+)
+
+
+class TestAccountTemplates(unittest.TestCase):
+    def setUp(self):
+        self.renderer = EmailTemplateRenderer(site_url=SITE_URL)
+
+    def render(self, template):
+        return self.renderer.render(template, CONTEXTS[template])
+
+    def test_every_account_template_has_a_written_text_part(self):
+        for template in ACCOUNT:
+            with self.subTest(template=template):
+                self.assertTrue((TEMPLATES_DIR / f"{template.value}.txt").is_file())
+
+    def test_a_code_is_in_both_bodies_and_never_in_the_subject(self):
+        for template in (
+            EmailTemplate.SIGN_UP_CODE,
+            EmailTemplate.EMAIL_VERIFICATION_CODE,
+        ):
+            with self.subTest(template=template):
+                email = self.render(template)
+
+                self.assertIn("042917", email.html)
+                self.assertIn("Your DataMap code: 042917", email.text)
+                self.assertNotIn("042917", email.subject)
+
+    def test_the_sign_up_code_tells_a_stranger_to_ignore_it(self):
+        email = self.render(EmailTemplate.SIGN_UP_CODE)
+
+        self.assertEqual(email.subject, "Confirm your email for DataMap")
+        self.assertIn("If this wasn't you, ignore this email.", email.text)
+        self.assertIn("It expires in 15 minutes.", email.text)
+
+    def test_the_email_verification_names_the_orcid_being_linked(self):
+        email = self.render(EmailTemplate.EMAIL_VERIFICATION_CODE)
+
+        self.assertEqual(email.subject, "Confirm your email to sign in with ORCID")
+        self.assertIn("0000-0002-1825-0097", email.html)
+        self.assertIn("ORCID iD: 0000-0002-1825-0097", email.text)
+
+    def test_the_reset_link_is_in_both_bodies_and_valid_for_an_hour(self):
+        email = self.render(EmailTemplate.PASSWORD_RESET)
+        link = "https://datamap.example.org/account/reset-password/tok-123"
+
+        self.assertEqual(email.subject, "Reset your DataMap password")
+        self.assertIn(link, email.html)
+        self.assertIn(link, email.text)
+        self.assertNotIn("tok-123", email.subject)
+        self.assertIn("valid for 1 hour", email.text)
+
+    def test_the_admin_notification_lists_the_account(self):
+        email = self.render(EmailTemplate.NEW_ACCOUNT_PENDING)
+
+        self.assertEqual(email.subject, "New DataMap account: Ana Souza")
+        for value in (
+            "Ana Souza",
+            "ana.souza@usp.br",
+            "Email and password",
+            "October 3, 2026 at 14:05 UTC",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, email.text)
+                self.assertIn(value, email.html)
+
+    def test_account_messages_do_not_claim_to_be_about_a_dataset(self):
+        for template in ACCOUNT:
+            with self.subTest(template=template):
+                email = self.render(template)
+                self.assertNotIn("transactional message about a dataset", email.html)
+                self.assertNotIn("transactional message about a dataset", email.text)
+
+    def test_a_name_is_escaped_in_html(self):
+        email = self.renderer.render(
+            EmailTemplate.SIGN_UP_CODE,
+            {**CONTEXTS[EmailTemplate.SIGN_UP_CODE], "name": "<b>Ana</b>"},
+        )
+
+        self.assertNotIn("<b>Ana</b>", email.html)
+        self.assertIn("&lt;b&gt;Ana&lt;/b&gt;", email.html)

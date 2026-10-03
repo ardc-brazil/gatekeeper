@@ -1,0 +1,14 @@
+{% extends "base.txt" %}
+{% block content %}
+Hi {{ name }},
+
+Enter this code on DataMap to confirm this address and link it to your ORCID iD.
+
+Your DataMap code: {{ code }}
+ORCID iD: {{ orcid }}
+
+It expires in {{ expires_in_minutes }} minutes.
+
+If you didn't sign in to DataMap with this ORCID iD, ignore this email. Nothing is linked without the code.
+{% endblock %}
+{% block reason %}You received this email because someone signing in to DataMap with ORCID gave this address.{% endblock %}

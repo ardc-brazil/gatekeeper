@@ -20,3 +20,7 @@ serves from `public/img/email/`.
 | `announcement` | `title`, `preheader`, `published_on`, `body`, `cta_label`, `cta_url` | `image_url`, `image_alt`, `highlights` (list of str) |
 | `dataset_reminder` | `dataset_title`, `draft_days`, `status`, `last_updated_on`, `files_summary`, `complete_url` | `missing_fields` (list of str) |
 | `notification` | `title`, `preheader`, `message`, `cta_label`, `cta_url`, `reason` | `actor_name`, `details` (list of `{label, value}`) |
+| `sign_up_code` | `name`, `code`, `expires_in_minutes` | |
+| `email_verification_code` | `name`, `code`, `orcid`, `expires_in_minutes` | |
+| `password_reset` | `name`, `link` | |
+| `new_account_pending` | `name`, `email`, `sign_in_method`, `created_at` | |
