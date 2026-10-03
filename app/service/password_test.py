@@ -55,7 +55,16 @@ class TestPasswordHasher(unittest.TestCase):
     def test_a_stored_value_of_another_shape_is_refused_without_reaching_bcrypt(self):
         for stored in ("", "$2b$10$short", "hmac-sha256$abc"):
             with self.subTest(stored=stored):
-                self.assertFalse(self.hasher.verify("correct horse battery", stored))
+                with patch("app.service.password.bcrypt.checkpw") as checkpw:
+                    self.assertFalse(
+                        self.hasher.verify("correct horse battery", stored)
+                    )
+                checkpw.assert_not_called()
+
+    def test_a_stored_value_with_an_invalid_salt_is_refused_rather_than_raising(self):
+        stored = "$2b$10$" + "x" * 53
+
+        self.assertFalse(self.hasher.verify("correct horse battery", stored))
 
     def test_burning_a_check_runs_bcrypt_once(self):
         with patch(

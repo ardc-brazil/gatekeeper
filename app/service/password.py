@@ -5,7 +5,7 @@ import secrets
 
 import bcrypt
 
-from app.service.secret import BCRYPT_LENGTH, MIN_PEPPER_LENGTH
+from app.service.secret import MIN_PEPPER_LENGTH, verify_bcrypt
 
 BCRYPT_ROUNDS = 10
 MIN_PASSWORD_LENGTH = 10
@@ -14,10 +14,6 @@ MAX_PASSWORD_LENGTH = 128
 
 def password_is_acceptable(password: str) -> bool:
     return MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH
-
-
-def _is_bcrypt_hash(stored: str) -> bool:
-    return len(stored) == BCRYPT_LENGTH and stored.startswith("$2")
 
 
 class PasswordHasher:
@@ -35,10 +31,7 @@ class PasswordHasher:
         return bcrypt.hashpw(self._peppered(password), salt).decode("utf-8")
 
     def verify(self, password: str, stored: str) -> bool:
-        # A value of another shape can panic inside bcrypt's Rust extension.
-        if not _is_bcrypt_hash(stored):
-            return False
-        return bcrypt.checkpw(self._peppered(password), stored.encode("utf-8"))
+        return verify_bcrypt(self._peppered(password), stored)
 
     def burn(self, password: str) -> None:
         self.verify(password, self._dummy)
