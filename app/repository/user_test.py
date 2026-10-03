@@ -1,10 +1,11 @@
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import Query, Session
 
 from app.repository.user import UserRepository
 
@@ -39,3 +40,23 @@ class TestFailedLogins(unittest.TestCase):
         self.assertIn("ELSE users.locked_until", sql)
         self.assertIn("WHERE users.id =", sql)
         recorder.session.commit.assert_called_once()
+
+
+class TestFetchByProviderAny(unittest.TestCase):
+    def test_the_lookup_ignores_whether_the_account_is_enabled(self):
+        @contextmanager
+        def session_factory():
+            yield Session()
+
+        with patch.object(Query, "first", autospec=True) as first:
+            UserRepository(session_factory).fetch_by_provider_any(
+                "orcid", "0000-0002-1825-0097"
+            )
+
+        query = first.call_args.args[0]
+        sql = str(query.statement.compile(dialect=postgresql.dialect()))
+        where = sql.split("WHERE", 1)[1]
+        self.assertIn("providers_1.name =", where)
+        self.assertIn("providers_1.reference =", where)
+        self.assertNotIn("is_enabled", where.split("ORDER BY", 1)[0])
+        self.assertIn("ORDER BY users.is_enabled DESC", sql)

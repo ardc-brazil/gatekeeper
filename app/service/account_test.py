@@ -72,7 +72,7 @@ class AccountServiceTestCase(unittest.TestCase):
     def setUp(self):
         self.users = Mock(spec=UserRepository)
         self.users.fetch_by_email_any.return_value = None
-        self.users.fetch_by_provider.return_value = None
+        self.users.fetch_by_provider_any.return_value = None
         self.user_service = Mock(spec=UserService)
         self.challenges = Mock(spec=AuthChallengeRepository)
         self.challenges.consume.return_value = True
@@ -399,20 +399,19 @@ class TestConfirmEmailVerification(AccountServiceTestCase):
         orcid_account = account(
             email="0000000218250097@fake.mail.com", email_verified_at=None
         )
-        self.users.fetch_by_provider.return_value = orcid_account
+        self.users.fetch_by_provider_any.return_value = orcid_account
 
         self.assertEqual(self.confirm(), orcid_account.id)
 
-        self.users.fetch_by_provider.assert_called_once_with(
-            provider_name="orcid", reference=ORCID
-        )
+        self.users.fetch_by_provider_any.assert_called_once_with("orcid", ORCID)
+        self.users.fetch_by_provider.assert_not_called()
         self.users.verify_email.assert_called_once_with(
             orcid_account.id, "ana.souza@usp.br", NOW
         )
 
     def test_an_orcid_account_that_already_has_this_email_is_confirmed(self):
         orcid_account = account(email_verified_at=None)
-        self.users.fetch_by_provider.return_value = orcid_account
+        self.users.fetch_by_provider_any.return_value = orcid_account
         self.users.fetch_by_email_any.return_value = orcid_account
 
         self.assertEqual(self.confirm(), orcid_account.id)
@@ -422,7 +421,7 @@ class TestConfirmEmailVerification(AccountServiceTestCase):
         )
 
     def test_an_orcid_account_and_another_account_with_the_email_conflict(self):
-        self.users.fetch_by_provider.return_value = account()
+        self.users.fetch_by_provider_any.return_value = account()
         self.users.fetch_by_email_any.return_value = account()
 
         with self.assertRaises(ConflictException) as raised:
@@ -469,6 +468,49 @@ class TestConfirmEmailVerification(AccountServiceTestCase):
             self.user_service.create.call_args.kwargs, {"email_verified_at": NOW}
         )
 
+    def assert_conflict_changes_nothing(self) -> None:
+        with self.assertRaises(ConflictException) as raised:
+            self.confirm()
+
+        self.assertEqual(str(raised.exception), "email_belongs_to_another_account")
+        self.users.verify_email.assert_not_called()
+        self.user_service.add_provider.assert_not_called()
+        self.user_service.create.assert_not_called()
+
+    def test_a_disabled_orcid_account_and_a_new_email_conflict(self):
+        self.users.fetch_by_provider_any.return_value = account(
+            email="0000000218250097@fake.mail.com", is_enabled=False
+        )
+
+        self.assert_conflict_changes_nothing()
+
+    def test_a_disabled_orcid_account_and_another_enabled_account_conflict(self):
+        self.users.fetch_by_provider_any.return_value = account(
+            email="0000000218250097@fake.mail.com", is_enabled=False
+        )
+        self.users.fetch_by_email_any.return_value = account()
+
+        self.assert_conflict_changes_nothing()
+
+    def test_a_disabled_orcid_account_holding_this_email_conflicts(self):
+        disabled = account(is_enabled=False, email_verified_at=None)
+        self.users.fetch_by_provider_any.return_value = disabled
+        self.users.fetch_by_email_any.return_value = disabled
+
+        self.assert_conflict_changes_nothing()
+
+    def test_a_sign_up_challenge_is_not_found(self):
+        other = challenge(kind=ChallengeKind.SIGN_UP)
+        self.challenges.fetch.return_value = other
+
+        self.assert_not_found(self.service.confirm_email_verification, other.id, CODE)
+
+    def test_a_password_reset_challenge_is_not_found(self):
+        other = challenge(kind=ChallengeKind.PASSWORD_RESET)
+        self.challenges.fetch.return_value = other
+
+        self.assert_not_found(self.service.confirm_email_verification, other.id, CODE)
+
     def test_a_wrong_code_changes_no_account(self):
         self.challenges.record_failed_attempt.return_value = 1
 
@@ -479,7 +521,7 @@ class TestConfirmEmailVerification(AccountServiceTestCase):
             "000000",
         )
 
-        self.users.fetch_by_provider.assert_not_called()
+        self.users.fetch_by_provider_any.assert_not_called()
         self.users.verify_email.assert_not_called()
 
 

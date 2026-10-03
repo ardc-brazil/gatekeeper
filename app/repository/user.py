@@ -63,6 +63,24 @@ class UserRepository:
 
         return user
 
+    def fetch_by_provider_any(self, provider_name: str, reference: str) -> User | None:
+        provider_alias = aliased(Provider)
+        with self._session_factory() as session:
+            return (
+                session.query(User)
+                .join(user_provider_association)
+                .join(
+                    provider_alias,
+                    provider_alias.id == user_provider_association.c.provider_id,
+                )
+                .filter(
+                    provider_alias.name == provider_name,
+                    provider_alias.reference == reference,
+                )
+                .order_by(User.is_enabled.desc())
+                .first()
+            )
+
     def upsert(self, user: User) -> User:
         try:
             with self._session_factory() as session:
