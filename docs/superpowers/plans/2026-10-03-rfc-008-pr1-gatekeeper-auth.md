@@ -2432,6 +2432,7 @@ In `app/container.py`, move these four providers, unchanged, from below `permiss
         password=config.SMTP_PASSWORD,
         starttls=config.SMTP_STARTTLS,
         timeout_seconds=config.SMTP_TIMEOUT_SECONDS,
+        local_hostname=providers.Callable(public_hostname, config.PUBLIC_BASE_URL),
     )
 
     email_service = providers.Factory(
