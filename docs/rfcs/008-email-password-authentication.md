@@ -99,12 +99,12 @@ confirmation field and nothing more.
 
 `users` gains four columns:
 
-| Column | Type | Meaning |
-|---|---|---|
-| `password_hash` | `String(128)`, nullable | `null` means the account has no password |
-| `email_verified_at` | `DateTime(tz)`, nullable | `null` means the email was never confirmed |
-| `failed_login_count` | `Integer`, default 0 | consecutive wrong passwords |
-| `locked_until` | `DateTime(tz)`, nullable | sign-in by password refused until then |
+| Column               | Type                     | Meaning                                    |
+| -------------------- | ------------------------ | ------------------------------------------ |
+| `password_hash`      | `String(128)`, nullable  | `null` means the account has no password   |
+| `email_verified_at`  | `DateTime(tz)`, nullable | `null` means the email was never confirmed |
+| `failed_login_count` | `Integer`, default 0     | consecutive wrong passwords                |
+| `locked_until`       | `DateTime(tz)`, nullable | sign-in by password refused until then     |
 
 The password does **not** become a `providers` row. A `credentials` provider
 referencing the email would go stale on the first email change; "has a
@@ -119,8 +119,10 @@ auth_challenges
   email          String(256), lower-cased
   secret_hash    String(128), unique
   attempts       Integer, default 0
+  issued_at      DateTime(tz)          -- last time a code was sent; drives the resend cooldown
   expires_at     DateTime(tz)
   consumed_at    DateTime(tz), nullable
+  confirmed_at   DateTime(tz), nullable -- set only by a successful confirmation
   user_id        UUID, nullable, FK users ON DELETE CASCADE
   payload        JSONB      -- what is pending: name, password hash, ORCID iD
   created_at     DateTime(tz)
@@ -174,10 +176,21 @@ both cases.
 | `POST /auth/login` | `{email, password}` | `200 {user_id}` or `401` |
 | `POST /auth/password-reset` | `{email}` | `202`, always |
 | `POST /auth/password-reset/confirm` | `{token, password}` | `204` |
-| `PUT /users/{id}/password` | `{current_password, new_password}` | `204` or `401`; authn + authz |
+| `PUT /users/{id}/password` | `{current_password, new_password}` | `204` or `401`; self only |
 
 Code errors on the confirm endpoints are `400` with `code_invalid`,
-`code_expired` or `code_attempts_exceeded`; the last two consume the challenge.
+`code_expired` or `code_attempts_exceeded`; the last two consume the challenge,
+and a resend revives it with a new code. Validation errors are `400` with
+`invalid_email`, `invalid_name`, `invalid_password` or `invalid_orcid`, raised
+as `IllegalStateException` so the body is `{"detail": "<code>"}` like every other
+error here (the `BadRequestException` handler answers a different shape).
+
+#### Self-access
+
+A new account has no Casbin role, so `authorize` would refuse it its own user.
+`GET /users/{id}` and `PUT /users/{id}/password` skip Casbin when `{id}` equals
+`X-User-Id`, and go through Casbin otherwise. The password change answers `401`
+for anyone but the account itself, whatever their roles.
 
 #### Sign-up
 
@@ -194,13 +207,18 @@ emails a code. Confirming:
 
 Called by the webapp when an ORCID sign-in finds no ready account. Confirming:
 
-| ORCID iD has an account? | Email has an account? | Result |
-|---|---|---|
-| yes | no | set the email on the ORCID account, confirm it |
-| yes | the same account | confirm it |
-| yes | a different account | `409 email_belongs_to_another_account` |
-| no | yes | attach the ORCID provider to that account, confirm it |
-| no | no | create the user with the ORCID provider and the email, confirmed |
+| ORCID iD has an account? | Email has an account? | Result                                                           |
+| ------------------------ | --------------------- | ---------------------------------------------------------------- |
+| yes                      | no                    | set the email on the ORCID account, confirm it                   |
+| yes                      | the same account      | confirm it                                                       |
+| yes                      | a different account   | `409 email_belongs_to_another_account`                           |
+| no                       | yes                   | attach the ORCID provider to that account, confirm it            |
+| no                       | no                    | create the user with the ORCID provider and the email, confirmed |
+
+A disabled account holding the email also answers the `409`; ORCID is never
+attached to a disabled account.
+
+Changing a user's email through `PUT /users/{id}` clears `email_verified_at`.
 
 #### Collisions
 
@@ -228,9 +246,20 @@ the lock and consumes every open `password_reset` challenge of that user.
 
 #### Rate limits
 
-- Resend: once per 60 seconds per challenge, `429` otherwise.
-- At most 5 challenges per email per hour across all kinds. Past that the
-  `202` is still returned and no email is sent.
+- Resend: once per 90 seconds per challenge, `429 resend_too_soon` otherwise.
+  It works on any challenge not yet confirmed — expired, out of attempts or
+  replaced — and issues a new code with fresh attempts and expiry. A confirmed
+  challenge answers `404 challenge_not_found`.
+- At most 5 code or link emails per address per hour, resends included,
+  counted from the outbox. Past that the `202` is still returned and no email
+  is sent.
+
+### Delivery
+
+Auth emails go through the outbox like every other email and leave on the
+Archivist's dispatch, every minute in production. The 90-second resend cooldown
+gives the first code a dispatch cycle to arrive before a resend replaces it,
+and the code screen says the email can take up to a minute.
 
 ### Notifications
 
@@ -245,8 +274,9 @@ ones, with the code or token in `secret_fields`:
 | `new_account_pending` | `ADMIN_NOTIFICATION_EMAILS` | name, email, sign-in method, creation time |
 
 `new_account_pending` is enqueued from `UserService.create`, so it fires for
-every path that creates a user — password, ORCID, or `POST /users` — with
-`dedup_key = user_id`.
+every path that creates a user — password, ORCID, or `POST /users` — one
+message per admin, with `dedup_key = new_account_pending:{user_id}:{address hash}`
+(the column is unique, so a key per user would reach only the first admin).
 
 ### Configuration
 
@@ -301,7 +331,7 @@ no library:
 - each box labelled "Digit n of 6".
 
 **`VerificationCodeForm`** wraps it for sign-up and email verification, with
-"Resend code" behind a 60-second countdown and the messages "Invalid code",
+"Resend code" behind a 90-second countdown and the messages "Invalid code",
 "Code expired, request a new one" and "Too many attempts".
 
 **Profile, "Sign-in methods":**
