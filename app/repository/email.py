@@ -187,6 +187,21 @@ class EmailRepository:
                 or 0
             )
 
+    def count_recent(
+        self, recipient: str, templates: list[str], since: datetime
+    ) -> int:
+        with self._session_factory() as session:
+            return (
+                session.query(func.count(EmailMessage.id))
+                .filter(
+                    func.lower(EmailMessage.recipient) == recipient.lower(),
+                    EmailMessage.template.in_(templates),
+                    EmailMessage.created_at >= since,
+                )
+                .scalar()
+                or 0
+            )
+
     def search(self, query: EmailQuery) -> PaginatedResult:
         with self._session_factory() as session:
             rows = session.query(EmailMessage)
