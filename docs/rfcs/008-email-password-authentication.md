@@ -237,12 +237,21 @@ dummy hash, so timing does not reveal which emails exist.
 
 Ten consecutive failures set `locked_until = now() + 15 min`; a lock answers
 `401` too, so it reveals nothing. A success or a reset clears both counters.
+Expiry does not: the count stays at ten, so the first wrong password after a
+lock ends locks the account again. The failures are consecutive until a
+success says otherwise.
 
 #### Password reset
 
 Sends the link `{PUBLIC_BASE_URL}/account/reset-password/{token}` only when the
-account exists and its email is confirmed. Confirming sets the password, clears
-the lock and consumes every open `password_reset` challenge of that user.
+account exists and its email is confirmed. Confirming consumes the link
+atomically before anything else, so a double submit sets one password and the
+second answers `token_invalid`; it then sets the password, clears the lock and
+consumes every other open `password_reset` challenge of that user.
+
+The request answers the same `202` for every address, but it does not burn
+equal time: a known, confirmed address costs a few more database round trips
+than an unknown one. Only sign-in carries the dummy-hash timing guarantee.
 
 #### Rate limits
 
