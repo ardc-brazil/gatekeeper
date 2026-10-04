@@ -273,9 +273,12 @@ than an unknown one. Only sign-in carries the dummy-hash timing guarantee.
 #### Rate limits
 
 - Resend: once per 90 seconds per challenge, `429 resend_too_soon` otherwise.
-  It works on any challenge not yet confirmed — expired, out of attempts or
-  replaced — and issues a new code with fresh attempts and expiry. A confirmed
-  challenge answers `404 challenge_not_found`.
+  It works on any challenge not yet confirmed — expired or out of attempts — and
+  issues a new code with fresh attempts and expiry. A confirmed challenge, and a
+  sign-up challenge replaced by a newer one (its password hash is already gone),
+  answer `404 challenge_not_found`. The unconfirmable challenge a sign-up returns
+  for an existing account goes through exactly the same states, so no sequence
+  of resends and wrong codes tells the two apart.
 - At most 5 code or link emails per address per hour, resends included,
   counted from the outbox. Past that the `202` is still returned and no email
   is sent.
