@@ -421,6 +421,24 @@ class TestChangePassword:
             == "10|t"
         )
 
+    def test_a_wrong_current_password_counts_even_with_a_short_new_one(
+        self, http_client, mailpit
+    ):
+        account = password_account(http_client, mailpit)
+
+        refused(
+            change_password(http_client, account["id"], "not the password", "short"),
+            401,
+            "invalid_credentials",
+        )
+
+        assert (
+            execute(
+                f"SELECT failed_login_count FROM users WHERE id = '{account['id']}'"
+            )
+            == "1"
+        )
+
     def test_a_change_retires_an_open_reset_link(self, http_client, mailpit):
         account = password_account(http_client, mailpit)
         assert_status_code(request_password_reset(http_client, account["email"]), 202)

@@ -66,18 +66,25 @@ QUIET_VALIDATION_ROUTES = {("PUT", "/v1/users/{id}/password")}
 
 
 def _answers_quietly(request: Request) -> bool:
-    path = getattr(request.scope.get("route"), "path", "") or ""
+    path = _route_template(request)
     return (
         path.startswith(QUIET_VALIDATION_PREFIX)
         or (request.method, path) in QUIET_VALIDATION_ROUTES
     )
 
 
+def _route_template(request: Request) -> str:
+    return getattr(request.scope.get("route"), "path", "") or ""
+
+
 async def request_validation_exception_handler(
     request: Request, exc: RequestValidationError
 ):
     if _answers_quietly(request):
-        logger.info("Invalid request on a credentials route")
+        logger.info(
+            "Invalid request on a credentials route",
+            extra=fields(path=_route_template(request)),
+        )
         return JSONResponse(status_code=400, content={"detail": "invalid_request"})
     return await default_validation_handler(request, exc)
 

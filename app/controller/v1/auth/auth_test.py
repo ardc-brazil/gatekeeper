@@ -280,6 +280,18 @@ class TestMalformedRequests(AuthRoutesTestCase):
                 self.assertEqual(response.json(), {"detail": "invalid_request"})
                 self.assertNotIn(secret, response.text)
 
+    def test_the_log_names_the_route_and_not_the_input(self):
+        with self.assertLogs("uvicorn", level="INFO") as logged:
+            self.client.post("/v1/auth/login", json={"email": "secret-value"})
+
+        record = next(
+            record
+            for record in logged.records
+            if record.getMessage() == "Invalid request on a credentials route"
+        )
+        self.assertEqual(record.path, "/v1/auth/login")
+        self.assertNotIn("secret-value", str(record.__dict__))
+
     def test_a_body_that_is_not_json_is_400_invalid_request(self):
         response = self.client.post(
             "/v1/auth/login",

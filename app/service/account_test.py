@@ -179,6 +179,10 @@ class TestSignUp(AccountServiceTestCase):
             "Ana\x00Souza",
             "Ana\x7fSouza",
             "Ana\x85Souza",
+            "Ana\u202eSouza",
+            "Ana\u200bSouza",
+            "Ana\u2028Souza",
+            "Ana\u2029Souza",
         ):
             with self.subTest(name=repr(name)):
                 self.assert_refused(
@@ -196,6 +200,11 @@ class TestSignUp(AccountServiceTestCase):
                     name,
                 )
         self.challenges.replace.assert_not_called()
+
+    def test_a_name_with_accents_and_inner_spaces_is_kept(self):
+        self.service.sign_up("  Ana Lúcia  de Souza ", "ana.souza@usp.br", PASSWORD)
+
+        self.assertEqual(self.stored().payload["name"], "Ana Lúcia  de Souza")
 
     def test_the_cap_counts_every_code_and_link_sent_to_the_address_in_the_last_hour(
         self,
@@ -253,8 +262,9 @@ class TestSignUpForAnExistingAccount(AccountServiceTestCase):
 
     def stored_by_kind(self) -> dict:
         return {
-            call.args[0].kind: call.args[0]
+            stored.kind: stored
             for call in self.challenges.replace.call_args_list
+            for stored in call.args
         }
 
     def test_an_account_with_a_password_is_emailed_a_reset_link_not_a_code(self):
@@ -266,6 +276,7 @@ class TestSignUpForAnExistingAccount(AccountServiceTestCase):
             )
 
         self.users.fetch_by_email_any.assert_called_once_with("ana.souza@usp.br")
+        self.challenges.replace.assert_called_once()
         stored = self.stored_by_kind()
         reset, answered = stored["password_reset"], stored["sign_up"]
         self.assertEqual(answered.id, challenge_id)
@@ -326,12 +337,20 @@ class TestSignUpForAnExistingAccount(AccountServiceTestCase):
         )
         self.challenges.fetch.return_value = answered
 
-        self.service.resend(answered.id)
+        with patch("app.service.account.new_code", return_value=CODE):
+            self.service.resend(answered.id)
 
-        self.challenges.reissue.assert_not_called()
-        self.challenges.touch.assert_called_once_with(answered.id, NOW)
+        challenge_id, secret_hash, expires_at, issued_at = (
+            self.challenges.reissue.call_args.args
+        )
+        self.assertEqual(challenge_id, answered.id)
+        self.assertNotEqual(secret_hash, answered.secret_hash)
+        self.assertNotEqual(secret_hash, code_hash(CHALLENGE_PEPPER, answered.id, CODE))
+        self.assertEqual((expires_at, issued_at), (NOW + timedelta(minutes=15), NOW))
+        self.challenges.touch.assert_not_called()
         self.assertEqual(self.stored().user_id, found.id)
         self.assertEqual(self.sent()["template"], "sign_up_existing_account")
+        self.assertNotIn("code", self.sent()["context"])
 
     def test_a_resend_of_the_answer_within_ninety_seconds_is_refused(self):
         self.existing()
@@ -357,6 +376,22 @@ class TestSignUpForAnExistingAccount(AccountServiceTestCase):
 
         self.service.resend(answered.id)
 
+        self.challenges.touch.assert_called_once_with(answered.id, NOW)
+        self.challenges.reissue.assert_not_called()
+        self.challenges.replace.assert_not_called()
+        self.email_service.enqueue.assert_not_called()
+
+    def test_a_resend_after_the_password_is_gone_renews_but_sends_nothing(self):
+        self.users.fetch_by_email_any.return_value = account(password_hash=None)
+        answered = challenge(
+            payload={"name": "Ana Souza", "existing_account": True},
+            issued_at=NOW - timedelta(seconds=91),
+        )
+        self.challenges.fetch.return_value = answered
+
+        self.service.resend(answered.id)
+
+        self.challenges.reissue.assert_called_once()
         self.challenges.replace.assert_not_called()
         self.email_service.enqueue.assert_not_called()
 
@@ -426,8 +461,10 @@ class TestConfirmSignUp(AccountServiceTestCase):
             self.service.confirm_sign_up(pending.id, CODE)
 
         self.assertEqual(str(raised.exception), "email_belongs_to_another_account")
+        self.users.set_password_and_verify_email.assert_not_called()
         self.users.set_password.assert_not_called()
         self.users.verify_email.assert_not_called()
+        self.challenges.consume_open_for_user.assert_not_called()
         self.user_service.create.assert_not_called()
 
     def test_surrounding_spaces_in_a_code_are_ignored(self):
@@ -1152,13 +1189,41 @@ class TestChangePassword(AccountServiceTestCase):
 
         self.assertEqual(str(raised.exception), "invalid_credentials")
 
-    def test_a_short_new_password_is_refused(self):
+    def test_a_short_new_password_is_refused_after_the_current_one_is_checked(self):
+        found = account(password_hash=self.hasher.hash(PASSWORD))
+        self.users.fetch_by_id.return_value = found
+
         self.assert_refused(
             "invalid_password",
             self.service.change_password,
-            uuid4(),
+            found.id,
             PASSWORD,
             "too short",
         )
 
-        self.users.fetch_by_id.assert_not_called()
+        self.users.set_password.assert_not_called()
+        self.users.record_failed_login.assert_not_called()
+
+    def test_a_wrong_current_password_counts_even_with_a_short_new_one(self):
+        found = account(password_hash=self.hasher.hash(PASSWORD))
+        self.users.fetch_by_id.return_value = found
+
+        with self.assertRaises(UnauthorizedException) as raised:
+            self.service.change_password(found.id, "not the password", "too short")
+
+        self.assertEqual(str(raised.exception), "invalid_credentials")
+        self.users.record_failed_login.assert_called_once_with(
+            found.id, 10, NOW + timedelta(minutes=15)
+        )
+
+    def test_a_locked_account_is_refused_before_the_new_password_is_judged(self):
+        found = account(
+            password_hash=self.hasher.hash(PASSWORD),
+            locked_until=NOW + timedelta(minutes=1),
+        )
+        self.users.fetch_by_id.return_value = found
+
+        with self.assertRaises(UnauthorizedException):
+            self.service.change_password(found.id, PASSWORD, "too short")
+
+        self.users.record_failed_login.assert_not_called()

@@ -63,7 +63,7 @@ class TestPasswordHashIsNotRetained(unittest.TestCase):
         self.assertTrue(confirmed)
         sql = recorder.sql()
         self.assertIn("confirmed_at=", sql)
-        self.assertIn("payload=(auth_challenges.payload - CAST(", sql)
+        self.assertIn("payload=((auth_challenges.payload - CAST(", sql)
         self.assertIn("auth_challenges.consumed_at IS NULL", sql)
         recorder.session.commit.assert_called_once()
 
@@ -83,7 +83,7 @@ class TestPasswordHashIsNotRetained(unittest.TestCase):
 
         sql = recorder.sql()
         self.assertIn("consumed_at=", sql)
-        self.assertIn("payload=(auth_challenges.payload - CAST(", sql)
+        self.assertIn("payload=((auth_challenges.payload - CAST(", sql)
         self.assertIn("auth_challenges.consumed_at IS NULL", sql)
         recorder.session.add.assert_called_once_with(challenge)
         recorder.session.commit.assert_called_once()
@@ -94,5 +94,43 @@ class TestPasswordHashIsNotRetained(unittest.TestCase):
         AuthChallengeRepository(recorder).reissue(uuid4(), "secret", NOW, NOW)
 
         sql = recorder.sql()
-        self.assertIn("payload=(auth_challenges.payload - CAST(", sql)
+        self.assertIn("payload=((auth_challenges.payload - CAST(", sql)
         self.assertIn("auth_challenges.id !=", sql)
+
+    def test_the_existing_account_marker_goes_with_the_password_hash(self):
+        for call in (
+            lambda repository: repository.confirm(uuid4(), NOW),
+            lambda repository: repository.replace(
+                AuthChallenge(
+                    id=uuid4(), kind="sign_up", email="a@usp.br", issued_at=NOW
+                )
+            ),
+            lambda repository: repository.reissue(uuid4(), "secret", NOW, NOW),
+        ):
+            recorder = Recorder()
+            recorder.session.execute.return_value.rowcount = 1
+
+            call(AuthChallengeRepository(recorder))
+
+            statement = recorder.session.execute.call_args.args[0]
+            params = statement.compile(dialect=postgresql.dialect()).params
+            self.assertIn("password_hash", params.values())
+            self.assertIn("existing_account", params.values())
+
+    def test_several_challenges_are_replaced_in_one_transaction(self):
+        recorder = Recorder()
+        first = AuthChallenge(
+            id=uuid4(), kind="password_reset", email="a@usp.br", issued_at=NOW
+        )
+        second = AuthChallenge(
+            id=uuid4(), kind="sign_up", email="a@usp.br", issued_at=NOW
+        )
+
+        AuthChallengeRepository(recorder).replace(first, second)
+
+        self.assertEqual(recorder.session.execute.call_count, 2)
+        self.assertEqual(
+            [call.args[0] for call in recorder.session.add.call_args_list],
+            [first, second],
+        )
+        recorder.session.commit.assert_called_once()

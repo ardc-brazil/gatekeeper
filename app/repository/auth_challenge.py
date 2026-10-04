@@ -12,9 +12,10 @@ from app.model.db.auth_challenge import AuthChallenge
 
 
 def _without_password_hash(table):
-    return table.c.payload.op("-", return_type=JSONB)(
-        cast(literal("password_hash"), Text)
-    )
+    payload = table.c.payload
+    for key in ("password_hash", "existing_account"):
+        payload = payload.op("-", return_type=JSONB)(cast(literal(key), Text))
+    return payload
 
 
 class AuthChallengeRepository:
@@ -23,22 +24,23 @@ class AuthChallengeRepository:
     ) -> None:
         self._session_factory = session_factory
 
-    def replace(self, challenge: AuthChallenge) -> None:
+    def replace(self, *challenges: AuthChallenge) -> None:
         table = AuthChallenge.__table__
-        statement = (
-            update(table)
-            .where(
-                table.c.kind == challenge.kind,
-                table.c.email == challenge.email,
-                table.c.consumed_at.is_(None),
-            )
-            .values(
-                consumed_at=challenge.issued_at, payload=_without_password_hash(table)
-            )
-        )
         with self._session_factory() as session:
-            session.execute(statement)
-            session.add(challenge)
+            for challenge in challenges:
+                session.execute(
+                    update(table)
+                    .where(
+                        table.c.kind == challenge.kind,
+                        table.c.email == challenge.email,
+                        table.c.consumed_at.is_(None),
+                    )
+                    .values(
+                        consumed_at=challenge.issued_at,
+                        payload=_without_password_hash(table),
+                    )
+                )
+                session.add(challenge)
             session.commit()
 
     def fetch(self, challenge_id: UUID) -> AuthChallenge | None:

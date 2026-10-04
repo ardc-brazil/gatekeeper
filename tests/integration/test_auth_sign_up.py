@@ -169,6 +169,105 @@ class TestSignUpForAnExistingAccount:
         )
 
 
+def _answer(response) -> tuple:
+    if not response.content:
+        return (response.status_code, None)
+    body = response.json()
+    return (response.status_code, body.get("detail", sorted(body)))
+
+
+def _replaced_then_resent(http_client, email: str) -> list[tuple]:
+    first = sign_up(http_client, email, password="another password")
+    second = sign_up(http_client, email, password="another password")
+    answers = [_answer(first), _answer(second)]
+    first_id, second_id = first.json()["challenge_id"], second.json()["challenge_id"]
+    answers.append(_answer(resend(http_client, first_id)))
+    age_challenge(first_id, "issued_at", 91)
+    answers.append(_answer(resend(http_client, first_id)))
+    answers.append(_answer(resend(http_client, second_id)))
+    age_challenge(second_id, "issued_at", 91)
+    answers.append(_answer(resend(http_client, second_id)))
+    answers.append(_answer(resend(http_client, second_id)))
+    return answers
+
+
+def _used_up_expired_and_resent(http_client, email: str) -> list[tuple]:
+    started = sign_up(http_client, email, password="another password")
+    challenge_id = started.json()["challenge_id"]
+    answers = [_answer(started)]
+    for _ in range(6):
+        answers.append(_answer(confirm_sign_up(http_client, challenge_id, "abcdef")))
+    age_challenge(challenge_id, "issued_at", 91)
+    answers.append(_answer(resend(http_client, challenge_id)))
+    answers.append(_answer(confirm_sign_up(http_client, challenge_id, "abcdef")))
+    age_challenge(challenge_id, "expires_at", 1)
+    answers.append(_answer(confirm_sign_up(http_client, challenge_id, "abcdef")))
+    answers.append(_answer(confirm_sign_up(http_client, challenge_id, "abcdef")))
+    age_challenge(challenge_id, "issued_at", 91)
+    answers.append(_answer(resend(http_client, challenge_id)))
+    answers.append(_answer(confirm_sign_up(http_client, challenge_id, "abcdef")))
+    return answers
+
+
+class TestAnExistingAccountLooksLikeANewAddress:
+    def test_replacing_and_resending_answer_the_same(self, http_client, mailpit):
+        existing = password_account(http_client, mailpit)["email"]
+
+        answers = _replaced_then_resent(http_client, existing)
+
+        assert answers == _replaced_then_resent(http_client, unique_email())
+        assert answers == [
+            (202, ["challenge_id"]),
+            (202, ["challenge_id"]),
+            (404, "challenge_not_found"),
+            (404, "challenge_not_found"),
+            (429, "resend_too_soon"),
+            (202, None),
+            (429, "resend_too_soon"),
+        ]
+
+    def test_wrong_codes_expiry_and_resends_answer_the_same(self, http_client, mailpit):
+        existing = password_account(http_client, mailpit)["email"]
+
+        answers = _used_up_expired_and_resent(http_client, existing)
+
+        assert answers == _used_up_expired_and_resent(http_client, unique_email())
+        assert answers == [
+            (202, ["challenge_id"]),
+            *[(400, "code_invalid")] * 4,
+            (400, "code_attempts_exceeded"),
+            (400, "code_attempts_exceeded"),
+            (202, None),
+            (400, "code_invalid"),
+            (400, "code_expired"),
+            (400, "code_expired"),
+            (202, None),
+            (400, "code_invalid"),
+        ]
+
+    def test_each_resend_to_an_existing_account_sends_a_fresh_link(
+        self, http_client, mailpit
+    ):
+        email = password_account(http_client, mailpit)["email"]
+        started = sign_up(http_client, email, password="another password")
+        challenge_id = started.json()["challenge_id"]
+        first = newest_reset_token(http_client, mailpit, email, count=2)
+        age_challenge(challenge_id, "issued_at", 91)
+
+        assert_status_code(resend(http_client, challenge_id), 202)
+
+        second = newest_reset_token(http_client, mailpit, email, count=3)
+        assert second != first
+        refused(
+            confirm_password_reset(http_client, first, "a brand new password"),
+            400,
+            "token_invalid",
+        )
+        assert_status_code(
+            confirm_password_reset(http_client, second, "a brand new password"), 204
+        )
+
+
 class TestWhatTheChallengesKeep:
     def _keeps_the_hash(self, challenge_id: str) -> str:
         return execute(
