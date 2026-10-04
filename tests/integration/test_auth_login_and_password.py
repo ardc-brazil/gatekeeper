@@ -6,6 +6,7 @@ from tests.integration.fixtures.account import (
     confirm_email_verification,
     confirm_password_reset,
     create_plain_user,
+    disable,
     login,
     newest_code,
     newest_reset_token,
@@ -60,12 +61,7 @@ class TestSignIn:
             f"UPDATE users SET email_verified_at = NULL WHERE id = '{unconfirmed['id']}'"
         )
         disabled = password_account(http_client, mailpit)
-        assert_status_code(
-            http_client.delete(
-                f"/users/{disabled['id']}", headers=AuthFixture.valid_headers()
-            ),
-            200,
-        )
+        disable(http_client, disabled["id"])
 
         answers = [
             login(http_client, unique_email(), PASSWORD),

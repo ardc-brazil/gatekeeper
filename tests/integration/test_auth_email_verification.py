@@ -3,6 +3,7 @@ import pytest
 from tests.integration.fixtures.account import (
     confirm_email_verification,
     create_plain_user,
+    disable,
     newest_code,
     newest_text,
     refused,
@@ -35,13 +36,6 @@ def _confirmed(http_client, mailpit, orcid: str, email: str):
     assert_status_code(started, 202)
     code = newest_code(http_client, mailpit, email)
     return confirm_email_verification(http_client, started.json()["challenge_id"], code)
-
-
-def _disable(http_client, user_id: str) -> None:
-    response = http_client.delete(
-        f"/users/{user_id}", headers=AuthFixture.valid_headers()
-    )
-    assert_status_code(response, 200)
 
 
 def _users_with_email(http_client, email: str, is_enabled: bool) -> list[dict]:
@@ -133,7 +127,7 @@ class TestDisabledOrcidHolders:
         self, http_client, mailpit
     ):
         orcid, email = random_orcid(), unique_email()
-        _disable(http_client, _orcid_account(http_client, orcid))
+        disable(http_client, _orcid_account(http_client, orcid))
 
         refused(
             _confirmed(http_client, mailpit, orcid, email),
@@ -147,7 +141,7 @@ class TestDisabledOrcidHolders:
         self, http_client, mailpit
     ):
         orcid, email = random_orcid(), unique_email()
-        _disable(http_client, _orcid_account(http_client, orcid))
+        disable(http_client, _orcid_account(http_client, orcid))
         other = create_plain_user(http_client, email)
 
         refused(
@@ -163,7 +157,7 @@ class TestDisabledOrcidHolders:
         self, http_client, mailpit
     ):
         orcid, email = random_orcid(), unique_email()
-        _disable(http_client, _orcid_account(http_client, orcid))
+        disable(http_client, _orcid_account(http_client, orcid))
         enabled = create_plain_user(http_client, unique_email())
         attached = http_client.put(
             f"/users/{enabled}/providers",

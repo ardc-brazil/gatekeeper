@@ -186,6 +186,13 @@ def user(http_client: HttpClient, user_id: str) -> dict:
     return response.json()
 
 
+def disable(http_client: HttpClient, user_id: str) -> None:
+    response = http_client.delete(
+        f"/users/{user_id}", headers=AuthFixture.valid_headers()
+    )
+    assert_status_code(response, 200)
+
+
 def create_plain_user(
     http_client: HttpClient, email: str, providers: list[dict] | None = None
 ) -> str:
