@@ -176,7 +176,7 @@ both cases.
 | `POST /auth/login` | `{email, password}` | `200 {user_id}` or `401` |
 | `POST /auth/password-reset` | `{email}` | `202`, always |
 | `POST /auth/password-reset/confirm` | `{token, password}` | `204` |
-| `PUT /users/{id}/password` | `{current_password, new_password}` | `204` or `401`; self only |
+| `PUT /users/{id}/password` | `{current_password, new_password}` | `204` or `401`; self only; a wrong current password counts towards the sign-in lock, and a locked account cannot change it |
 
 Code errors on the confirm endpoints are `400` with `code_invalid`,
 `code_expired` or `code_attempts_exceeded`; the last two consume the challenge,
@@ -184,6 +184,9 @@ and a resend revives it with a new code. Validation errors are `400` with
 `invalid_email`, `invalid_name`, `invalid_password` or `invalid_orcid`, raised
 as `IllegalStateException` so the body is `{"detail": "<code>"}` like every other
 error here (the `BadRequestException` handler answers a different shape).
+A body FastAPI cannot parse on these routes (a missing or mistyped field) is
+`400 {"detail": "invalid_request"}`, never the default `422`, which echoes the
+input — passwords included — back to the caller.
 
 #### Self-access
 
@@ -194,14 +197,28 @@ for anyone but the account itself, whatever their roles.
 
 #### Sign-up
 
-`POST /auth/sign-up` hashes the password, stores it in the challenge payload and
-emails a code. Confirming:
+`POST /auth/sign-up` answers the same `202 {challenge_id}` in every case. What
+it sends depends on the address:
 
-- **Email has no account:** creates the user with `password_hash` and
-  `email_verified_at = now()`.
-- **Email has an account:** sets `password_hash` on it and confirms the email.
-  The person who typed the code owns the inbox, which is exactly what a password
-  reset proves.
+- **An enabled account with a confirmed email and a password:** no code. The
+  address gets `sign_up_existing_account`, which carries a password-reset link
+  (the same 256-bit, one-hour, single-use link as *Password reset*), and the
+  returned challenge can never be confirmed. Otherwise a sign-up would be a
+  password reset guarded by six digits: 25 guesses an hour against a fixed
+  account adds up to roughly one in five over a year.
+- **Anything else:** the password hash goes into the challenge payload and a code
+  is emailed. Confirming:
+  - **no account:** creates the user with `password_hash` and
+    `email_verified_at = now()`;
+  - **an enabled account without a password** (ORCID only, or never confirmed):
+    sets the password and confirms the email in one update, and retires the
+    user's open reset links;
+  - **a disabled account:** `409 email_belongs_to_another_account`; the account
+    is not touched, so re-enabling it later cannot bring back a password set
+    while it was disabled.
+
+The payload's password hash is cleared once the challenge is confirmed or
+replaced.
 
 #### Email verification (ORCID sign-in)
 
@@ -278,6 +295,7 @@ ones, with the code or token in `secret_fields`:
 | Template | Sent to | Content |
 |---|---|---|
 | `sign_up_code` | the person | the code; "if this wasn't you, ignore it" |
+| `sign_up_existing_account` | the person | "you already have an account" and a reset link, valid 1 hour |
 | `email_verification_code` | the person | the code and the ORCID iD being linked |
 | `password_reset` | the person | the link, valid 1 hour |
 | `new_account_pending` | `ADMIN_NOTIFICATION_EMAILS` | name, email, sign-in method, creation time |
