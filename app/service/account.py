@@ -40,6 +40,7 @@ LOCK_DURATION = timedelta(minutes=15)
 INVALID_CREDENTIALS = "invalid_credentials"
 MAX_NAME_LENGTH = 256
 REFUSED_NAME_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
+ALLOWED_NAME_JOINERS = frozenset({"\u200c", "\u200d"})
 ORCID_PROVIDER = "orcid"
 CHALLENGE_NOT_FOUND = "challenge_not_found"
 CODE_INVALID = "code_invalid"
@@ -94,6 +95,7 @@ def _name(value: str) -> str:
         or len(name) > MAX_NAME_LENGTH
         or any(
             unicodedata.category(character) in REFUSED_NAME_CATEGORIES
+            and character not in ALLOWED_NAME_JOINERS
             for character in value
         )
     ):

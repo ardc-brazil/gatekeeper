@@ -201,6 +201,32 @@ class TestSignUp(AccountServiceTestCase):
                 )
         self.challenges.replace.assert_not_called()
 
+    def test_a_name_with_the_joiners_its_script_needs_is_kept(self):
+        for name in (
+            "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645",
+            "\u0915\u094d\u200d\u0937",
+        ):
+            with self.subTest(name=name):
+                self.service.sign_up(name, "ana.souza@usp.br", PASSWORD)
+
+                self.assertEqual(self.stored().payload["name"], name)
+
+    def test_bidi_overrides_and_invisible_spaces_are_refused(self):
+        for name in (
+            "Ana\u202eSouza",
+            "Ana\u200bSouza",
+            "Ana\ufeffSouza",
+            "Ana\u2066Souza",
+        ):
+            with self.subTest(name=repr(name)):
+                self.assert_refused(
+                    "invalid_name",
+                    self.service.sign_up,
+                    name,
+                    "ana.souza@usp.br",
+                    PASSWORD,
+                )
+
     def test_a_name_with_accents_and_inner_spaces_is_kept(self):
         self.service.sign_up("  Ana Lúcia  de Souza ", "ana.souza@usp.br", PASSWORD)
 
