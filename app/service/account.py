@@ -290,6 +290,8 @@ class AccountService:
             or challenge.expires_at <= now
         ):
             raise _invalid("token_invalid")
+        if not self._challenges.consume(challenge.id, now):
+            raise _invalid("token_invalid")
         self._users.set_password(challenge.user_id, self._hasher.hash(password))
         self._challenges.consume_open_for_user(
             challenge.user_id, ChallengeKind.PASSWORD_RESET, now

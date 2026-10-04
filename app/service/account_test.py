@@ -796,11 +796,12 @@ class TestRequestPasswordReset(AccountServiceTestCase):
 
 class TestConfirmPasswordReset(AccountServiceTestCase):
     def pending(self, **overrides) -> AuthChallenge:
+        values = dict(user_id=uuid4())
+        values.update(overrides)
         pending = challenge(
             kind=ChallengeKind.PASSWORD_RESET,
             secret_hash=hash_token("tok"),
-            user_id=uuid4(),
-            **overrides,
+            **values,
         )
         self.challenges.fetch_open_by_secret.return_value = pending
         return pending
@@ -820,8 +821,44 @@ class TestConfirmPasswordReset(AccountServiceTestCase):
             pending.user_id, ChallengeKind.PASSWORD_RESET, NOW
         )
 
+    def test_the_token_is_consumed_before_the_password_is_set(self):
+        pending = self.pending()
+        manager = Mock()
+        manager.attach_mock(self.challenges.consume, "consume")
+        manager.attach_mock(self.users.set_password, "set_password")
+
+        self.service.confirm_password_reset("tok", "a brand new password")
+
+        self.challenges.consume.assert_called_once_with(pending.id, NOW)
+        self.assertEqual(
+            [call[0] for call in manager.mock_calls], ["consume", "set_password"]
+        )
+
+    def test_a_token_already_consumed_by_a_concurrent_submit_is_invalid(self):
+        self.pending()
+        self.challenges.consume.return_value = False
+
+        self.assert_refused(
+            "token_invalid",
+            self.service.confirm_password_reset,
+            "tok",
+            "a brand new password",
+        )
+        self.users.set_password.assert_not_called()
+
     def test_an_unknown_or_used_token_is_invalid(self):
         self.challenges.fetch_open_by_secret.return_value = None
+
+        self.assert_refused(
+            "token_invalid",
+            self.service.confirm_password_reset,
+            "tok",
+            "a brand new password",
+        )
+        self.users.set_password.assert_not_called()
+
+    def test_a_token_without_a_user_is_invalid(self):
+        self.pending(user_id=None)
 
         self.assert_refused(
             "token_invalid",

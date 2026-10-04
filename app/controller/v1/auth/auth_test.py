@@ -164,6 +164,17 @@ class TestEmailVerificationRoutes(AuthRoutesTestCase):
             response.json(), {"detail": "email_belongs_to_another_account"}
         )
 
+    def test_a_challenge_id_that_is_not_a_uuid_is_404_without_reaching_the_service(
+        self,
+    ):
+        response = self.client.post(
+            "/v1/auth/email-verifications/not-a-uuid/confirm", json={"code": "042917"}
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "challenge_not_found"})
+        self.accounts.confirm_email_verification.assert_not_called()
+
 
 class TestResendRoute(AuthRoutesTestCase):
     def test_a_resend_answers_202_with_no_body(self):
@@ -182,6 +193,15 @@ class TestResendRoute(AuthRoutesTestCase):
 
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.json(), {"detail": "resend_too_soon"})
+
+    def test_a_challenge_id_that_is_not_a_uuid_is_404_without_reaching_the_service(
+        self,
+    ):
+        response = self.client.post("/v1/auth/challenges/not-a-uuid/resend")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "challenge_not_found"})
+        self.accounts.resend.assert_not_called()
 
 
 class TestLoginRoute(AuthRoutesTestCase):

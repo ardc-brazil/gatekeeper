@@ -88,7 +88,10 @@ def sign_up(
 
 
 def confirm_sign_up(
-    http_client: HttpClient, challenge_id, code: str, headers: dict | None = None
+    http_client: HttpClient,
+    challenge_id: uuid.UUID | str,
+    code: str,
+    headers: dict | None = None,
 ) -> requests.Response:
     return http_client.post(
         f"/auth/sign-up/{challenge_id}/confirm",
@@ -108,7 +111,7 @@ def request_email_verification(
 
 
 def confirm_email_verification(
-    http_client: HttpClient, challenge_id, code: str
+    http_client: HttpClient, challenge_id: uuid.UUID | str, code: str
 ) -> requests.Response:
     return http_client.post(
         f"/auth/email-verifications/{challenge_id}/confirm",
@@ -117,7 +120,7 @@ def confirm_email_verification(
     )
 
 
-def resend(http_client: HttpClient, challenge_id) -> requests.Response:
+def resend(http_client: HttpClient, challenge_id: uuid.UUID | str) -> requests.Response:
     return http_client.post(
         f"/auth/challenges/{challenge_id}/resend", headers=client_headers()
     )
@@ -200,7 +203,7 @@ def create_plain_user(
     return response.json()["id"]
 
 
-def age_challenge(challenge_id, column: str, seconds: int) -> None:
+def age_challenge(challenge_id: uuid.UUID | str, column: str, seconds: int) -> None:
     execute(
         f"UPDATE auth_challenges SET {column} = now() - interval '{seconds} seconds' "
         f"WHERE id = '{challenge_id}'"

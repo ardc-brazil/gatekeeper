@@ -29,7 +29,7 @@ def _challenge_id(value: str) -> UUID:
     try:
         return UUID(value)
     except ValueError:
-        raise NotFoundException("challenge_not_found")
+        raise NotFoundException("challenge_not_found") from None
 
 
 @router.post("/sign-up", status_code=202, response_model=ChallengeResponse)

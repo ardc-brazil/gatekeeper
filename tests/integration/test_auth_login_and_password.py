@@ -133,6 +133,13 @@ class TestLock:
 
         assert_status_code(_reset(http_client, mailpit, account["email"], count=2), 204)
 
+        assert (
+            execute(
+                "SELECT failed_login_count, locked_until IS NULL "
+                f"FROM users WHERE id = '{account['id']}'"
+            )
+            == "0|t"
+        )
         assert_status_code(login(http_client, account["email"], NEW_PASSWORD), 200)
 
 
