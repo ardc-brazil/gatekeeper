@@ -673,6 +673,10 @@ CONTEXTS[EmailTemplate.PASSWORD_RESET] = {
     "name": "Ana Souza",
     "link": "https://datamap.example.org/account/reset-password/tok-123",
 }
+CONTEXTS[EmailTemplate.SIGN_UP_EXISTING_ACCOUNT] = {
+    "name": "Ana Souza",
+    "link": "https://datamap.example.org/account/reset-password/tok-123",
+}
 CONTEXTS[EmailTemplate.NEW_ACCOUNT_PENDING] = {
     "name": "Ana Souza",
     "email": "ana.souza@usp.br",
@@ -685,6 +689,7 @@ ACCOUNT = frozenset(
         EmailTemplate.SIGN_UP_CODE,
         EmailTemplate.EMAIL_VERIFICATION_CODE,
         EmailTemplate.PASSWORD_RESET,
+        EmailTemplate.SIGN_UP_EXISTING_ACCOUNT,
         EmailTemplate.NEW_ACCOUNT_PENDING,
     }
 )
@@ -738,6 +743,23 @@ class TestAccountTemplates(unittest.TestCase):
         self.assertNotIn("tok-123", email.subject)
         self.assertIn("valid for 1 hour", email.text)
 
+    def test_a_sign_up_for_an_existing_account_offers_a_reset_instead(self):
+        email = self.render(EmailTemplate.SIGN_UP_EXISTING_ACCOUNT)
+        link = "https://datamap.example.org/account/reset-password/tok-123"
+
+        self.assertEqual(email.subject, "You already have a DataMap account")
+        self.assertIn(link, email.html)
+        self.assertIn(link, email.text)
+        self.assertNotIn("tok-123", email.subject)
+        for sentence in (
+            "You already have a DataMap account with this address.",
+            "If you forgot your password, reset it with this link, valid for 1 hour.",
+            "If you did not try to create an account, ignore this email.",
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertIn(sentence, email.text)
+                self.assertIn(sentence, email.html)
+
     def test_the_admin_notification_lists_the_account(self):
         email = self.render(EmailTemplate.NEW_ACCOUNT_PENDING)
 
@@ -763,6 +785,15 @@ class TestAccountTemplates(unittest.TestCase):
         email = self.renderer.render(
             EmailTemplate.SIGN_UP_CODE,
             {**CONTEXTS[EmailTemplate.SIGN_UP_CODE], "name": "<b>Ana</b>"},
+        )
+
+        self.assertNotIn("<b>Ana</b>", email.html)
+        self.assertIn("&lt;b&gt;Ana&lt;/b&gt;", email.html)
+
+    def test_a_name_is_escaped_in_the_existing_account_html(self):
+        email = self.renderer.render(
+            EmailTemplate.SIGN_UP_EXISTING_ACCOUNT,
+            {**CONTEXTS[EmailTemplate.SIGN_UP_EXISTING_ACCOUNT], "name": "<b>Ana</b>"},
         )
 
         self.assertNotIn("<b>Ana</b>", email.html)

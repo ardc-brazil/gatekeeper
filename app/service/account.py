@@ -49,7 +49,9 @@ TEMPLATES = {
     ChallengeKind.EMAIL_VERIFICATION: EmailTemplate.EMAIL_VERIFICATION_CODE,
     ChallengeKind.PASSWORD_RESET: EmailTemplate.PASSWORD_RESET,
 }
-CAPPED_TEMPLATES = [template.value for template in TEMPLATES.values()]
+CAPPED_TEMPLATES = [template.value for template in TEMPLATES.values()] + [
+    EmailTemplate.SIGN_UP_EXISTING_ACCOUNT.value
+]
 
 
 def _utcnow() -> datetime:
@@ -95,6 +97,22 @@ def _consumed_reason(challenge: AuthChallenge) -> str:
     return CODE_INVALID
 
 
+def _signs_in_with_password(found: UserDBModel | None) -> bool:
+    return (
+        found is not None
+        and found.is_enabled
+        and found.password_hash is not None
+        and found.email_verified_at is not None
+    )
+
+
+def _answers_an_existing_account(challenge: AuthChallenge) -> bool:
+    return (
+        challenge.kind == ChallengeKind.SIGN_UP.value
+        and challenge.payload.get("existing_account") is True
+    )
+
+
 def _can_resend(challenge: AuthChallenge) -> bool:
     return (
         challenge.kind != ChallengeKind.PASSWORD_RESET.value
@@ -129,6 +147,9 @@ class AccountService:
     def sign_up(self, name: str, email: str, password: str) -> UUID:
         name, email = _name(name), _email(email)
         password_hash = self._hasher.hash(_password(password))
+        found = self._users.fetch_by_email_any(email)
+        if _signs_in_with_password(found):
+            return self._answer_existing_account(found, email, name)
         return self._issue_code(
             ChallengeKind.SIGN_UP,
             email,
@@ -139,6 +160,8 @@ class AccountService:
         challenge = self._redeem(challenge_id, ChallengeKind.SIGN_UP, code)
         password_hash = challenge.payload["password_hash"]
         existing = self._users.fetch_by_email_any(challenge.email)
+        if existing is not None and not existing.is_enabled:
+            raise ConflictException(EMAIL_TAKEN)
         if existing is None:
             return self._user_service.create(
                 User(
@@ -202,6 +225,14 @@ class AccountService:
         now = self._clock()
         if now - challenge.issued_at < RESEND_COOLDOWN:
             raise TooManyRequestsException("resend_too_soon")
+        if _answers_an_existing_account(challenge):
+            self._challenges.touch(challenge.id, now)
+            found = self._users.fetch_by_email_any(challenge.email)
+            if _signs_in_with_password(found):
+                self._send_reset_link(
+                    found, challenge.email, now, EmailTemplate.SIGN_UP_EXISTING_ACCOUNT
+                )
+            return
         if self._capped(challenge.email, now):
             self._challenges.touch(challenge.id, now)
             self._log_issue(challenge.id, challenge.kind, "capped")
@@ -248,7 +279,13 @@ class AccountService:
         found = self._users.fetch_by_email_any(address)
         if found is None or not found.is_enabled or found.email_verified_at is None:
             return
-        now = self._clock()
+        self._send_reset_link(
+            found, address, self._clock(), EmailTemplate.PASSWORD_RESET
+        )
+
+    def _send_reset_link(
+        self, found: UserDBModel, address: str, now: datetime, template: EmailTemplate
+    ) -> None:
         if self._capped(address, now):
             self._log_issue(None, ChallengeKind.PASSWORD_RESET.value, "capped")
             return
@@ -267,7 +304,7 @@ class AccountService:
             )
         )
         self._queue(
-            EmailTemplate.PASSWORD_RESET,
+            template,
             address,
             {"name": found.name, "link": self.reset_link(token)},
             frozenset({"link"}),
@@ -348,6 +385,26 @@ class AccountService:
         if not self._challenges.confirm(challenge.id, now):
             raise _invalid(CODE_INVALID)
         return challenge
+
+    def _answer_existing_account(
+        self, found: UserDBModel, email: str, name: str
+    ) -> UUID:
+        now, challenge_id = self._clock(), uuid4()
+        self._send_reset_link(found, email, now, EmailTemplate.SIGN_UP_EXISTING_ACCOUNT)
+        self._challenges.replace(
+            AuthChallenge(
+                id=challenge_id,
+                kind=ChallengeKind.SIGN_UP.value,
+                email=email,
+                secret_hash=code_hash(self._pepper, challenge_id, new_token()),
+                attempts=0,
+                expires_at=now + CODE_LIFETIME,
+                issued_at=now,
+                payload={"name": name, "existing_account": True},
+            )
+        )
+        self._log_issue(challenge_id, ChallengeKind.SIGN_UP.value, "existing_account")
+        return challenge_id
 
     def _issue_code(self, kind: ChallengeKind, email: str, payload: dict) -> UUID:
         now = self._clock()

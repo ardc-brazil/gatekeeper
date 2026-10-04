@@ -22,6 +22,7 @@ class EmailTemplate(str, Enum):
     SIGN_UP_CODE = "sign_up_code"
     EMAIL_VERIFICATION_CODE = "email_verification_code"
     PASSWORD_RESET = "password_reset"
+    SIGN_UP_EXISTING_ACCOUNT = "sign_up_existing_account"
     NEW_ACCOUNT_PENDING = "new_account_pending"
 
 

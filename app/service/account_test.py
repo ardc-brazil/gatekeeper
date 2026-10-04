@@ -177,7 +177,12 @@ class TestSignUp(AccountServiceTestCase):
 
         self.emails.count_recent.assert_called_once_with(
             "ana.souza@usp.br",
-            ["sign_up_code", "email_verification_code", "password_reset"],
+            [
+                "sign_up_code",
+                "email_verification_code",
+                "password_reset",
+                "sign_up_existing_account",
+            ],
             NOW - timedelta(hours=1),
         )
 
@@ -211,6 +216,122 @@ class TestSignUp(AccountServiceTestCase):
             )
 
         self.assertEqual(self.stored().id, challenge_id)
+
+
+class TestSignUpForAnExistingAccount(AccountServiceTestCase):
+    def existing(self, **overrides) -> UserDBModel:
+        found = account(password_hash=self.hasher.hash(PASSWORD), **overrides)
+        self.users.fetch_by_email_any.return_value = found
+        return found
+
+    def stored_by_kind(self) -> dict:
+        return {
+            call.args[0].kind: call.args[0]
+            for call in self.challenges.replace.call_args_list
+        }
+
+    def test_an_account_with_a_password_is_emailed_a_reset_link_not_a_code(self):
+        found = self.existing()
+
+        with patch("app.service.account.new_code", return_value=CODE):
+            challenge_id = self.service.sign_up(
+                "Someone Else", " Ana.Souza@USP.br ", PASSWORD
+            )
+
+        self.users.fetch_by_email_any.assert_called_once_with("ana.souza@usp.br")
+        stored = self.stored_by_kind()
+        reset, answered = stored["password_reset"], stored["sign_up"]
+        self.assertEqual(answered.id, challenge_id)
+        self.assertEqual(answered.email, "ana.souza@usp.br")
+        self.assertEqual(
+            answered.payload, {"name": "Someone Else", "existing_account": True}
+        )
+        self.assertNotEqual(
+            answered.secret_hash, code_hash(CHALLENGE_PEPPER, challenge_id, CODE)
+        )
+        self.assertEqual(reset.user_id, found.id)
+        self.assertEqual(reset.email, "ana.souza@usp.br")
+        self.assertEqual(reset.expires_at, NOW + timedelta(hours=1))
+        self.assertEqual(reset.issued_at, NOW)
+        self.email_service.enqueue.assert_called_once()
+        sent = self.sent()
+        prefix = "https://datamap.example.org/account/reset-password/"
+        link = sent["context"]["link"]
+        self.assertEqual(sent["template"], "sign_up_existing_account")
+        self.assertEqual(sent["recipient"], "ana.souza@usp.br")
+        self.assertEqual(sent["context"]["name"], "Ana Souza")
+        self.assertEqual(sent["secret_fields"], frozenset({"link"}))
+        self.assertEqual(sent["related_id"], reset.id)
+        self.assertTrue(link.startswith(prefix))
+        self.assertEqual(reset.secret_hash, hash_token(link[len(prefix) :]))
+        self.assertNotIn("code", sent["context"])
+
+    def test_past_the_hourly_cap_nothing_is_sent_and_no_link_is_made(self):
+        self.existing()
+        self.emails.count_recent.return_value = 5
+
+        challenge_id = self.service.sign_up("Ana Souza", "ana.souza@usp.br", PASSWORD)
+
+        self.assertEqual(set(self.stored_by_kind()), {"sign_up"})
+        self.assertEqual(self.stored().id, challenge_id)
+        self.email_service.enqueue.assert_not_called()
+
+    def test_an_account_without_a_password_still_gets_a_code(self):
+        self.users.fetch_by_email_any.return_value = account(password_hash=None)
+
+        self.service.sign_up("Ana Souza", "ana.souza@usp.br", PASSWORD)
+
+        self.assertEqual(self.sent()["template"], "sign_up_code")
+        self.assertIn("password_hash", self.stored().payload)
+
+    def test_a_disabled_account_with_a_password_still_gets_a_code(self):
+        self.existing(is_enabled=False)
+
+        self.service.sign_up("Ana Souza", "ana.souza@usp.br", PASSWORD)
+
+        self.assertEqual(self.sent()["template"], "sign_up_code")
+
+    def test_a_resend_of_the_answer_sends_the_link_again_not_a_code(self):
+        found = self.existing()
+        answered = challenge(
+            payload={"name": "Ana Souza", "existing_account": True},
+            issued_at=NOW - timedelta(seconds=91),
+        )
+        self.challenges.fetch.return_value = answered
+
+        self.service.resend(answered.id)
+
+        self.challenges.reissue.assert_not_called()
+        self.challenges.touch.assert_called_once_with(answered.id, NOW)
+        self.assertEqual(self.stored().user_id, found.id)
+        self.assertEqual(self.sent()["template"], "sign_up_existing_account")
+
+    def test_a_resend_of_the_answer_within_ninety_seconds_is_refused(self):
+        self.existing()
+        answered = challenge(
+            payload={"name": "Ana Souza", "existing_account": True},
+            issued_at=NOW - timedelta(seconds=89),
+        )
+        self.challenges.fetch.return_value = answered
+
+        with self.assertRaises(TooManyRequestsException):
+            self.service.resend(answered.id)
+
+        self.email_service.enqueue.assert_not_called()
+
+    def test_a_resend_of_the_answer_past_the_cap_sends_nothing(self):
+        self.existing()
+        self.emails.count_recent.return_value = 5
+        answered = challenge(
+            payload={"name": "Ana Souza", "existing_account": True},
+            issued_at=NOW - timedelta(seconds=91),
+        )
+        self.challenges.fetch.return_value = answered
+
+        self.service.resend(answered.id)
+
+        self.challenges.replace.assert_not_called()
+        self.email_service.enqueue.assert_not_called()
 
 
 class TestConfirmSignUp(AccountServiceTestCase):
@@ -258,6 +379,18 @@ class TestConfirmSignUp(AccountServiceTestCase):
         self.users.verify_email.assert_called_once_with(
             existing.id, "ana.souza@usp.br", NOW
         )
+        self.user_service.create.assert_not_called()
+
+    def test_a_disabled_account_with_the_email_conflicts_and_is_left_alone(self):
+        pending = self.pending()
+        self.users.fetch_by_email_any.return_value = account(is_enabled=False)
+
+        with self.assertRaises(ConflictException) as raised:
+            self.service.confirm_sign_up(pending.id, CODE)
+
+        self.assertEqual(str(raised.exception), "email_belongs_to_another_account")
+        self.users.set_password.assert_not_called()
+        self.users.verify_email.assert_not_called()
         self.user_service.create.assert_not_called()
 
     def test_surrounding_spaces_in_a_code_are_ignored(self):

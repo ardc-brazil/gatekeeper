@@ -3,14 +3,20 @@ import uuid
 import pytest
 
 from tests.integration.fixtures.account import (
+    CODE,
     PASSWORD,
+    RESET_LINK,
     age_challenge,
+    confirm_password_reset,
     confirm_sign_up,
     create_plain_user,
     delivered,
+    disable,
     login,
     newest_code,
+    newest_text,
     outbox,
+    password_account,
     refused,
     resend,
     sign_up,
@@ -21,6 +27,7 @@ from tests.integration.fixtures.embargo import client_headers
 from tests.integration.fixtures.sharing import dispatch
 from tests.integration.utils.assertions import assert_status_code
 from tests.integration.utils.container_log import access_lines, wait_for_log
+from tests.integration.utils.database import execute
 from tests.integration.utils.mailpit import Mailpit
 
 
@@ -94,6 +101,64 @@ class TestSignUp:
 
     def test_a_malformed_email_is_refused(self, http_client):
         refused(sign_up(http_client, "not-an-email"), 400, "invalid_email")
+
+
+class TestSignUpForAnExistingAccount:
+    def test_an_account_with_a_password_is_emailed_a_reset_link_and_no_code(
+        self, http_client, mailpit
+    ):
+        account = password_account(http_client, mailpit)
+        email = account["email"]
+
+        again = sign_up(http_client, email.upper(), password="another password")
+
+        assert_status_code(again, 202)
+        assert set(again.json()) == {"challenge_id"}
+        text = newest_text(http_client, mailpit, email, count=2)
+        assert "You already have a DataMap account with this address." in text
+        assert CODE.search(text) is None
+        token = RESET_LINK.search(text).group(1)
+        assert (
+            outbox(http_client, recipient=email, template="sign_up_existing_account")[
+                "total_count"
+            ]
+            == 1
+        )
+        for code in ("000000", "123456"):
+            refused(
+                confirm_sign_up(http_client, again.json()["challenge_id"], code),
+                400,
+                "code_invalid",
+            )
+        assert_status_code(login(http_client, email, PASSWORD), 200)
+        assert_status_code(
+            confirm_password_reset(http_client, token, "a brand new password"), 204
+        )
+        assert_status_code(login(http_client, email, "a brand new password"), 200)
+
+    def test_a_disabled_account_with_the_email_is_not_given_the_password(
+        self, http_client, mailpit
+    ):
+        account = password_account(http_client, mailpit)
+        disable(http_client, account["id"])
+        state = (
+            "SELECT password_hash, email_verified_at, is_enabled "
+            f"FROM users WHERE id = '{account['id']}'"
+        )
+        before = execute(state)
+
+        started = sign_up(http_client, account["email"], password="another password")
+        assert_status_code(started, 202)
+        code = newest_code(http_client, mailpit, account["email"], count=2)
+        confirmed = confirm_sign_up(http_client, started.json()["challenge_id"], code)
+
+        refused(confirmed, 409, "email_belongs_to_another_account")
+        assert execute(state) == before
+        refused(
+            login(http_client, account["email"], "another password"),
+            401,
+            "invalid_credentials",
+        )
 
 
 class TestCodes:

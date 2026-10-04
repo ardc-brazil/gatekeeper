@@ -23,4 +23,5 @@ serves from `public/img/email/`.
 | `sign_up_code` | `name`, `code`, `expires_in_minutes` | |
 | `email_verification_code` | `name`, `code`, `orcid`, `expires_in_minutes` | |
 | `password_reset` | `name`, `link` | |
+| `sign_up_existing_account` | `name`, `link` | |
 | `new_account_pending` | `name`, `email`, `sign_in_method`, `created_at` | |

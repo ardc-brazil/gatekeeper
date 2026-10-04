@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}You already have a DataMap account{% endblock %}
+{% block preheader %}The link is valid for 1 hour.{% endblock %}
+{% block label %}Sign-up{% endblock %}
+{% block content %}
+{{ m.heading("You already have an account") }}
+{% call m.paragraph() %}Hi {{ name }}. You already have a DataMap account with this address.{% endcall %}
+{% call m.paragraph() %}If you forgot your password, reset it with this link, valid for 1 hour.{% endcall %}
+{{ m.button("Reset your password", link) }}
+{{ m.spacer(16) }}
+{% call m.note(bottom=16) %}If you did not try to create an account, ignore this email.{% endcall %}
+{{ m.link_fallback(link) }}
+{% endblock %}
+{% block reason %}You received this email because someone used this address to create a DataMap account.{% endblock %}
