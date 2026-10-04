@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from tests.integration.fixtures.account import (
@@ -6,6 +8,7 @@ from tests.integration.fixtures.account import (
     confirm_email_verification,
     confirm_password_reset,
     create_plain_user,
+    delivered,
     disable,
     login,
     newest_code,
@@ -15,12 +18,14 @@ from tests.integration.fixtures.account import (
     refused,
     request_email_verification,
     request_password_reset,
+    sign_up,
     unique_email,
 )
 from tests.integration.fixtures.auth import AuthFixture
-from tests.integration.fixtures.embargo import headers_for
-from tests.integration.fixtures.sharing import random_orcid
+from tests.integration.fixtures.embargo import client_headers, headers_for
+from tests.integration.fixtures.sharing import dispatch, random_orcid
 from tests.integration.utils.assertions import assert_status_code
+from tests.integration.utils.container_log import access_lines, wait_for_log
 from tests.integration.utils.database import execute
 from tests.integration.utils.mailpit import Mailpit
 
@@ -121,6 +126,29 @@ class TestLock:
                 f"FROM users WHERE id = '{account['id']}'"
             )
             == "0|t"
+        )
+
+    def test_after_a_lock_expires_the_first_wrong_password_locks_again(
+        self, http_client, mailpit
+    ):
+        account = password_account(http_client, mailpit)
+        _fail(http_client, account["email"], 10)
+        execute(
+            "UPDATE users SET locked_until = now() - interval '1 second' "
+            f"WHERE id = '{account['id']}'"
+        )
+
+        _fail(http_client, account["email"], 1)
+
+        refused(
+            login(http_client, account["email"], PASSWORD), 401, "invalid_credentials"
+        )
+        assert (
+            execute(
+                "SELECT locked_until > now() + interval '14 minutes' "
+                f"FROM users WHERE id = '{account['id']}'"
+            )
+            == "t"
         )
 
     def test_a_reset_lifts_the_lock(self, http_client, mailpit):
@@ -408,3 +436,108 @@ class TestChangePassword:
             "token_invalid",
         )
         assert_status_code(login(http_client, account["email"], NEW_PASSWORD), 200)
+
+
+class TestHourlyCapAcrossKinds:
+    def test_codes_and_links_share_five_an_hour(self, http_client, mailpit):
+        account = password_account(http_client, mailpit)
+        email = account["email"]
+        for sent in (2, 3):
+            assert_status_code(request_password_reset(http_client, email), 202)
+            delivered(http_client, mailpit, email, count=sent)
+        assert_status_code(sign_up(http_client, email), 202)
+        delivered(http_client, mailpit, email, count=4)
+        assert_status_code(
+            request_email_verification(http_client, random_orcid(), email), 202
+        )
+        delivered(http_client, mailpit, email, count=5)
+
+        assert_status_code(request_password_reset(http_client, email), 202)
+        assert_status_code(sign_up(http_client, email), 202)
+        assert_status_code(
+            request_email_verification(http_client, random_orcid(), email), 202
+        )
+
+        dispatch(http_client)
+        assert len(mailpit.messages_to(email)) == 5
+        assert outbox(http_client, recipient=email)["total_count"] == 5
+        assert {
+            template: outbox(http_client, recipient=email, template=template)[
+                "total_count"
+            ]
+            for template in (
+                "sign_up_code",
+                "password_reset",
+                "sign_up_existing_account",
+                "email_verification_code",
+            )
+        } == {
+            "sign_up_code": 1,
+            "password_reset": 2,
+            "sign_up_existing_account": 1,
+            "email_verification_code": 1,
+        }
+
+
+class TestWhatReachesTheLog:
+    def _access_line(self, marker: str) -> dict:
+        lines = access_lines(wait_for_log(lambda log: marker in log), marker)
+        assert lines
+        return lines[0]
+
+    def test_the_access_line_of_a_sign_in_redacts_the_password(
+        self, http_client, mailpit
+    ):
+        account = password_account(http_client, mailpit)
+        marker = f"req-{uuid.uuid4()}"
+
+        response = http_client.post(
+            "/auth/login",
+            json={"email": account["email"], "password": PASSWORD},
+            headers={**client_headers(), "X-Request-Id": marker},
+        )
+
+        assert_status_code(response, 200)
+        line = self._access_line(marker)
+        assert line["body"]["password"] == "[redacted]"
+        assert PASSWORD not in str(line)
+
+    def test_the_access_line_of_a_reset_redacts_the_token_and_password(
+        self, http_client, mailpit
+    ):
+        account = password_account(http_client, mailpit)
+        assert_status_code(request_password_reset(http_client, account["email"]), 202)
+        token = newest_reset_token(http_client, mailpit, account["email"], count=2)
+        marker = f"req-{uuid.uuid4()}"
+
+        response = http_client.post(
+            "/auth/password-reset/confirm",
+            json={"token": token, "password": NEW_PASSWORD},
+            headers={**client_headers(), "X-Request-Id": marker},
+        )
+
+        assert_status_code(response, 204)
+        line = self._access_line(marker)
+        assert line["body"]["token"] == "[redacted]"
+        assert line["body"]["password"] == "[redacted]"
+        assert token not in str(line)
+        assert NEW_PASSWORD not in str(line)
+
+    def test_the_access_line_of_a_password_change_redacts_both_passwords(
+        self, http_client, mailpit
+    ):
+        account = password_account(http_client, mailpit)
+        marker = f"req-{uuid.uuid4()}"
+
+        response = http_client.put(
+            f"/users/{account['id']}/password",
+            json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+            headers={**headers_for(account["id"], None), "X-Request-Id": marker},
+        )
+
+        assert_status_code(response, 204)
+        line = self._access_line(marker)
+        assert line["body"]["current_password"] == "[redacted]"
+        assert line["body"]["new_password"] == "[redacted]"
+        assert PASSWORD not in str(line)
+        assert NEW_PASSWORD not in str(line)

@@ -202,6 +202,23 @@ class TestEmailVerificationRequests:
             "invalid_orcid",
         )
 
+    def test_a_malformed_email_is_refused(self, http_client):
+        refused(
+            request_email_verification(http_client, random_orcid(), "not-an-email"),
+            400,
+            "invalid_email",
+        )
+
+    def test_a_blank_name_or_one_with_a_line_break_is_refused(self, http_client):
+        for name in ("   ", "Ana\nSouza"):
+            refused(
+                request_email_verification(
+                    http_client, random_orcid(), unique_email(), name=name
+                ),
+                400,
+                "invalid_name",
+            )
+
     def test_the_email_names_the_orcid_being_linked(self, http_client, mailpit):
         orcid, email = random_orcid(), unique_email()
 

@@ -104,6 +104,12 @@ class TestSignUp:
     def test_a_malformed_email_is_refused(self, http_client):
         refused(sign_up(http_client, "not-an-email"), 400, "invalid_email")
 
+    def test_a_blank_name_or_one_with_a_line_break_is_refused(self, http_client):
+        for name in ("   ", "Ana\nSouza", "Ana\r\nBcc: x@example.com"):
+            refused(
+                sign_up(http_client, unique_email(), name=name), 400, "invalid_name"
+            )
+
 
 class TestSignUpForAnExistingAccount:
     def test_an_account_with_a_password_is_emailed_a_reset_link_and_no_code(

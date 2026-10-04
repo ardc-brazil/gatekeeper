@@ -898,6 +898,16 @@ class TestLogin(AccountServiceTestCase):
 
         self.users.clear_failed_logins.assert_called_once_with(found.id)
 
+    def test_after_a_lock_expires_the_first_wrong_password_locks_again(self):
+        found = self.with_password(failed_login_count=10, locked_until=NOW)
+
+        self.assert_invalid_credentials("ana.souza@usp.br", "not the password")
+
+        self.users.record_failed_login.assert_called_once_with(
+            found.id, 10, NOW + timedelta(minutes=15)
+        )
+        self.users.clear_failed_logins.assert_not_called()
+
     def test_an_unconfirmed_email_is_refused(self):
         self.with_password(email_verified_at=None)
 
