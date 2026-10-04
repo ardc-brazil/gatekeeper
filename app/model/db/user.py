@@ -31,6 +31,10 @@ class User(Base):
     name = Column(String(256), nullable=False)
     email = Column(String(256), nullable=True)
     is_enabled = Column(Boolean, nullable=False, default=True)
+    password_hash = Column(String(128), nullable=True)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    failed_login_count = Column(Integer, nullable=False, default=0, server_default="0")
+    locked_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

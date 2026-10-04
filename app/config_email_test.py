@@ -16,6 +16,8 @@ REQUIRED = {
     "POSTGRES_DB": "db",
     "AUTH_FILE_UPLOAD_TOKEN_SECRET": "secret",
     "AUTH_CLIENT_SECRET_PEPPER": "pepper-of-sixteen-chars",
+    "AUTH_PASSWORD_PEPPER": "password-pepper-of-sixteen",
+    "AUTH_CHALLENGE_PEPPER": "challenge-pepper-of-sixteen",
     "CASBIN_MODEL_FILE": "app/resources/casbin_model.conf",
     "DOI_BASE_URL": "http://doi",
     "DOI_PREFIX": "10.0",

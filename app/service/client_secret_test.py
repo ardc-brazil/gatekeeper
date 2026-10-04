@@ -74,6 +74,12 @@ def test_a_stored_value_that_cannot_be_read_is_a_failed_verification(stored: str
     assert verify_secret("the-real-secret", stored, PEPPER) is False
 
 
+def test_a_legacy_hash_with_an_invalid_salt_fails_rather_than_raising():
+    stored = "$2b$10$" + "x" * 53
+
+    assert verify_secret("the-real-secret", stored, PEPPER) is False
+
+
 def test_verification_is_fast_enough_not_to_block_the_event_loop():
     stored = hash_secret("the-real-secret", PEPPER)
 

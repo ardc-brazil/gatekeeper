@@ -10,6 +10,7 @@ from app.gateway.object_storage.http_client import build_http_client
 from app.service.health import DependencyHealthService
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
 from app.repository.access_event import AccessEventRepository
+from app.repository.auth_challenge import AuthChallengeRepository
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_anonymous_link import DatasetAnonymousLinkRepository
@@ -21,6 +22,7 @@ from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.user import UserRepository
 
+from app.service.account import AccountService
 from app.service.anonymous_link import AnonymousLinkService
 from app.service.access_history import AccessHistoryService
 from app.service.dataset import DatasetService
@@ -34,6 +36,7 @@ from app.service.embargo import EmbargoService
 from app.service.embargo_termination import EmbargoTermination
 from app.service.members_access import MembersAccessService
 from app.service.notification import EmbargoNotificationService
+from app.service.password import PasswordHasher
 from app.service.permission import PermissionService
 from app.service.share import ShareService
 from app.service.tus import TusService
@@ -58,6 +61,7 @@ class Container(containers.DeclarativeContainer):
             # only when its own module is wired.
             "app.controller.interceptor.authentication",
             "app.controller.interceptor.authorization",
+            "app.controller.v1.auth.auth",
             "app.controller.v1.client.client",
             "app.controller.v1.dataset.dataset",
             "app.controller.v1.dataset.dataset_filter",
@@ -126,6 +130,39 @@ class Container(containers.DeclarativeContainer):
         casbin_adapter,
     )
 
+    email_repository = providers.Factory(
+        EmailRepository,
+        session_factory=db.provided.session,
+    )
+
+    email_renderer = providers.Singleton(
+        EmailTemplateRenderer,
+        site_url=config.PUBLIC_BASE_URL,
+    )
+
+    smtp_sender = providers.Factory(
+        SmtpSender,
+        host=config.SMTP_HOST,
+        port=config.SMTP_PORT,
+        username=config.SMTP_USERNAME,
+        password=config.SMTP_PASSWORD,
+        starttls=config.SMTP_STARTTLS,
+        timeout_seconds=config.SMTP_TIMEOUT_SECONDS,
+        local_hostname=providers.Callable(public_hostname, config.PUBLIC_BASE_URL),
+    )
+
+    email_service = providers.Factory(
+        EmailService,
+        repository=email_repository,
+        renderer=email_renderer,
+        sender=smtp_sender,
+        enabled=config.EMAIL_ENABLED,
+        from_name=config.EMAIL_FROM_NAME,
+        from_address=config.EMAIL_FROM_ADDRESS,
+        reply_to=config.EMAIL_REPLY_TO,
+        template_version=config.BUILD_COMMIT,
+    )
+
     user_repository = providers.Factory(
         UserRepository,
         session_factory=db.provided.session,
@@ -136,6 +173,8 @@ class Container(containers.DeclarativeContainer):
         repository=user_repository,
         tenancy_repository=tenancy_repository,
         casbin_enforcer=casbin_enforcer,
+        email_service=email_service,
+        admin_emails=config.ADMIN_NOTIFICATION_EMAILS,
     )
 
     auth_service = providers.Factory(
@@ -304,39 +343,6 @@ class Container(containers.DeclarativeContainer):
         audit=dataset_access_audit,
     )
 
-    email_repository = providers.Factory(
-        EmailRepository,
-        session_factory=db.provided.session,
-    )
-
-    email_renderer = providers.Singleton(
-        EmailTemplateRenderer,
-        site_url=config.PUBLIC_BASE_URL,
-    )
-
-    smtp_sender = providers.Factory(
-        SmtpSender,
-        host=config.SMTP_HOST,
-        port=config.SMTP_PORT,
-        username=config.SMTP_USERNAME,
-        password=config.SMTP_PASSWORD,
-        starttls=config.SMTP_STARTTLS,
-        timeout_seconds=config.SMTP_TIMEOUT_SECONDS,
-        local_hostname=providers.Callable(public_hostname, config.PUBLIC_BASE_URL),
-    )
-
-    email_service = providers.Factory(
-        EmailService,
-        repository=email_repository,
-        renderer=email_renderer,
-        sender=smtp_sender,
-        enabled=config.EMAIL_ENABLED,
-        from_name=config.EMAIL_FROM_NAME,
-        from_address=config.EMAIL_FROM_ADDRESS,
-        reply_to=config.EMAIL_REPLY_TO,
-        template_version=config.BUILD_COMMIT,
-    )
-
     dataset_invitation_repository = providers.Factory(
         DatasetInvitationRepository,
         session_factory=db.provided.session,
@@ -393,5 +399,27 @@ class Container(containers.DeclarativeContainer):
         anonymous_link_repository=dataset_anonymous_link_repository,
         audit=dataset_access_audit,
         email_service=email_service,
+        public_base_url=config.PUBLIC_BASE_URL,
+    )
+
+    password_hasher = providers.Singleton(
+        PasswordHasher,
+        pepper=config.AUTH_PASSWORD_PEPPER,
+    )
+
+    auth_challenge_repository = providers.Factory(
+        AuthChallengeRepository,
+        session_factory=db.provided.session,
+    )
+
+    account_service = providers.Factory(
+        AccountService,
+        users=user_repository,
+        user_service=user_service,
+        challenges=auth_challenge_repository,
+        emails=email_repository,
+        email_service=email_service,
+        hasher=password_hasher,
+        challenge_pepper=config.AUTH_CHALLENGE_PEPPER,
         public_base_url=config.PUBLIC_BASE_URL,
     )

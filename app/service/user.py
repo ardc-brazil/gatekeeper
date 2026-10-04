@@ -1,10 +1,38 @@
+import logging
+from datetime import datetime, timezone
 from uuid import UUID
 from app.exception.not_found import NotFoundException
+from app.logging_config import fields
 from app.model.db.user import Provider as ProviderDBModel, User as UserDBModel
 from app.model.user import User, UserProvider, UserQuery
 from app.repository.tenancy import TenancyRepository
 from app.repository.user import UserRepository
+from app.service.email import EmailService
+from app.service.email_format import long_date
+from app.service.email_template import EmailTemplate
+from app.service.share_token import hash_token
 from casbin import SyncedEnforcer
+
+PROVIDER_LABELS = {"orcid": "ORCID", "github": "GitHub"}
+
+
+def admin_addresses(value: str) -> list[str]:
+    return [address.strip() for address in (value or "").split(",") if address.strip()]
+
+
+def sign_in_method(providers: list, has_password: bool) -> str:
+    if has_password:
+        return "Email and password"
+    if providers:
+        return ", ".join(
+            PROVIDER_LABELS.get(provider.name, provider.name) for provider in providers
+        )
+    return "Created through the API"
+
+
+def created_on(moment: datetime) -> str:
+    utc = moment.astimezone(timezone.utc)
+    return f"{long_date(utc)} at {utc:%H:%M} UTC"
 
 
 class UserService:
@@ -13,10 +41,15 @@ class UserService:
         repository: UserRepository,
         tenancy_repository: TenancyRepository,
         casbin_enforcer: SyncedEnforcer,
+        email_service: EmailService | None = None,
+        admin_emails: str = "",
     ) -> None:
         self._repository: UserRepository = repository
         self._tenancy_repository: TenancyRepository = tenancy_repository
         self._casbin_enforcer: SyncedEnforcer = casbin_enforcer
+        self._email = email_service
+        self._admin_emails = admin_addresses(admin_emails)
+        self._logger = logging.getLogger("service:UserService")
 
     def __adapt_user(self, user: UserDBModel) -> User:
         return User(
@@ -32,6 +65,8 @@ class UserService:
             tenancies=[tenancy.name for tenancy in user.tenancies],
             created_at=user.created_at,
             updated_at=user.updated_at,
+            email_verified_at=user.email_verified_at,
+            has_password=user.password_hash is not None,
         )
 
     def fetch_by_id(self, id: UUID, is_enabled: bool = True) -> User:
@@ -63,8 +98,18 @@ class UserService:
         user.roles = self._casbin_enforcer.get_roles_for_user(str(user.id))
         return self.__adapt_user(user=user)
 
-    def create(self, user: User) -> UUID:
-        dbUser = UserDBModel(name=user.name, email=user.email)
+    def create(
+        self,
+        user: User,
+        password_hash: str | None = None,
+        email_verified_at: datetime | None = None,
+    ) -> UUID:
+        dbUser = UserDBModel(
+            name=user.name,
+            email=user.email,
+            password_hash=password_hash,
+            email_verified_at=email_verified_at,
+        )
 
         for provider in user.providers:
             dbUser.providers.append(
@@ -74,18 +119,56 @@ class UserService:
         for tenancy in user.tenancies or []:
             dbUser.tenancies.append(self._tenancy_repository.fetch(tenancy=tenancy))
 
-        user_id = self._repository.upsert(user=dbUser).id
+        created = self._repository.upsert(user=dbUser)
+        user_id = created.id
 
         for role in user.roles:
             self._casbin_enforcer.add_grouping_policy(str(user_id), role)
 
+        self._notify_admins(
+            user_id, user, created.created_at, password_hash is not None
+        )
         return user_id
+
+    def _notify_admins(
+        self, user_id: UUID, user: User, created_at: datetime, has_password: bool
+    ) -> None:
+        if self._email is None:
+            return
+        for recipient in self._admin_emails:
+            try:
+                self._email.enqueue(
+                    template=EmailTemplate.NEW_ACCOUNT_PENDING.value,
+                    recipient=recipient,
+                    context={
+                        "name": user.name,
+                        "email": user.email,
+                        "sign_in_method": sign_in_method(
+                            user.providers or [], has_password
+                        ),
+                        "created_at": created_on(created_at),
+                    },
+                    related_type="user",
+                    related_id=user_id,
+                    dedup_key=f"new_account_pending:{user_id}:{hash_token(recipient.lower())[:16]}",
+                )
+            except Exception:
+                self._logger.error(
+                    "email enqueue failed",
+                    exc_info=True,
+                    extra=fields(
+                        template=EmailTemplate.NEW_ACCOUNT_PENDING.value,
+                        user_id=str(user_id),
+                    ),
+                )
 
     def update(self, id: UUID, name: str, email: str) -> User:
         user: UserDBModel = self._repository.fetch_by_id(id=id)
         if user is None:
             raise NotFoundException(f"not_found: {id}")
 
+        if (user.email or "").lower() != (email or "").lower():
+            user.email_verified_at = None
         user.name = name
         user.email = email
 

@@ -19,6 +19,11 @@ class EmailTemplate(str, Enum):
     DATASET_INVITATION = "dataset_invitation"
     EMBARGO_REMINDER = "embargo_reminder"
     EMBARGO_ENDED = "embargo_ended"
+    SIGN_UP_CODE = "sign_up_code"
+    EMAIL_VERIFICATION_CODE = "email_verification_code"
+    PASSWORD_RESET = "password_reset"
+    SIGN_UP_EXISTING_ACCOUNT = "sign_up_existing_account"
+    NEW_ACCOUNT_PENDING = "new_account_pending"
 
 
 _OPTIONAL_DEFAULTS: dict[EmailTemplate, dict[str, Any]] = {

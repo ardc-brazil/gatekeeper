@@ -18,6 +18,12 @@ class UserGetResponse(BaseModel):
     updated_at: datetime = Field(..., description="User updated time")
     providers: list[UserProvider] = Field(..., description="User providers")
     tenancies: list[str] = Field(..., description="User tenancies")
+    email_verified_at: datetime | None = Field(
+        None, description="When the email was confirmed; null if it never was"
+    )
+    has_password: bool = Field(
+        False, description="Whether the account can sign in with a password"
+    )
 
 
 class UserUpdateRequest(BaseModel):
@@ -52,3 +58,8 @@ class UserEnforceRequest(BaseModel):
 
 class UserEnforceResponse(BaseModel):
     allow: bool = Field(..., description="Allow access")
+
+
+class UserPasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., description="The account's current password")
+    new_password: str = Field(..., description="New password, 10 to 128 characters")

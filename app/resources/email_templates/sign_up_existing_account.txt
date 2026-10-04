@@ -1,0 +1,13 @@
+{% extends "base.txt" %}
+{% block content %}
+Hi {{ name }},
+
+You already have a DataMap account with this address.
+
+If you forgot your password, reset it with this link, valid for 1 hour.
+
+Reset your password: {{ link }}
+
+If you did not try to create an account, ignore this email.
+{% endblock %}
+{% block reason %}You received this email because someone used this address to create a DataMap account.{% endblock %}

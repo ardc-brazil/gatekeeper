@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Confirm your email for DataMap{% endblock %}
+{% block preheader %}Your code expires in {{ expires_in_minutes }} minutes.{% endblock %}
+{% block label %}Sign-up{% endblock %}
+{% block content %}
+{{ m.heading("Confirm your email") }}
+{% call m.paragraph() %}Hi {{ name }}, enter this code on the DataMap screen where you created your account.{% endcall %}
+{{ m.details([{"label": "Your code", "value": code}, {"label": "Expires in", "value": expires_in_minutes ~ " minutes"}]) }}
+{% call m.note(bottom=16) %}If this wasn't you, ignore this email. Nobody can use this address on DataMap without the code.{% endcall %}
+{% endblock %}
+{% block reason %}You received this email because someone used this address to create a DataMap account.{% endblock %}

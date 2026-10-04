@@ -1,0 +1,161 @@
+from contextlib import AbstractContextManager
+from datetime import datetime
+from typing import Callable
+from uuid import UUID
+
+from sqlalchemy import Text, case, cast, literal, update
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Session
+
+from app.model.auth_challenge import ChallengeKind
+from app.model.db.auth_challenge import AuthChallenge
+
+
+def _without_password_hash(table):
+    payload = table.c.payload
+    for key in ("password_hash", "existing_account"):
+        payload = payload.op("-", return_type=JSONB)(cast(literal(key), Text))
+    return payload
+
+
+class AuthChallengeRepository:
+    def __init__(
+        self, session_factory: Callable[..., AbstractContextManager[Session]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    def replace(self, *challenges: AuthChallenge) -> None:
+        table = AuthChallenge.__table__
+        with self._session_factory() as session:
+            for challenge in challenges:
+                session.execute(
+                    update(table)
+                    .where(
+                        table.c.kind == challenge.kind,
+                        table.c.email == challenge.email,
+                        table.c.consumed_at.is_(None),
+                    )
+                    .values(
+                        consumed_at=challenge.issued_at,
+                        payload=_without_password_hash(table),
+                    )
+                )
+                session.add(challenge)
+            session.commit()
+
+    def fetch(self, challenge_id: UUID) -> AuthChallenge | None:
+        with self._session_factory() as session:
+            return session.query(AuthChallenge).filter_by(id=challenge_id).first()
+
+    def fetch_open_by_secret(
+        self, secret_hash: str, kind: ChallengeKind
+    ) -> AuthChallenge | None:
+        with self._session_factory() as session:
+            return (
+                session.query(AuthChallenge)
+                .filter(
+                    AuthChallenge.secret_hash == secret_hash,
+                    AuthChallenge.kind == kind.value,
+                    AuthChallenge.consumed_at.is_(None),
+                )
+                .first()
+            )
+
+    def consume(self, challenge_id: UUID, now: datetime) -> bool:
+        with self._session_factory() as session:
+            updated = (
+                session.query(AuthChallenge)
+                .filter(
+                    AuthChallenge.id == challenge_id,
+                    AuthChallenge.consumed_at.is_(None),
+                )
+                .update({AuthChallenge.consumed_at: now}, synchronize_session=False)
+            )
+            session.commit()
+            return updated == 1
+
+    def confirm(self, challenge_id: UUID, now: datetime) -> bool:
+        table = AuthChallenge.__table__
+        statement = (
+            update(table)
+            .where(table.c.id == challenge_id, table.c.consumed_at.is_(None))
+            .values(
+                consumed_at=now,
+                confirmed_at=now,
+                payload=_without_password_hash(table),
+            )
+        )
+        with self._session_factory() as session:
+            updated = session.execute(statement).rowcount
+            session.commit()
+            return updated == 1
+
+    def record_failed_attempt(
+        self, challenge_id: UUID, max_attempts: int, now: datetime
+    ) -> int | None:
+        table = AuthChallenge.__table__
+        statement = (
+            update(table)
+            .where(table.c.id == challenge_id, table.c.consumed_at.is_(None))
+            .values(
+                attempts=table.c.attempts + 1,
+                consumed_at=case(
+                    (table.c.attempts + 1 >= max_attempts, now), else_=None
+                ),
+            )
+            .returning(table.c.attempts)
+        )
+        with self._session_factory() as session:
+            row = session.execute(statement).first()
+            session.commit()
+            return row[0] if row is not None else None
+
+    def reissue(
+        self,
+        challenge_id: UUID,
+        secret_hash: str,
+        expires_at: datetime,
+        issued_at: datetime,
+    ) -> None:
+        with self._session_factory() as session:
+            challenge = (
+                session.query(AuthChallenge)
+                .filter_by(id=challenge_id)
+                .with_for_update()
+                .one()
+            )
+            table = AuthChallenge.__table__
+            session.execute(
+                update(table)
+                .where(
+                    table.c.kind == challenge.kind,
+                    table.c.email == challenge.email,
+                    table.c.consumed_at.is_(None),
+                    table.c.id != challenge_id,
+                )
+                .values(consumed_at=issued_at, payload=_without_password_hash(table))
+            )
+            challenge.secret_hash = secret_hash
+            challenge.attempts = 0
+            challenge.expires_at = expires_at
+            challenge.issued_at = issued_at
+            challenge.consumed_at = None
+            session.commit()
+
+    def touch(self, challenge_id: UUID, issued_at: datetime) -> None:
+        with self._session_factory() as session:
+            session.query(AuthChallenge).filter(
+                AuthChallenge.id == challenge_id
+            ).update({AuthChallenge.issued_at: issued_at}, synchronize_session=False)
+            session.commit()
+
+    def consume_open_for_user(
+        self, user_id: UUID, kind: ChallengeKind, now: datetime
+    ) -> None:
+        with self._session_factory() as session:
+            session.query(AuthChallenge).filter(
+                AuthChallenge.user_id == user_id,
+                AuthChallenge.kind == kind.value,
+                AuthChallenge.consumed_at.is_(None),
+            ).update({AuthChallenge.consumed_at: now}, synchronize_session=False)
+            session.commit()

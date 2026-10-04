@@ -4,6 +4,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 
 from app.logging_config import (  # noqa: F401
     fields,
@@ -19,6 +20,7 @@ from app.controller.v1.infrastructure.infrastructure import (
     protected_router as infrastructure_protected_router,
 )
 from app.controller.v1.tenancy.tenancy import router as tenancies_router
+from app.controller.v1.auth.auth import router as auth_router
 from app.controller.v1.user.user import router as user_router
 from app.controller.v1.dataset.dataset_filter import router as dataset_filter_router
 from app.controller.v1.dataset.dataset import router as dataset_router
@@ -43,6 +45,7 @@ from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
 from app.exception.conflict import ConflictException
 from app.exception.illegal_state import IllegalStateException
+from app.exception.too_many_requests import TooManyRequestsException
 from app.controller.interceptor.exception_handler import (
     bad_request_exception_handler,
     conflict_exception_handler,
@@ -50,6 +53,8 @@ from app.controller.interceptor.exception_handler import (
     generic_exception_handler,
     illegal_state_exception_handler,
     not_found_exception_handler,
+    request_validation_exception_handler,
+    too_many_requests_exception_handler,
     unauthorized_exception_handler,
 )
 
@@ -206,6 +211,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(members_access_router, prefix="/v1")
     fastAPIApp.include_router(tenancies_router, prefix="/v1")
     fastAPIApp.include_router(user_router, prefix="/v1")
+    fastAPIApp.include_router(auth_router, prefix="/v1")
     fastAPIApp.include_router(client_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_protected_router, prefix="/v1")
@@ -226,4 +232,10 @@ def setup_error_handlers(fastAPIApp: FastAPI) -> None:
         IllegalStateException, illegal_state_exception_handler
     )
     fastAPIApp.add_exception_handler(BadRequestException, bad_request_exception_handler)
+    fastAPIApp.add_exception_handler(
+        TooManyRequestsException, too_many_requests_exception_handler
+    )
+    fastAPIApp.add_exception_handler(
+        RequestValidationError, request_validation_exception_handler
+    )
     fastAPIApp.add_exception_handler(Exception, generic_exception_handler)

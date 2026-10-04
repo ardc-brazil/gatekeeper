@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass
@@ -18,6 +19,8 @@ class User:
     is_enabled: bool = True
     created_at: str = None
     updated_at: str = None
+    email_verified_at: datetime | None = None
+    has_password: bool = False
 
 
 @dataclass

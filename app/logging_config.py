@@ -14,6 +14,9 @@ REDACTED = "[redacted]"
 
 _SECRET_WORDS = r"token|secret|password|authorization|api[-_]?key"
 
+# An exact match: `status_code` and the like must stay readable.
+_SECRET_KEYS = frozenset({"code"})
+
 _STANDARD_RECORD_ATTRS = frozenset(
     logging.LogRecord("", 0, "", 0, "", None, None).__dict__
 ) | {"message", "asctime", "taskName"}
@@ -64,7 +67,7 @@ class Redactor:
 
     @classmethod
     def scrub_field(cls, key: str, value: Any) -> Any:
-        if cls.KEY_PATTERN.search(key):
+        if key.lower() in _SECRET_KEYS or cls.KEY_PATTERN.search(key):
             return REDACTED
         if key in _PATH_FIELDS and isinstance(value, str):
             value = mask_path_tokens(value)

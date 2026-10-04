@@ -110,6 +110,18 @@ class TestRedaction(unittest.TestCase):
 
         self.assertNotIn("eyJhbGciOi.secret", stream.getvalue())
 
+    def test_a_confirmation_code_in_a_body_is_redacted(self):
+        self.assertEqual(Redactor.scrub({"code": "042917"})["code"], "[redacted]")
+        self.assertEqual(Redactor.scrub({"Code": "042917"})["Code"], "[redacted]")
+
+    def test_it_is_redacted_inside_the_access_line_body_too(self):
+        scrubbed = Redactor.scrub({"body": {"code": "042917"}})
+
+        self.assertEqual(scrubbed["body"]["code"], "[redacted]")
+
+    def test_a_field_that_merely_ends_in_code_is_left_alone(self):
+        self.assertEqual(Redactor.scrub({"status_code": 401})["status_code"], 401)
+
 
 class TestReservedAttributes(unittest.TestCase):
     def tearDown(self):

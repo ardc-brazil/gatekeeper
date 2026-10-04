@@ -1,12 +1,17 @@
 from dataclasses import asdict
 import logging
 from fastapi import Request
+from fastapi.exception_handlers import (
+    request_validation_exception_handler as default_validation_handler,
+)
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.exception.bad_request import BadRequestException
 from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.unauthorized import UnauthorizedException
 from app.exception.not_found import NotFoundException
+from app.exception.too_many_requests import TooManyRequestsException
 from app.exception import conflict
 from app.logging_config import fields, request_id_var
 
@@ -33,6 +38,13 @@ async def forbidden_exception_handler(request: Request, exc: ForbiddenException)
     return JSONResponse(status_code=403, content={"detail": "forbidden"})
 
 
+async def too_many_requests_exception_handler(
+    request: Request, exc: TooManyRequestsException
+):
+    logger.info(f"Too many requests exception: {exc}")
+    return JSONResponse(status_code=429, content={"detail": str(exc)})
+
+
 async def illegal_state_exception_handler(request: Request, exc: IllegalStateException):
     logger.info(f"Illegal State exception: {exc}")
     return JSONResponse(status_code=400, content={"detail": str(exc)})
@@ -47,6 +59,34 @@ async def bad_request_exception_handler(request: Request, exc: BadRequestExcepti
             "errors": [asdict(error) for error in exc.errors],
         },
     )
+
+
+QUIET_VALIDATION_PREFIX = "/v1/auth/"
+QUIET_VALIDATION_ROUTES = {("PUT", "/v1/users/{id}/password")}
+
+
+def _answers_quietly(request: Request) -> bool:
+    path = _route_template(request)
+    return (
+        path.startswith(QUIET_VALIDATION_PREFIX)
+        or (request.method, path) in QUIET_VALIDATION_ROUTES
+    )
+
+
+def _route_template(request: Request) -> str:
+    return getattr(request.scope.get("route"), "path", "") or ""
+
+
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+):
+    if _answers_quietly(request):
+        logger.info(
+            "Invalid request on a credentials route",
+            extra=fields(path=_route_template(request)),
+        )
+        return JSONResponse(status_code=400, content={"detail": "invalid_request"})
+    return await default_validation_handler(request, exc)
 
 
 def _request_id(request: Request) -> str:
