@@ -206,6 +206,8 @@ it sends depends on the address:
   returned challenge can never be confirmed. Otherwise a sign-up would be a
   password reset guarded by six digits: 25 guesses an hour against a fixed
   account adds up to roughly one in five over a year.
+  Like a reset request from anyone, it retires the owner's previous open
+  reset link.
 - **Anything else:** the password hash goes into the challenge payload and a code
   is emailed. Confirming:
   - **no account:** creates the user with `password_hash` and
