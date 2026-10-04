@@ -1,6 +1,10 @@
 from dataclasses import asdict
 import logging
 from fastapi import Request
+from fastapi.exception_handlers import (
+    request_validation_exception_handler as default_validation_handler,
+)
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.exception.bad_request import BadRequestException
 from app.exception.forbidden import ForbiddenException
@@ -55,6 +59,27 @@ async def bad_request_exception_handler(request: Request, exc: BadRequestExcepti
             "errors": [asdict(error) for error in exc.errors],
         },
     )
+
+
+QUIET_VALIDATION_PREFIX = "/v1/auth/"
+QUIET_VALIDATION_ROUTES = {("PUT", "/v1/users/{id}/password")}
+
+
+def _answers_quietly(request: Request) -> bool:
+    path = getattr(request.scope.get("route"), "path", "") or ""
+    return (
+        path.startswith(QUIET_VALIDATION_PREFIX)
+        or (request.method, path) in QUIET_VALIDATION_ROUTES
+    )
+
+
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+):
+    if _answers_quietly(request):
+        logger.info("Invalid request on a credentials route")
+        return JSONResponse(status_code=400, content={"detail": "invalid_request"})
+    return await default_validation_handler(request, exc)
 
 
 def _request_id(request: Request) -> str:

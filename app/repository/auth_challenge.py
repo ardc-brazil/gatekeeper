@@ -3,11 +3,18 @@ from datetime import datetime
 from typing import Callable
 from uuid import UUID
 
-from sqlalchemy import case, update
+from sqlalchemy import Text, case, cast, literal, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from app.model.auth_challenge import ChallengeKind
 from app.model.db.auth_challenge import AuthChallenge
+
+
+def _without_password_hash(table):
+    return table.c.payload.op("-", return_type=JSONB)(
+        cast(literal("password_hash"), Text)
+    )
 
 
 class AuthChallengeRepository:
@@ -17,15 +24,20 @@ class AuthChallengeRepository:
         self._session_factory = session_factory
 
     def replace(self, challenge: AuthChallenge) -> None:
-        with self._session_factory() as session:
-            session.query(AuthChallenge).filter(
-                AuthChallenge.kind == challenge.kind,
-                AuthChallenge.email == challenge.email,
-                AuthChallenge.consumed_at.is_(None),
-            ).update(
-                {AuthChallenge.consumed_at: challenge.issued_at},
-                synchronize_session=False,
+        table = AuthChallenge.__table__
+        statement = (
+            update(table)
+            .where(
+                table.c.kind == challenge.kind,
+                table.c.email == challenge.email,
+                table.c.consumed_at.is_(None),
             )
+            .values(
+                consumed_at=challenge.issued_at, payload=_without_password_hash(table)
+            )
+        )
+        with self._session_factory() as session:
+            session.execute(statement)
             session.add(challenge)
             session.commit()
 
@@ -61,18 +73,18 @@ class AuthChallengeRepository:
             return updated == 1
 
     def confirm(self, challenge_id: UUID, now: datetime) -> bool:
-        with self._session_factory() as session:
-            updated = (
-                session.query(AuthChallenge)
-                .filter(
-                    AuthChallenge.id == challenge_id,
-                    AuthChallenge.consumed_at.is_(None),
-                )
-                .update(
-                    {AuthChallenge.consumed_at: now, AuthChallenge.confirmed_at: now},
-                    synchronize_session=False,
-                )
+        table = AuthChallenge.__table__
+        statement = (
+            update(table)
+            .where(table.c.id == challenge_id, table.c.consumed_at.is_(None))
+            .values(
+                consumed_at=now,
+                confirmed_at=now,
+                payload=_without_password_hash(table),
             )
+        )
+        with self._session_factory() as session:
+            updated = session.execute(statement).rowcount
             session.commit()
             return updated == 1
 
@@ -110,12 +122,17 @@ class AuthChallengeRepository:
                 .with_for_update()
                 .one()
             )
-            session.query(AuthChallenge).filter(
-                AuthChallenge.kind == challenge.kind,
-                AuthChallenge.email == challenge.email,
-                AuthChallenge.consumed_at.is_(None),
-                AuthChallenge.id != challenge_id,
-            ).update({AuthChallenge.consumed_at: issued_at}, synchronize_session=False)
+            table = AuthChallenge.__table__
+            session.execute(
+                update(table)
+                .where(
+                    table.c.kind == challenge.kind,
+                    table.c.email == challenge.email,
+                    table.c.consumed_at.is_(None),
+                    table.c.id != challenge_id,
+                )
+                .values(consumed_at=issued_at, payload=_without_password_hash(table))
+            )
             challenge.secret_hash = secret_hash
             challenge.attempts = 0
             challenge.expires_at = expires_at

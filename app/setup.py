@@ -4,6 +4,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 
 from app.logging_config import (  # noqa: F401
     fields,
@@ -52,6 +53,7 @@ from app.controller.interceptor.exception_handler import (
     generic_exception_handler,
     illegal_state_exception_handler,
     not_found_exception_handler,
+    request_validation_exception_handler,
     too_many_requests_exception_handler,
     unauthorized_exception_handler,
 )
@@ -232,5 +234,8 @@ def setup_error_handlers(fastAPIApp: FastAPI) -> None:
     fastAPIApp.add_exception_handler(BadRequestException, bad_request_exception_handler)
     fastAPIApp.add_exception_handler(
         TooManyRequestsException, too_many_requests_exception_handler
+    )
+    fastAPIApp.add_exception_handler(
+        RequestValidationError, request_validation_exception_handler
     )
     fastAPIApp.add_exception_handler(Exception, generic_exception_handler)

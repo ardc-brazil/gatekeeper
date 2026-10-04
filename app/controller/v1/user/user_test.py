@@ -167,6 +167,26 @@ class TestChangePasswordRoute(UserRoutesTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"detail": "invalid_password"})
 
+    def test_a_malformed_body_is_400_invalid_request_without_echoing_it(self):
+        user_id = uuid4()
+
+        response = self.client.put(
+            f"/v1/users/{user_id}/password",
+            json={"current_password": "my-secret-password-123"},
+            headers={"X-User-Id": str(user_id)},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "invalid_request"})
+        self.assertNotIn("my-secret-password-123", response.text)
+        self.accounts.change_password.assert_not_called()
+
+    def test_another_user_route_keeps_the_default_422(self):
+        response = self.client.put(f"/v1/users/{uuid4()}", json={"name": "Ana"})
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIsInstance(response.json()["detail"], list)
+
     def test_the_password_route_asks_for_self_or_policy(self):
         route = next(
             route

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy.dialects import postgresql
 
+from app.model.db.auth_challenge import AuthChallenge
 from app.repository.auth_challenge import AuthChallengeRepository
 
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
@@ -50,3 +51,48 @@ class TestFailedAttempts(unittest.TestCase):
         )
 
         self.assertIsNone(attempts)
+
+
+class TestPasswordHashIsNotRetained(unittest.TestCase):
+    def test_a_confirmed_challenge_drops_the_password_hash(self):
+        recorder = Recorder()
+        recorder.session.execute.return_value.rowcount = 1
+
+        confirmed = AuthChallengeRepository(recorder).confirm(uuid4(), NOW)
+
+        self.assertTrue(confirmed)
+        sql = recorder.sql()
+        self.assertIn("confirmed_at=", sql)
+        self.assertIn("payload=(auth_challenges.payload - CAST(", sql)
+        self.assertIn("auth_challenges.consumed_at IS NULL", sql)
+        recorder.session.commit.assert_called_once()
+
+    def test_a_challenge_confirmed_meanwhile_is_not_confirmed_again(self):
+        recorder = Recorder()
+        recorder.session.execute.return_value.rowcount = 0
+
+        self.assertFalse(AuthChallengeRepository(recorder).confirm(uuid4(), NOW))
+
+    def test_a_replaced_challenge_drops_the_password_hash(self):
+        recorder = Recorder()
+        challenge = AuthChallenge(
+            id=uuid4(), kind="sign_up", email="ana.souza@usp.br", issued_at=NOW
+        )
+
+        AuthChallengeRepository(recorder).replace(challenge)
+
+        sql = recorder.sql()
+        self.assertIn("consumed_at=", sql)
+        self.assertIn("payload=(auth_challenges.payload - CAST(", sql)
+        self.assertIn("auth_challenges.consumed_at IS NULL", sql)
+        recorder.session.add.assert_called_once_with(challenge)
+        recorder.session.commit.assert_called_once()
+
+    def test_a_challenge_replaced_by_a_resend_drops_the_password_hash(self):
+        recorder = Recorder()
+
+        AuthChallengeRepository(recorder).reissue(uuid4(), "secret", NOW, NOW)
+
+        sql = recorder.sql()
+        self.assertIn("payload=(auth_challenges.payload - CAST(", sql)
+        self.assertIn("auth_challenges.id !=", sql)

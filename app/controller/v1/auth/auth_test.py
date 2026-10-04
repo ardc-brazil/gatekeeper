@@ -263,6 +263,41 @@ class TestPasswordResetRoutes(AuthRoutesTestCase):
         self.assertEqual(response.json(), {"detail": "token_invalid"})
 
 
+class TestMalformedRequests(AuthRoutesTestCase):
+    def test_a_malformed_body_is_400_invalid_request_without_echoing_it(self):
+        secret = "my-secret-password-123"
+        for path, body in (
+            ("/v1/auth/sign-up", {"name": "Ana", "password": secret}),
+            ("/v1/auth/sign-up", {"name": ["Ana"], "email": secret, "password": 1}),
+            ("/v1/auth/login", {"email": secret}),
+            ("/v1/auth/password-reset/confirm", {"token": secret}),
+            (f"/v1/auth/sign-up/{uuid4()}/confirm", {"code": [secret]}),
+        ):
+            with self.subTest(path=path, body=body):
+                response = self.client.post(path, json=body)
+
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json(), {"detail": "invalid_request"})
+                self.assertNotIn(secret, response.text)
+
+    def test_a_body_that_is_not_json_is_400_invalid_request(self):
+        response = self.client.post(
+            "/v1/auth/login",
+            content=b"email=x&password=y",
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "invalid_request"})
+
+    def test_other_routes_keep_the_default_422(self):
+        response = self.client.post("/v1/users/", json={"name": "Ana"})
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("detail", response.json())
+        self.assertIsInstance(response.json()["detail"], list)
+
+
 class TestTheRoutesStayOffTheEventLoop(AuthRoutesTestCase):
     def test_every_route_that_hashes_is_a_plain_function_run_in_the_threadpool(self):
         routes = [

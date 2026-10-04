@@ -121,6 +121,23 @@ class UserRepository:
             },
         )
 
+    def set_password_and_verify_email(
+        self, id: UUID, password_hash: str, email: str, verified_at: datetime
+    ) -> None:
+        try:
+            self._update(
+                id,
+                {
+                    User.password_hash: password_hash,
+                    User.failed_login_count: 0,
+                    User.locked_until: None,
+                    User.email: email,
+                    User.email_verified_at: verified_at,
+                },
+            )
+        except IntegrityError:
+            raise ConflictException("email_belongs_to_another_account")
+
     def clear_failed_logins(self, id: UUID) -> None:
         self._update(id, {User.failed_login_count: 0, User.locked_until: None})
 

@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Query, Session
 
+from app.exception.conflict import ConflictException
 from app.repository.user import UserRepository
 
 LOCK_UNTIL = datetime(2026, 10, 3, 12, 15, tzinfo=timezone.utc)
@@ -40,6 +42,45 @@ class TestFailedLogins(unittest.TestCase):
         self.assertIn("ELSE users.locked_until", sql)
         self.assertIn("WHERE users.id =", sql)
         recorder.session.commit.assert_called_once()
+
+
+class TestSetPasswordAndVerifyEmail(unittest.TestCase):
+    def test_the_password_and_the_confirmed_email_are_one_update(self):
+        recorder = Recorder()
+        user_id = uuid4()
+
+        UserRepository(recorder).set_password_and_verify_email(
+            user_id, "hash", "ana.souza@usp.br", LOCK_UNTIL
+        )
+
+        updates = recorder.session.query.return_value.filter.return_value.update
+        updates.assert_called_once()
+        values = {
+            column.key: value for column, value in updates.call_args.args[0].items()
+        }
+        self.assertEqual(
+            values,
+            {
+                "password_hash": "hash",
+                "failed_login_count": 0,
+                "locked_until": None,
+                "email": "ana.souza@usp.br",
+                "email_verified_at": LOCK_UNTIL,
+            },
+        )
+        recorder.session.commit.assert_called_once()
+
+    def test_an_email_held_by_another_account_conflicts(self):
+        recorder = Recorder()
+        updates = recorder.session.query.return_value.filter.return_value.update
+        updates.side_effect = IntegrityError("UPDATE", {}, Exception("unique"))
+
+        with self.assertRaises(ConflictException) as raised:
+            UserRepository(recorder).set_password_and_verify_email(
+                uuid4(), "hash", "ana.souza@usp.br", LOCK_UNTIL
+            )
+
+        self.assertEqual(str(raised.exception), "email_belongs_to_another_account")
 
 
 def compiled_lookup(call) -> str:

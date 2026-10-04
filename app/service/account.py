@@ -1,5 +1,6 @@
 import hmac
 import logging
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 from uuid import UUID, uuid4
@@ -77,8 +78,13 @@ def _orcid(value: str) -> str:
 
 
 def _name(value: str) -> str:
-    name = (value or "").strip()
-    if not name or len(name) > MAX_NAME_LENGTH:
+    value = value or ""
+    name = value.strip()
+    if (
+        not name
+        or len(name) > MAX_NAME_LENGTH
+        or any(unicodedata.category(character) == "Cc" for character in value)
+    ):
         raise _invalid("invalid_name")
     return name
 
@@ -114,6 +120,10 @@ def _answers_an_existing_account(challenge: AuthChallenge) -> bool:
 
 
 def _can_resend(challenge: AuthChallenge) -> bool:
+    if challenge.kind == ChallengeKind.SIGN_UP.value and not (
+        "password_hash" in challenge.payload or _answers_an_existing_account(challenge)
+    ):
+        return False
     return (
         challenge.kind != ChallengeKind.PASSWORD_RESET.value
         and challenge.confirmed_at is None
@@ -173,8 +183,13 @@ class AccountService:
                 password_hash=password_hash,
                 email_verified_at=self._clock(),
             )
-        self._users.set_password(existing.id, password_hash)
-        self._users.verify_email(existing.id, challenge.email, self._clock())
+        now = self._clock()
+        self._users.set_password_and_verify_email(
+            existing.id, password_hash, challenge.email, now
+        )
+        self._challenges.consume_open_for_user(
+            existing.id, ChallengeKind.PASSWORD_RESET, now
+        )
         return existing.id
 
     def request_email_verification(self, orcid: str, email: str, name: str) -> UUID:
@@ -338,14 +353,24 @@ class AccountService:
         self, user_id: UUID, current_password: str, new_password: str
     ) -> None:
         _password(new_password)
+        now = self._clock()
         current_password = current_password or ""
         found = self._users.fetch_by_id(id=user_id)
         if found is None or found.password_hash is None:
             self._hasher.burn(current_password)
             raise self._refused("unknown" if found is None else "no_password", found)
+        if found.locked_until is not None and found.locked_until > now:
+            self._hasher.burn(current_password)
+            raise self._refused("locked", found)
         if not self._hasher.verify(current_password, found.password_hash):
+            self._users.record_failed_login(
+                found.id, MAX_FAILED_LOGINS, now + LOCK_DURATION
+            )
             raise self._refused("wrong_password", found)
         self._users.set_password(found.id, self._hasher.hash(new_password))
+        self._challenges.consume_open_for_user(
+            found.id, ChallengeKind.PASSWORD_RESET, now
+        )
 
     def _account_for_login(self, email: str) -> UserDBModel | None:
         try:

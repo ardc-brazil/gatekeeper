@@ -364,3 +364,47 @@ class TestChangePassword:
             400,
             "invalid_password",
         )
+
+    def test_ten_wrong_current_passwords_lock_sign_in_too(self, http_client, mailpit):
+        account = password_account(http_client, mailpit)
+
+        for _ in range(10):
+            refused(
+                change_password(
+                    http_client, account["id"], "not the password", NEW_PASSWORD
+                ),
+                401,
+                "invalid_credentials",
+            )
+
+        refused(
+            login(http_client, account["email"], PASSWORD), 401, "invalid_credentials"
+        )
+        refused(
+            change_password(http_client, account["id"], PASSWORD, NEW_PASSWORD),
+            401,
+            "invalid_credentials",
+        )
+        assert (
+            execute(
+                "SELECT failed_login_count, locked_until > now() "
+                f"FROM users WHERE id = '{account['id']}'"
+            )
+            == "10|t"
+        )
+
+    def test_a_change_retires_an_open_reset_link(self, http_client, mailpit):
+        account = password_account(http_client, mailpit)
+        assert_status_code(request_password_reset(http_client, account["email"]), 202)
+        token = newest_reset_token(http_client, mailpit, account["email"], count=2)
+
+        assert_status_code(
+            change_password(http_client, account["id"], PASSWORD, NEW_PASSWORD), 204
+        )
+
+        refused(
+            confirm_password_reset(http_client, token, "yet another password"),
+            400,
+            "token_invalid",
+        )
+        assert_status_code(login(http_client, account["email"], NEW_PASSWORD), 200)

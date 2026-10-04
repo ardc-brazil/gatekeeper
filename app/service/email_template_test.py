@@ -790,6 +790,18 @@ class TestAccountTemplates(unittest.TestCase):
         self.assertNotIn("<b>Ana</b>", email.html)
         self.assertIn("&lt;b&gt;Ana&lt;/b&gt;", email.html)
 
+    def test_the_admin_notification_escapes_a_script_in_the_name(self):
+        email = self.renderer.render(
+            EmailTemplate.NEW_ACCOUNT_PENDING,
+            {
+                **CONTEXTS[EmailTemplate.NEW_ACCOUNT_PENDING],
+                "name": "<script>alert(1)</script>",
+            },
+        )
+
+        self.assertNotIn("<script>", email.html)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", email.html)
+
     def test_a_name_is_escaped_in_the_existing_account_html(self):
         email = self.renderer.render(
             EmailTemplate.SIGN_UP_EXISTING_ACCOUNT,

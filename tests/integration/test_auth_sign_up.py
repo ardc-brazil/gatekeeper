@@ -14,10 +14,12 @@ from tests.integration.fixtures.account import (
     disable,
     login,
     newest_code,
+    newest_reset_token,
     newest_text,
     outbox,
     password_account,
     refused,
+    request_password_reset,
     resend,
     sign_up,
     unique_email,
@@ -159,6 +161,59 @@ class TestSignUpForAnExistingAccount:
             401,
             "invalid_credentials",
         )
+
+
+class TestWhatTheChallengesKeep:
+    def _keeps_the_hash(self, challenge_id: str) -> str:
+        return execute(
+            "SELECT payload ? 'password_hash' FROM auth_challenges "
+            f"WHERE id = '{challenge_id}'"
+        )
+
+    def test_a_confirmed_sign_up_no_longer_holds_the_password_hash(
+        self, http_client, mailpit
+    ):
+        email = unique_email()
+        challenge_id = _started(http_client, email)
+        assert self._keeps_the_hash(challenge_id) == "t"
+        code = newest_code(http_client, mailpit, email)
+
+        assert_status_code(confirm_sign_up(http_client, challenge_id, code), 200)
+
+        assert self._keeps_the_hash(challenge_id) == "f"
+
+    def test_a_replaced_sign_up_no_longer_holds_the_password_hash(
+        self, http_client, mailpit
+    ):
+        email = unique_email()
+        first = _started(http_client, email)
+        delivered(http_client, mailpit, email, count=1)
+        second = _started(http_client, email)
+
+        assert self._keeps_the_hash(first) == "f"
+        assert self._keeps_the_hash(second) == "t"
+        age_challenge(first, "issued_at", 91)
+        refused(resend(http_client, first), 404, "challenge_not_found")
+
+    def test_a_password_set_by_sign_up_retires_an_open_reset_link(
+        self, http_client, mailpit
+    ):
+        email = unique_email()
+        user_id = create_plain_user(http_client, email)
+        execute(f"UPDATE users SET email_verified_at = now() WHERE id = '{user_id}'")
+        assert_status_code(request_password_reset(http_client, email), 202)
+        token = newest_reset_token(http_client, mailpit, email, count=1)
+
+        challenge_id = _started(http_client, email)
+        code = newest_code(http_client, mailpit, email, count=2)
+        assert_status_code(confirm_sign_up(http_client, challenge_id, code), 200)
+
+        refused(
+            confirm_password_reset(http_client, token, "a brand new password"),
+            400,
+            "token_invalid",
+        )
+        assert_status_code(login(http_client, email, PASSWORD), 200)
 
 
 class TestCodes:
