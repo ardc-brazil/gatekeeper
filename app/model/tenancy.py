@@ -74,13 +74,20 @@ def is_production(path: str | None) -> bool:
     return bool(path) and path.startswith(PRODUCTION_PREFIX)
 
 
-def closed_to_members(path: str, is_enabled: bool | None) -> str | None:
-    if is_enabled is None:
-        return "tenancy_not_found"
+def locked_membership(path: str) -> str | None:
     if is_default(path):
         return "public_tenancy_locked"
     if is_legacy(path):
         return "legacy_tenancy_read_only"
+    return None
+
+
+def closed_to_members(path: str, is_enabled: bool | None) -> str | None:
+    if is_enabled is None:
+        return "tenancy_not_found"
+    locked = locked_membership(path)
+    if locked is not None:
+        return locked
     if not is_enabled or not is_production(path):
         return "tenancy_disabled"
     return None

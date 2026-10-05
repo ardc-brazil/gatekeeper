@@ -16,10 +16,14 @@ from app.repository.integrity import violates
 from app.repository.tenancy_event import add_event
 
 
-def datasets_in(session: Session, tenancy: str) -> Query:
-    return session.query(func.count(Dataset.id)).filter(
-        Dataset.tenancy == tenancy, Dataset.is_enabled == true()
+def _counted_datasets(session: Session, *columns) -> Query:
+    return session.query(*columns, func.count(Dataset.id)).filter(
+        Dataset.is_enabled == true()
     )
+
+
+def datasets_in(session: Session, tenancy: str) -> Query:
+    return _counted_datasets(session).filter(Dataset.tenancy == tenancy)
 
 
 class TenancyRepository:
@@ -97,8 +101,8 @@ class TenancyRepository:
     def dataset_counts(self) -> dict[str, int]:
         with self._session_factory() as session:
             rows = (
-                session.query(Dataset.tenancy, func.count(Dataset.id))
-                .filter(Dataset.is_enabled == true(), Dataset.tenancy.isnot(None))
+                _counted_datasets(session, Dataset.tenancy)
+                .filter(Dataset.tenancy.isnot(None))
                 .group_by(Dataset.tenancy)
                 .all()
             )

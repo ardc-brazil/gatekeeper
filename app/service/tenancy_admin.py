@@ -9,6 +9,7 @@ from app.model.tenancy import (
     display_name_of,
     is_default,
     is_legacy,
+    locked_membership,
     tenancy_order,
 )
 from app.model.tenancy_access import (
@@ -101,7 +102,7 @@ class TenancyAdminService:
         return TenancyMembersView(
             members=Page(items=items, total_count=total, limit=limit, offset=offset),
             invitations=[]
-            if is_default(path) or is_legacy(path)
+            if locked_membership(path)
             else self._pending_invitations(path),
         )
 
@@ -149,10 +150,9 @@ class TenancyAdminService:
 
     def remove(self, path: str, user_id: UUID, admin_id: UUID) -> None:
         self._existing(path)
-        if is_default(path):
-            raise ConflictException("public_tenancy_locked")
-        if is_legacy(path):
-            raise ConflictException("legacy_tenancy_read_only")
+        locked = locked_membership(path)
+        if locked is not None:
+            raise ConflictException(locked)
         if not self._memberships.remove(path, user_id, admin_id):
             raise NotFoundException("member_not_found")
 

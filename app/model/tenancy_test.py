@@ -5,11 +5,13 @@ from app.model.tenancy import (
     TenancyEventType,
     TenancyInvitationStatus,
     TenancyRequestStatus,
+    closed_to_members,
     derived_display_name,
     display_name_of,
     is_default,
     is_legacy,
     is_production,
+    locked_membership,
     match_key,
     namespace_is_valid,
     namespace_of,
@@ -32,6 +34,26 @@ class TestPaths(unittest.TestCase):
         self.assertFalse(is_production("datamap/staging/data-amazon"))
         self.assertTrue(is_production("datamap/production/data-amazon"))
         self.assertFalse(is_legacy("datamap/production/data-amazon"))
+
+    def test_public_and_legacy_memberships_are_locked_whether_enabled_or_not(self):
+        self.assertEqual(locked_membership(DEFAULT_TENANCY), "public_tenancy_locked")
+        self.assertEqual(
+            locked_membership("datamap/staging/data-amazon"),
+            "legacy_tenancy_read_only",
+        )
+        self.assertIsNone(locked_membership("datamap/production/atto"))
+
+    def test_closed_to_members_adds_missing_and_disabled_to_the_locks(self):
+        self.assertEqual(
+            closed_to_members("datamap/production/atto", None), "tenancy_not_found"
+        )
+        self.assertEqual(
+            closed_to_members(DEFAULT_TENANCY, True), "public_tenancy_locked"
+        )
+        self.assertEqual(
+            closed_to_members("datamap/production/atto", False), "tenancy_disabled"
+        )
+        self.assertIsNone(closed_to_members("datamap/production/atto", True))
 
     def test_the_namespace_is_the_last_segment(self):
         self.assertEqual(
