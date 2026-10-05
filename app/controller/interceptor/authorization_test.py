@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 
 from app import setup
 from app.container import Container
-from app.controller.interceptor.authorization import authorize_self_or_policy
+from app.controller.interceptor.authorization import (
+    authorize_self,
+    authorize_self_or_policy,
+)
 from app.exception.unauthorized import UnauthorizedException
 from app.service.auth import AuthService
 
@@ -89,3 +92,59 @@ class TestSelfOrPolicy(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.auth.authorize_user.assert_not_called()
+
+
+class TestSelfOnly(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.container = Container()
+        app = FastAPI()
+        setup.setup_error_handlers(app)
+
+        @app.get("/users/{id}/tenancies", dependencies=[Depends(authorize_self)])
+        def read(id: str):
+            return {"id": id}
+
+        cls.client = TestClient(app, raise_server_exceptions=False)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.container.unwire()
+
+    def setUp(self):
+        self.auth = Mock(spec=AuthService)
+        self.container.auth_service.override(providers.Object(self.auth))
+
+    def tearDown(self):
+        self.container.auth_service.reset_override()
+
+    def test_a_user_reaches_their_own_route_without_any_role(self):
+        user_id = uuid4()
+
+        response = self.client.get(
+            f"/users/{user_id}/tenancies", headers={"X-User-Id": str(user_id)}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.auth.authorize_user.assert_not_called()
+
+    def test_anyone_else_is_refused_even_an_admin_and_casbin_is_not_asked(self):
+        response = self.client.get(
+            f"/users/{uuid4()}/tenancies", headers={"X-User-Id": str(uuid4())}
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"detail": "not_authorized"})
+        self.auth.authorize_user.assert_not_called()
+
+    def test_a_path_id_that_is_not_a_uuid_is_refused(self):
+        response = self.client.get(
+            "/users/everyone/tenancies", headers={"X-User-Id": str(uuid4())}
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_without_a_user_header_it_is_401(self):
+        self.assertEqual(
+            self.client.get(f"/users/{uuid4()}/tenancies").status_code, 401
+        )

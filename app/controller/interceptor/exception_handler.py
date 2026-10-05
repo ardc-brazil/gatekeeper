@@ -63,12 +63,20 @@ async def bad_request_exception_handler(request: Request, exc: BadRequestExcepti
 
 QUIET_VALIDATION_PREFIX = "/v1/auth/"
 QUIET_VALIDATION_ROUTES = {("PUT", "/v1/users/{id}/password")}
+TENANCY_VALIDATION_PREFIXES = (
+    "/v1/admin/tenanc",
+    "/v1/admin/users",
+    "/v1/users/{id}/tenanc",
+    "/v1/datasets/{dataset_id}/tenancy-invitations",
+    "/v1/datasets/{dataset_id}/share/lookup",
+)
 
 
 def _answers_quietly(request: Request) -> bool:
     path = _route_template(request)
     return (
         path.startswith(QUIET_VALIDATION_PREFIX)
+        or path.startswith(TENANCY_VALIDATION_PREFIXES)
         or (request.method, path) in QUIET_VALIDATION_ROUTES
     )
 

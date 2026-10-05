@@ -55,6 +55,15 @@ def authorize_self_or_policy(
         raise
 
 
+def authorize_self(
+    request: Request,
+    user_id: UUID = Depends(parse_user_header),
+) -> None:
+    if not _is_self(request, user_id):
+        metrics.auth_failure("authz", "not_self")
+        raise UnauthorizedException("not_authorized")
+
+
 def _adapt_tus_response(res: TusResult):
     return {
         "HTTPResponse": {
