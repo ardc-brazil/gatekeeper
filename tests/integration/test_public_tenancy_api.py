@@ -11,6 +11,7 @@ from tests.integration.fixtures.account import (
 from tests.integration.fixtures.embargo import grant
 from tests.integration.fixtures.sharing import random_orcid
 from tests.integration.fixtures.tenancy import (
+    ADMIN_ID,
     PUBLIC,
     as_user,
     create_dataset,
@@ -201,17 +202,16 @@ class TestPublicIsReadOnlyForMembers:
         assert_status_code(update, 403)
         assert detail.json()["members_can_edit"] is False
 
-    def test_moving_a_dataset_into_public_closes_it(self, http_client):
-        owner = new_account(http_client)
+    def test_an_admin_moving_a_dataset_into_public_closes_it(self, http_client):
         tenancy = new_tenancy()
-        join(owner["id"], tenancy)
-        dataset = create_dataset(http_client, owner["id"], tenancy)
-        assert_status_code(members_access(http_client, owner["id"], dataset, True), 200)
+        join(ADMIN_ID, tenancy)
+        dataset = create_dataset(http_client, ADMIN_ID, tenancy)
+        assert_status_code(members_access(http_client, ADMIN_ID, dataset, True), 200)
 
         moved = http_client.put(
             f"/datasets/{dataset['id']}",
             json={"name": "moved", "data": {}, "tenancy": PUBLIC},
-            headers=as_user(owner["id"], tenancy),
+            headers=as_user(ADMIN_ID, tenancy),
         )
 
         assert_status_code(moved, 200)
@@ -239,66 +239,58 @@ class TestOutsidePublic:
         assert_status_code(opened, 200)
         assert_status_code(after, 200)
 
-    def test_only_the_owner_moves_a_dataset_out_of_the_tenancy(self, http_client):
+    def test_no_one_but_an_admin_moves_a_dataset_out_of_the_tenancy(self, http_client):
         tenancy, elsewhere = new_tenancy(), new_tenancy()
-        owner, member = new_account(http_client), new_account(http_client)
-        for account in (owner, member):
+        owner, editor, holder = (new_account(http_client) for _ in range(3))
+        for account in (owner, editor, holder):
             join(account["id"], tenancy)
             join(account["id"], elsewhere)
         dataset = create_dataset(http_client, owner["id"], tenancy)
         assert_status_code(members_access(http_client, owner["id"], dataset, True), 200)
-
-        by_member = http_client.put(
-            f"/datasets/{dataset['id']}",
-            json={"name": "moved", "data": {}, "tenancy": PUBLIC},
-            headers=as_user(member["id"], tenancy),
-        )
-        after_member = execute(
-            f"SELECT tenancy FROM datasets WHERE id = '{dataset['id']}'"
-        )
-        by_owner = http_client.put(
-            f"/datasets/{dataset['id']}",
-            json={"name": "moved", "data": {}, "tenancy": elsewhere},
-            headers=as_user(owner["id"], tenancy),
-        )
-
-        assert_status_code(by_member, 403)
-        assert by_member.json() == {"detail": "forbidden"}
-        assert after_member == tenancy
-        assert_status_code(by_owner, 200)
-        assert (
-            execute(f"SELECT tenancy FROM datasets WHERE id = '{dataset['id']}'")
-            == elsewhere
-        )
-
-    def test_a_write_share_holder_cannot_move_the_dataset_but_still_edits(
-        self, http_client
-    ):
-        tenancy, elsewhere = new_tenancy(), new_tenancy()
-        owner, holder = new_account(http_client), new_account(http_client)
-        join(owner["id"], tenancy)
-        for place in (tenancy, elsewhere):
-            join(holder["id"], place)
-        dataset = create_dataset(http_client, owner["id"], tenancy)
         grant(http_client, dataset["id"], holder["id"], "write")
+
+        for account in (owner, editor, holder):
+            for target in (elsewhere, PUBLIC):
+                moved = http_client.put(
+                    f"/datasets/{dataset['id']}",
+                    json={"name": "moved", "data": {}, "tenancy": target},
+                    headers=as_user(account["id"], tenancy),
+                )
+
+                assert_status_code(moved, 400)
+                assert moved.json() == {"detail": "tenancy_cannot_change"}
+                assert (
+                    execute(
+                        f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'"
+                    )
+                    == f"{dataset['name']}|{tenancy}"
+                )
+
+        for account in (owner, editor, holder):
+            assert_status_code(update_dataset(http_client, account["id"], dataset), 200)
+        assert (
+            execute(f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'")
+            == f"edited|{tenancy}"
+        )
+
+    def test_an_admin_editing_as_a_member_moves_a_colleagues_dataset(self, http_client):
+        tenancy, elsewhere = new_tenancy(), new_tenancy()
+        owner = new_account(http_client)
+        join(owner["id"], tenancy)
+        join(ADMIN_ID, tenancy)
+        dataset = create_dataset(http_client, owner["id"], tenancy)
+        assert_status_code(members_access(http_client, owner["id"], dataset, True), 200)
 
         moved = http_client.put(
             f"/datasets/{dataset['id']}",
             json={"name": "moved", "data": {}, "tenancy": elsewhere},
-            headers=as_user(holder["id"], tenancy),
+            headers=as_user(ADMIN_ID, tenancy),
         )
-        after_move = execute(
-            f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'"
-        )
-        edited = update_dataset(http_client, holder["id"], dataset)
 
-        assert_status_code(moved, 403)
-        assert moved.json() == {"detail": "forbidden"}
-        assert after_move == f"{dataset['name']}|{tenancy}"
-        assert_status_code(edited, 200)
+        assert_status_code(moved, 200)
         assert (
             execute(f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'")
-            == f"edited|{tenancy}"
+            == f"moved|{elsewhere}"
         )
 
 
