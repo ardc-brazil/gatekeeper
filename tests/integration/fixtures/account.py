@@ -1,6 +1,7 @@
 import re
 import time
 import uuid
+from datetime import datetime, timedelta
 
 import requests
 
@@ -16,6 +17,7 @@ PASSWORD = "correct horse battery"
 ADMIN_ADDRESS = "datamap-admins@fake.mail.com"
 CODE = re.compile(r"Your DataMap code: (\d{6})")
 RESET_LINK = re.compile(r"/account/reset-password/([A-Za-z0-9_-]+)")
+CREATED = re.compile(r"^(.+?)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)?$")
 
 
 def unique_email(prefix: str = "account") -> str:
@@ -42,11 +44,18 @@ def delivered(
     )
 
 
+def _created(message: dict) -> datetime:
+    whole, fraction, zone = CREATED.match(message["Created"]).groups()
+    offset = "+00:00" if zone in (None, "Z") else zone
+    micros = int((fraction or "0").ljust(6, "0")[:6])
+    return datetime.fromisoformat(whole + offset) + timedelta(microseconds=micros)
+
+
 def newest_text(
     http_client: HttpClient, mailpit: Mailpit, address: str, count: int = 1
 ) -> str:
     found = delivered(http_client, mailpit, address, count)
-    newest = max(found, key=lambda message: message["Created"])
+    newest = max(found, key=_created)
     return mailpit.message(newest["ID"])["Text"]
 
 
