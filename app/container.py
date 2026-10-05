@@ -128,11 +128,6 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
-    tenancy_service = providers.Factory(
-        TenancyService,
-        repository=tenancy_repository,
-    )
-
     casbin_adapter = providers.Singleton(
         CasbinSQLAlchemyAdapter, db.provided.get_engine.call()
     )
@@ -211,6 +206,12 @@ class Container(containers.DeclarativeContainer):
         memberships=tenancy_membership_repository,
         users=user_repository,
         notifier=tenancy_notifier,
+    )
+
+    tenancy_service = providers.Factory(
+        TenancyService,
+        repository=tenancy_repository,
+        membership_service=tenancy_membership_service,
     )
 
     tenancy_request_repository = providers.Factory(

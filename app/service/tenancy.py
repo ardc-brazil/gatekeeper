@@ -1,15 +1,27 @@
 from typing import List
 from app.model.db.tenancy import Tenancy as DBModel
-from app.model.tenancy import Tenancy
+from app.model.tenancy import (
+    PRODUCTION_PREFIX,
+    Tenancy,
+    derived_display_name,
+    is_default,
+    is_production,
+)
 from app.repository.tenancy import TenancyRepository
 from app.exception.conflict import ConflictException
+from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
-from app.model.tenancy import is_default
+from app.service.tenancy_membership import TenancyMembershipService
 
 
 class TenancyService:
-    def __init__(self, repository: TenancyRepository) -> None:
+    def __init__(
+        self,
+        repository: TenancyRepository,
+        membership_service: TenancyMembershipService,
+    ) -> None:
         self._repository: TenancyRepository = repository
+        self._membership_service = membership_service
 
     def __adapt_tenancy(self, tenancy: DBModel) -> Tenancy:
         return Tenancy(
@@ -36,8 +48,13 @@ class TenancyService:
         return tenancies
 
     def create(self, tenancy: Tenancy) -> None:
-        tenancy = DBModel(name=tenancy.name, is_enabled=tenancy.is_enabled)
-        self._repository.upsert(tenancy)
+        if not is_production(tenancy.name):
+            raise IllegalStateException("namespace_invalid")
+        path, _ = self._membership_service.check_new_tenancy(
+            derived_display_name(tenancy.name),
+            tenancy.name[len(PRODUCTION_PREFIX) :],
+        )
+        self._repository.upsert(DBModel(name=path, is_enabled=tenancy.is_enabled))
 
     def update(self, old_name: str, updated_tenancy: Tenancy) -> None:
         if is_default(old_name):
