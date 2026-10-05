@@ -40,8 +40,9 @@ credential of their own:
 6. **People who use the API directly get personal access tokens.** A
    signed-in user creates a token in the webapp profile and sends it as
    `Authorization: Bearer dm_pat_…`, alone — from a script or from the Swagger
-   UI. It acts as that user with their current roles, never on admin routes,
-   and can be read-only, expiring and revoked. OAuth is deferred.
+   UI. It acts as that user with their current roles — admin routes included,
+   for an admin's token — and can be read-only, expiring and revoked. OAuth is
+   deferred.
 7. **The residual risk is stated, not hidden.** The BFF mints assertions for
    whoever it believes is signed in, so a compromised BFF host still acts as
    any user. What changes is that every *other* secret — the archivist's, the
@@ -115,10 +116,11 @@ hold a signing key, so closing the hole for them needs a different credential.
 | **Zipper** | `gatekeeper.api_key`/`api_secret` in the tracked `zipper/local_config.yml` and `zipper/staging_config.yml`; `zipper/app/gateways/gatekeeper.py:12-16` | One callback, `POST /v1/internal/datasets/{id}/versions/{v}/files/zip/{id}` (`gatekeeper.py:19`), **which does not exist in the gatekeeper**. The zipper is not deployed (`infrastructure/prometheus/prometheus.yml:30`) | **Never** |
 | **TUSd** | **None.** It holds no client secret | `POST /tus/hooks`, guarded by `authorize_tus` only (`app/controller/v1/tus/tus.py:16`), with no `authenticate` | The user comes from the hook payload; see below |
 | **Integration test client** | Seeded by `tests/integration/fixtures/seed_clients.sql:38-50`; defaults in `tests/integration/config.py:13-20` | Every route, as the seeded user, which holds `admin` and `clients_admin` (`seed_clients.sql:75-76`) | **Yes**, `X-User-Id` from config (`tests/integration/fixtures/auth.py:11-19`) |
-| **Direct API users** (scripts, the Swagger UI) | A client key and secret issued through `/clients` and handed to a person | Whatever they need | **Yes**, an `X-User-Id` of their choosing. Nothing in the repositories says how many such clients exist; see *Open questions* |
+| **Direct API users** (scripts, the Swagger UI) | A client key and secret issued through `/clients` and handed to a person | Whatever they need | **Yes**, an `X-User-Id` of their choosing. The production rows and who holds each are listed in *Existing direct API clients* |
 
-Whether the BFF and the archivist are two client rows in production or share
-one is not visible from the repositories; see *Open questions*.
+The BFF and the archivist are two separate client rows in production,
+confirmed in *Existing direct API clients*; the scope migration maps them —
+and every other row — by name.
 
 #### Every use of `X-User-Id` today
 
@@ -331,8 +333,8 @@ Scope roles, seeded by the migration:
 | Role | Policy (`v1`, `v2`) | Holders |
 |---|---|---|
 | `scope_internal` | `^/api/v1/internal/` , `.*` | archivist, zipper |
-| `scope_bff` | `^/api/v1/(?!internal/\|tus/)` , `.*` | BFF, integration test client |
-| `scope_pat` | `^/api/v1/(?!internal/\|tus/\|auth/\|clients\|admin/\|users/[^/]+/(roles\|tokens)\|users/providers/\|users/?$\|tokens)` , `.*` | the subject `pat`, which every PAT request is checked as |
+| `scope_bff` | `^/api/v1/(?!internal/\|tus/)` , `.*` | both BFF deployments (DataMap, DataAmazon), integration test client |
+| `scope_pat` | `^/api/v1/(?!internal/\|tus/\|auth/\|clients\|users/[^/]+/tokens\|users/providers/\|users/?$\|tokens)` , `.*` | the subject `pat`, which every PAT request is checked as |
 
 The matcher's `regexMatch` (`app/resources/casbin_model.conf`) is pycasbin's
 `re.match`: anchored at the start, open at the end. The patterns are prefixes,
@@ -340,8 +342,10 @@ so that is what we want; the explicit `^` is for the reader. The negative
 lookahead in `scope_bff` is what keeps it from being `/*`. No client is ever
 granted `admin`, whose `/*` would cover everything; a test asserts it.
 `scope_pat` additionally keeps a token away from the routes that create
-accounts, change roles, manage clients or tokens, and the admin area — see
-*Personal access tokens*.
+accounts, manage clients, or manage tokens — **not** the admin area or role
+changes, which stay gated by the route's own `authorize`, so an admin's token
+reaches them exactly as an admin's session does — see *Personal access
+tokens*.
 
 `authenticate` enforces the scope right after the secret check:
 
@@ -468,25 +472,36 @@ yields no usable token.
 **Using one.** `Authorization: Bearer dm_pat_…`, and nothing else — no
 `X-Api-Key`, no `X-Api-Secret`, no `X-User-Id`. The token is the credential. A
 request is identified by the token's id: in the log (`pat_id`, never the
-token), in `last_used_at` (written at most once a minute per token, not per
-request) and in a per-token rate limit (`AUTH_PAT_RATE_LIMIT_PER_MINUTE`, 600,
-`429` beyond it; in memory per gatekeeper instance, so at most twice that across
-the two).
+token) and in `last_used_at` (written at most once a minute per token, not per
+request). There is no rate limit on a PAT (see *Out of scope*).
 
 **What it can do.** Everything the user can do *now*, intersected with
 `scope_pat`, and with `GET` only if the token is read-only:
 
-1. `enforce("pat", path, method)` — `scope_pat` keeps it off `/internal`,
-   `/tus`, `/auth`, `/clients`, `/admin`, `POST /users`, the provider lookup,
-   role changes and the token routes themselves (`403 pat_out_of_scope`);
+1. `enforce("pat", path, method)` — `scope_pat` keeps every PAT off
+   `/internal`, `/tus`, `/auth`, `/clients`, `POST /users`, the provider lookup
+   and the token routes themselves (`403 pat_out_of_scope`);
 2. read-only and the method is not `GET`/`HEAD` → `403 pat_read_only`;
 3. the route's own `authorize` as today, with the token's user — so a role
    removed from the user takes effect on their tokens within the five-second
-   policy reload.
+   policy reload, and so an admin's token reaches `/admin/*` and
+   `/users/{id}/roles` exactly as an admin's session does.
 
-Admin routes are refused to every PAT, admins' included, until the owner
-decides otherwise (see *Open questions*). A token cannot create, list or revoke
-tokens, so a stolen one cannot extend itself.
+**Admins are admins.** A token carries the user's live roles with no exclusion
+beyond what any admin session already has, so there is nothing left for
+`scope_pat` to add on the admin area or on role changes. What stays excluded
+for every PAT, admin included, is not about privilege:
+
+- `/internal` and `/tus` — no session, admin or not, ever reaches them as a
+  bearer user; one is machine-only, the other takes its user from a signed
+  upload token.
+- `/auth/*`, the provider lookup and `POST /users` — how someone gets a
+  session in the first place, which a PAT already presupposes.
+- `/clients` and the token routes (`/users/{id}/tokens`, `/tokens`) — letting a
+  leaked bearer credential mint another standing credential, client or token,
+  is a bigger blast radius than anything the user's own roles allow. A token
+  cannot create, list or revoke tokens or clients, so a stolen one cannot
+  extend itself.
 
 **Revocation.** The user revokes from the profile
 (`DELETE /users/{id}/tokens/{token_id}`); an admin lists and revokes any token
@@ -521,7 +536,6 @@ stores it on `request.state`. It tries three paths, in order:
    - not `dm_pat_…`, no row for its hash, revoked, expired, or the user
      disabled → `401 pat_invalid` (`pat_expired` and `pat_revoked` are
      separate reasons in the metric, not in the body).
-   - rate limit → `429 pat_rate_limited`.
    - `scope_pat` and read-only as above → `403`.
    The user is the token's user; the source is `pat`.
 2. **Client key and secret.**
@@ -582,11 +596,12 @@ webapp cleanup; it is ignored either way. The source in the access log is
 | Route | Change |
 |---|---|
 | `POST /users/{user_id}/invitations/claim` | the path `user_id` must equal the asserted user (`401` otherwise). The BFF already calls it with that user right after sign-in (`lib/share.ts:75`) |
-| `GET /users/providers/{provider}/{reference}`, `POST /users`, `/auth/*` | unchanged: they are how the BFF finds out who is signing in, before any assertion can exist. Reachable only with `scope_bff` |
+| `GET /users/providers/{provider}/{reference}`, `POST /users`, `/auth/*` | unchanged, and **not** moved under `/auth/*` for a shared prefix: `scope_pat` and `scope_bff` already name them explicitly (*Client scopes*), so renaming the paths would be churn across both BFF deployments for no security gain. Reachable only with `scope_bff` |
 | `/internal/*` | unchanged code; now `scope_internal` only |
 | `POST /tus/hooks` | the user is the upload token's `sub` |
 | `/users/{id}/tokens`, `/tokens` | new |
 | `/clients/*` | `acts_as_users` and key management are added in RFC 010's admin screen; until then they are set by migration and SQL |
+| `GET /health-check/dependencies` | unchanged: `authorize` gates it to `admin` today, since no other role is granted it. An admin's PAT now reaches it, the same way an admin's session already does. No `scope_ops` and no machine client for it now; if an external uptime monitor ever needs this route, give it a machine client scoped to just this path then |
 
 ### Webapp
 
@@ -601,6 +616,12 @@ webapp cleanup; it is ignored either way. The source in the access log is
   assertion and no header, which the gatekeeper treats as "no user".
 - New settings: `DATAMAP_USER_ASSERTION_KEY` (PKCS#8 PEM, base64 in the env
   file) and `DATAMAP_USER_ASSERTION_KID`, in `frontend.env.sops`.
+- **DataAmazon is the same codebase, deployed separately.** `DataAmazon BFF -
+  PROD` is this same webapp deployed with its own configuration, not a second
+  repository. PR 4 covers both: each deployment generates its own key pair and
+  gets its own `kid`, carried in its own `frontend.env.sops` (DataMap's and
+  DataAmazon's), so one deployment's key never verifies the other's
+  assertions.
 - Calls made before a session exists — the NextAuth `jwt` callback's
   `getUserByUID` (`pages/api/auth/[...nextauth].ts:128`) included — sign for the
   user id the gatekeeper just returned from `/auth/login`, sign-up confirmation
@@ -615,24 +636,60 @@ webapp cleanup; it is ignored either way. The source in the access log is
   stops sending it to tusd; the Jest tests and the two diagrams in the audit
   table follow.
 
-### Archivist and zipper
+### Archivist
 
-No code change. The archivist's client gets `scope_internal`; it never sent a
-user and never will. The zipper's callback route does not exist, and its tracked
-config carries a client key; whether that key is enabled in any environment is
-an open question, and the answer decides whether it is rotated or deleted. When
-the zipper is deployed it gets its own client, `scope_internal`, and a real
-route.
+No code change. The archivist's client (`archivist 2026-09`) gets
+`scope_internal`; it never sent a user and never will.
+
+The zipper is out of scope for this RFC entirely; see *Out of scope*.
 
 ### Existing direct API clients
 
+The production `clients` table has eleven rows. Names and truncated ids only —
+no secrets, no full UUIDs:
+
+| Name | Classification | Action at deploy |
+|---|---|---|
+| DataMap BFF - PROD 2026-09 | BFF, acts as users | `scope_bff`, `acts_as_users = true`; its own key pair and `kid` |
+| DataAmazon BFF - PROD | BFF, acts as users | `scope_bff`, `acts_as_users = true`; its own key pair and `kid`, in its own `frontend.env.sops` (*Webapp*) |
+| archivist 2026-09 | Machine | `scope_internal` |
+| Caio Maia - API Credentials | Personal API access | told beforehand, then disabled once a PAT replaces it |
+| Danielle S. Monteiro - 5726dcb3-… - API access | Personal API access | told beforehand, then disabled once a PAT replaces it |
+| Adriano Almeida - API | Personal API access | told beforehand, then disabled once a PAT replaces it |
+| Jeaneth Machicao - b2c91e37-… - API access | Personal API access | told beforehand, then disabled once a PAT replaces it |
+| Workshop on Data Science - Oct/24 | Likely stale | `scope_bff` (migration default) until the owner confirms it unused, then disabled |
+| 3B93A51A-ACE0-4D40-B5AA-C203B6CE3F0E | Likely stale (bare UUID) | `scope_bff` (migration default) until the owner confirms it unused, then disabled |
+| archivist | Likely stale (older duplicate of "archivist 2026-09") | `scope_bff` (migration default) until the owner confirms it unused, then disabled |
+| DataAmazon BFF | Likely stale (older duplicate of "DataAmazon BFF - PROD") | `scope_bff` (migration default) until the owner confirms it unused, then disabled |
+
+The BFF and the archivist are never one row; the scope migration maps every
+row above **by name** (*Migration and seed*).
+
+**The two BFF rows** are the same `datamap-webapp` codebase, deployed twice
+with different configuration — `DataAmazon BFF - PROD` is not a second
+repository. Each deployment keeps acting as users through the assertion, with
+its own key pair and `kid` in its own environment; the webapp PR covers both
+(*Delivery*).
+
+**The machine row** (`archivist 2026-09`) gets `scope_internal` and nothing
+else changes.
+
+**Personal API access** — the four named people and Caio Maia — move to
+personal access tokens. Each is told before the deploy: the date, that their
+client secret stops acting as a user, and how to create a token. Their client
+rows are disabled once they confirm the move.
+
+**Likely stale** — the two undated duplicates, the bare-UUID row and the
+workshop row — are proposed for disabling at the deploy. The `clients` table
+has no `last_used` column (`app/model/db/client.py:10-28`), so staleness is
+checked in the access log and `datamap_requests_total` by client name, not a
+column; the owner confirms each one is actually unused before it is disabled,
+not after.
+
 A client row used by a person or an outside script with `X-User-Id` stops
-working as a user at the deploy: it does not get `acts_as_users`, and a bare
-`X-User-Id` answers `401 user_id_header_rejected`. Its owner moves to a PAT.
-Each one is told **before** the deploy — the date, what breaks, and how to
-create a token — and its client row is disabled after the deploy once its
-owner confirms the move, or mapped to `scope_internal` if it turns out to be a
-machine. Who they are is an open question.
+working as a user at the deploy regardless of its classification above: it
+does not get `acts_as_users`, and a bare `X-User-Id` answers `401
+user_id_header_rejected`.
 
 ### Rollout
 
@@ -642,9 +699,9 @@ mode to remove later.
 
 | Step | What ships | Effect |
 |---|---|---|
-| 0 | Before the window: the BFF key pair is generated, the private key and `kid` go into `frontend.env.sops`, external API users have been told the date | — |
-| 1 | **Webapp** (PR 4): signs every user call, still sends `X-User-Id` | None visible. Today's gatekeeper ignores `X-User-Assertion` |
-| 2 | **Gatekeeper** (PRs 1–3), in the downtime window: the migration runs at startup; the operator then sets `acts_as_users` and inserts the BFF's public key (runbook) before traffic is let back in | Assertions required; `X-User-Id` refused or ignored; scopes enforced; PAT routes and the Swagger bearer field live |
+| 0 | Before the window: both deployments' key pairs are generated, each private key and `kid` goes into its own `frontend.env.sops` (DataMap's and DataAmazon's), the five personal-API-access holders have been told the date | — |
+| 1 | **Webapp** (PR 4), deployed to both the DataMap and DataAmazon environments: signs every user call, still sends `X-User-Id` | None visible. Today's gatekeeper ignores `X-User-Assertion` |
+| 2 | **Gatekeeper** (PRs 1–3), in the downtime window: the migration runs at startup; the operator then sets `acts_as_users` and inserts both deployments' public keys (runbook) before traffic is let back in | Assertions required; `X-User-Id` refused or ignored; scopes enforced; PAT routes and the Swagger bearer field live |
 | 3 | **Webapp** (PRs 5–6), straight after: API tokens in the profile, `X-User-Id` no longer leaves the BFF | External users can create tokens |
 
 Between 2 and 3 external users have no way in; that gap is minutes and inside
@@ -653,9 +710,9 @@ the announced window.
 Scopes ship enforced with the gatekeeper: the migration grants every existing
 client the scope matching its known routes, and a client that is refused shows
 up as `client_out_of_scope` within minutes — the archivist dispatches email
-every minute, the BFF calls constantly. If the BFF and the archivist turn out to
-share one client row, the deploy waits until they are split (see *Open
-questions*).
+every minute, each BFF calls constantly. The BFF and the archivist do not
+share a row (*Existing direct API clients*), so the deploy does not wait on
+that.
 
 **Watching it.** `datamap_auth_failures_total` by `reason` for the hour after
 the deploy: `assertion_*` points at the BFF or its key, `client_out_of_scope`
@@ -683,6 +740,10 @@ Overlap, as the runbook already does for client secrets
 the BFF then fails with `401` until step 2 is done — an outage of user pages,
 traded for closing the hole at once. The runbook gains a section 8 for this.
 
+Each deployment rotates independently — DataMap's and DataAmazon's keys are
+different rows under different client keys; rotating one never touches the
+other.
+
 Client *secret* rotation is unchanged. Rotating one does not require rotating
 the other. PATs are not rotated by operators: they expire, and their users make
 new ones.
@@ -703,15 +764,23 @@ as an attack.
 ### Replay
 
 An assertion is valid for one method, one path and at most about a minute and a
-half. To replay one, an attacker must have seen it — in transit between the
-BFF and the gatekeeper, or in a log — *and* hold the BFF's client secret, which
+half. To replay one, an attacker must have seen it — in transit between a BFF
+and the gatekeeper, or in a log — *and* hold that BFF's client secret, which
 travels in the same request. The assertion is redacted from every log (below).
 
-We do **not** keep a `jti` store in the first version. Two gatekeeper instances
-would need it in PostgreSQL, one insert per request, plus cleanup; it would turn
-"repeat this exact request within a minute" into "nothing". The `jti` is logged
-on every verified request, so the store can be added later without a format
-change. See *Open questions*.
+Today every BFF reaches the gatekeeper over the internal network — the same
+host, as *Clock skew* notes — not the public `/api/v1`. The 60-second lifetime
+and the method/path binding are what stands between a captured assertion and
+a replay; nothing about today's network path does that job, and nothing here
+assumes it always will. If a BFF is ever moved to reach the gatekeeper over
+the public network, revisit whether a `jti` store is still deferrable.
+
+We do **not** keep a `jti` store in this version, and that is settled, not
+open: two gatekeeper instances would need it in PostgreSQL, one insert per
+request, plus cleanup, to turn "repeat this exact request within a minute"
+into "nothing". The `jti` claim stays in the assertion only because it is
+logged on every verified request (*Metrics and logging*); if that logging
+ever stops, drop the claim too. See *Out of scope*.
 
 A PAT is a bearer credential and is replayable by design until it expires or is
 revoked; that is what its expiry, read-only flag, scope and revocation are for.
@@ -753,10 +822,13 @@ Metrics:
 
 | Metric | Labels | Purpose |
 |---|---|---|
-| `datamap_auth_failures_total` (existing, `app/metrics.py:209-214`) | new `reason` values: `client_out_of_scope`, `assertion_not_allowed`, `assertion_invalid`, `assertion_expired`, `user_id_header_rejected`, `ambiguous_credentials`, `pat_invalid`, `pat_expired`, `pat_revoked`, `pat_out_of_scope`, `pat_read_only`, `pat_rate_limited` | added to `AUTH_REASONS` (`app/metrics.py:34`), or they collapse into `other`. This is what the deploy is watched by |
+| `datamap_auth_failures_total` (existing, `app/metrics.py:209-214`) | new `reason` values: `client_out_of_scope`, `assertion_not_allowed`, `assertion_invalid`, `assertion_expired`, `user_id_header_rejected`, `ambiguous_credentials`, `pat_invalid`, `pat_expired`, `pat_revoked`, `pat_out_of_scope`, `pat_read_only` | added to `AUTH_REASONS` (`app/metrics.py:34`), or they collapse into `other`. This is what the deploy is watched by |
 | `datamap_requests_total` (existing) | `client` = the client's name, or `pat` for every PAT request | how much direct API traffic there is. Never a token id: unbounded |
 
-`kid`, `jti` and `pat_id` are never labels.
+`kid`, `jti` and `pat_id` are never labels. Abuse is visible without a rate
+limiter: `last_used_at` per token and `pat_id` on every access-log line and
+every refusal let an operator single out one token making far more requests
+than its name suggests, without a Prometheus label carrying an identifier.
 
 Logging, following the rules in `CLAUDE.md`:
 
@@ -778,8 +850,7 @@ Logging, following the rules in `CLAUDE.md`:
 |---|---|---|
 | `DATAMAP_USER_ASSERTION_KEY` | webapp | PKCS#8 PEM, base64; private |
 | `DATAMAP_USER_ASSERTION_KID` | webapp | must name an unrevoked row of the BFF client |
-| `AUTH_PAT_MAX_DAYS` | gatekeeper | default 365 |
-| `AUTH_PAT_RATE_LIMIT_PER_MINUTE` | gatekeeper | default 600, per token, per instance |
+| `AUTH_PAT_MAX_DAYS` | gatekeeper | default 365, the ceiling. No rate-limit setting exists (see *Out of scope*) |
 
 The gatekeeper gains no secret.
 
@@ -791,11 +862,15 @@ One Alembic revision:
   `personal_access_tokens`;
 - inserts the `scope_internal`, `scope_bff`, `scope_pat` and `tokens_admin`
   policies, and the grouping that gives the subject `pat` `scope_pat`;
-- grants scopes to existing clients **by name**, from a mapping in the
-  migration (the production names are confirmed before it is written; see *Open
-  questions*). A client it cannot classify gets `scope_bff`, which is exactly
-  what every client can do today minus `/internal` — so the migration narrows
-  access and never widens it — and is logged so an operator decides;
+- grants scopes to existing clients **by name**, from the mapping in
+  *Existing direct API clients*: `scope_internal` for the archivist,
+  `scope_bff` for both BFF deployments and, until the owner confirms otherwise,
+  for the four likely-stale rows. It grants nothing to the five
+  personal-access rows, which are disabled once each owner has been told and a
+  PAT replaces the client. A row the mapping does not name gets `scope_bff`,
+  which is exactly what every client can do today minus `/internal` — so the
+  migration narrows access and never widens it — and is logged so an operator
+  decides;
 - does not set `acts_as_users` or insert keys: those are production values,
   set by the operator from the runbook during the deploy window (*Rollout*,
   step 2).
@@ -820,18 +895,21 @@ seeded rows as `CLAUDE.md` describes, with the PAT poll above.
 | A leaked gatekeeper database or environment | holds public keys, secret hashes and PAT hashes only; cannot mint assertions or recover a token |
 | Claiming another user's invitations | claim requires path user = asserted user |
 | A TUS hook naming another user | the user is the signed upload token's `sub`; the header is ignored |
-| A leaked PAT | that user only, never admin routes, `GET` only if read-only, until expiry (at most 365 days) or revocation; the prefix lets secret scanners flag it; `last_used_at` and Activity show its use |
+| A leaked PAT | that user only, `GET` only if read-only, until expiry (at most 365 days) or revocation; the prefix lets secret scanners flag it; `last_used_at` and Activity show its use |
+| A leaked PAT belonging to an admin | the same blast radius as a leaked admin session: every admin route. `/internal`, `/tus`, `/auth`, `/clients` and the token routes stay out of reach regardless of role — see *Personal access tokens* |
 | A PAT used to mint or extend tokens | token routes are outside `scope_pat` |
 | A PAT of a demoted or disabled user | roles are read live; `is_enabled` is checked on every request |
-| A PAT guessed or brute-forced | 256 random bits; per-token rate limit |
+| A PAT guessed or brute-forced | 256 random bits — nothing short enough to guess; no rate limit backs this up (see *Out of scope*) |
 | A PAT sent with a client secret to borrow the client's scope | `401 ambiguous_credentials` |
 
 #### Residual risk
 
-- **A compromised BFF host** holds the private key, the client secret and
-  `NEXTAUTH_SECRET`. It can assert any user, admins included. This RFC does not
-  change that. Narrowing it means the gatekeeper issuing user sessions itself,
-  which is in *Alternatives considered*.
+- **A compromised BFF host** — DataMap's or DataAmazon's deployment — holds its
+  private key, its client secret and `NEXTAUTH_SECRET`. It can assert any
+  user, admins included. This RFC does not change that, and does not make one
+  deployment's compromise reach the other: each holds a different key pair
+  and a different client row. Narrowing it further means the gatekeeper
+  issuing user sessions itself, which is in *Alternatives considered*.
 - **The BFF is also the sign-in authority for ORCID.** It decides which ORCID iD
   signed in and asks the gatekeeper for that user, so even gatekeeper-issued
   sessions would trust the BFF for ORCID sign-in.
@@ -839,8 +917,8 @@ seeded rows as `CLAUDE.md` describes, with the PAT poll above.
   the BFF-to-gatekeeper traffic, until a `jti` store exists.
 - **A PAT is a bearer credential.** Whoever holds it is the user until it
   expires or is revoked; it is not bound to a machine or an address.
-- **Client-only routes stay reachable with the BFF secret alone:** `POST
-  /users`, the provider lookup, `/auth/*`, previews. The provider lookup still
+- **Client-only routes stay reachable with either BFF deployment's secret
+  alone:** `POST /users`, the provider lookup, `/auth/*`, previews. The provider lookup still
   returns a user's roles to a holder of that secret, and `POST /users` still
   creates accounts. RFC 009 PR A removes the roles from creation; rate limits
   and a narrower lookup response are follow-ups.
@@ -865,10 +943,12 @@ seeded rows as `CLAUDE.md` describes, with the PAT poll above.
   `sub`; one with no `X-User-Id` at all succeeds;
 - PATs: create (returned once, absent from the list), use alone on a user
   route, list, revoke then `401`; expired `401`; a read-only token on `PUT`
-  `403`; a token on `/clients`, `/users/{id}/roles`, `/users/{id}/tokens` and
-  `/internal/*` `403`; a role removed from the user is refused within the
-  reload; a disabled user's token `401`; a PAT plus `X-Api-Key` `401`; an admin
-  revokes another user's token;
+  `403`; a token on `/clients`, `/users/{id}/tokens` and `/internal/*` `403`
+  regardless of role; a non-admin's token on `/admin/*` and
+  `/users/{id}/roles` `403` from the route's own `authorize`, not from scope;
+  an admin's token reaches both; a role removed from the user is refused
+  within the reload; a disabled user's token `401`; a PAT plus `X-Api-Key`
+  `401`; an admin revokes another user's token;
 - `/api/openapi.json` declares the bearer scheme and no `X-User-Id` scheme;
 - the access log line carries the authorized user, `user_id_source` and
   `pat_id`, and no assertion or token text.
@@ -879,9 +959,11 @@ of the bare-header cases and has no token routes.
 **Unit (gatekeeper):** path normalization (trailing slash, query string,
 percent-encoding, `{name:path}` tenancy routes); skew boundaries; the principal
 for each of the three paths; `parse_user_header` reads the principal, not the
-header; PAT format, hashing and the `last_used_at` throttle; the per-token rate
-limit; the migration's name mapping never grants `admin`; `scope_pat` matches
-none of the routes it must exclude.
+header; PAT format, hashing and the `last_used_at` throttle; the migration's
+name mapping never grants `admin`; `scope_pat` matches exactly the routes
+listed in *Personal access tokens* — `/admin/*` and `/users/{id}/roles` are
+not among them, so a non-admin's PAT on either is refused by `authorize`, not
+by scope, and an admin's PAT passes both.
 
 **Webapp (Jest):** the interceptor signs with method and normalized path; no
 assertion for an empty user; the three hand-set headers get one; a verification
@@ -893,28 +975,28 @@ the token is shown once and cleared on close; the expiry choices; revoke.
 | PR | Repository | Content |
 |---|---|---|
 | 1 | gatekeeper | Migration (clients, keys, scopes), `Principal`, assertion verification, `X-User-Id` removed from `parse_user_header`, the TUS hook and the access log, claim route check, metrics and reasons, redaction, seed, integration suite signing in `HttpClient`, unit tests moved to the principal, `cryptography` dependency, runbook section 8 and the deploy SQL |
-| 2 | gatekeeper | Personal access tokens: table, bearer path in `authenticate`, `scope_pat`, token routes, rate limit, Activity events, seeded PAT and `CLAUDE.md` poll, integration tests |
+| 2 | gatekeeper | Personal access tokens: table, bearer path in `authenticate`, `scope_pat`, token routes, Activity events, seeded PAT and `CLAUDE.md` poll, integration tests |
 | 3 | gatekeeper | Swagger: bearer scheme, `X-User-Id` scheme removed |
-| 4 | webapp | Assertion interceptor in `lib/rpc.ts` (still sends `X-User-Id`), `jose`, settings, Jest tests |
+| 4 | webapp | Assertion interceptor in `lib/rpc.ts` (still sends `X-User-Id`), `jose`, settings, Jest tests. Deployed twice — to the DataMap and DataAmazon environments — with a key pair and `kid` of its own per deployment |
 | 5 | webapp | API tokens section in the profile |
 | 6 | webapp | Cleanup: `X-User-Id` no longer leaves the BFF or the uploader; tests and diagrams |
-| 7 | zipper | Own client, real callback route, credentials out of tracked config — when the zipper is deployed |
 
-The archivist needs no PR. PR 4 is deployed before PRs 1–3 reach production;
-1–3 deploy together; 5 and 6 deploy right after (*Rollout*). PRs 1–3 can be
-reviewed and merged in any order as long as they are not deployed before 4.
+The archivist needs no PR; the zipper is out of scope (see *Out of scope*). PR
+4 is deployed before PRs 1–3 reach production; 1–3 deploy together; 5 and 6
+deploy right after (*Rollout*). PRs 1–3 can be reviewed and merged in any
+order as long as they are not deployed before 4.
 
 ### Before the deploy
 
-- The production client rows are listed (names and keys only) and each is
-  mapped to a scope.
-- If the BFF and the archivist share a client, a second client is created and
-  the archivist moved to it first.
-- The zipper's tracked key is checked against every environment's `clients`
-  table.
-- Every external API user has been told the date and how to create a token.
-- The BFF key pair exists; the private key is in `frontend.env.sops` and PR 4
-  is deployed; the public-key SQL is ready in the runbook.
+- The production client rows are mapped to a scope, per *Existing direct API
+  clients*; the owner has confirmed each likely-stale row is actually unused
+  and signed off on disabling it.
+- The five personal-API-access holders — the four named people and Caio Maia —
+  have been told the date, that their client secret stops acting as a user,
+  and how to create a token.
+- Both deployments' key pairs exist: each private key is in its own
+  `frontend.env.sops` and PR 4 is deployed to both the DataMap and DataAmazon
+  environments; the public-key SQL for both is ready in the runbook.
 - Runbook section 8 rehearsed once in staging or locally.
 
 ## Alternatives considered
@@ -996,7 +1078,18 @@ and nothing about user impersonation.
 ## Out of scope
 
 - The admin screen for clients, scopes and keys (RFC 010).
-- A `jti` replay store.
+- **The zipper.** It is not deployed and this RFC changes nothing about it.
+  Its tracked config (`zipper/local_config.yml`, `zipper/staging_config.yml`)
+  commits a client key and secret; that key must never be enabled in any
+  environment, and it is not one of the eleven rows in *Existing direct API
+  clients* — none of them is the zipper's. When the zipper is deployed it
+  gets its own client, `scope_internal`, and a real callback route, as its
+  own change.
+- A `jti` replay store (see *Replay*).
+- Rate limiting personal access tokens, per-token or otherwise. `last_used_at`
+  and the `pat_id` on every access-log line and refusal already make heavy use
+  of a single token visible (*Metrics and logging*); a limiter is a follow-up
+  if that turns out not to be enough. The 365-day maximum expiry stays.
 - Rate limits on `POST /users` and `/users/providers/...`, and trimming the
   lookup's response.
 - **The rest of the TUS hook path.** The user now comes from the upload token
@@ -1011,31 +1104,8 @@ and nothing about user impersonation.
 
 ## Open questions
 
-- **Which client rows exist in production, and do the BFF and the archivist
-  share one?** The scope migration maps clients by name; if they share a row it
-  cannot scope either without splitting them first.
-- **Which external API clients exist today, who uses each, and how do we reach
-  them before the deploy?** Every one that sends `X-User-Id` breaks at the
-  deploy and must move to a PAT. If the answer is "none", the notice is a
-  line in the release notes.
-- **Should admins be able to create admin PATs?** The default here is no: a PAT
-  never reaches `/clients`, `/admin`, role changes or token administration,
-  whoever owns it. Allowing it means an `admin` flag on the token, a shorter
-  maximum expiry, and Activity alerts on its use.
-- **Is the zipper's tracked client key enabled anywhere?** It is in
-  `zipper/local_config.yml` and `zipper/staging_config.yml`. If it matches a
-  production client, that client is disabled before this ships.
-- **`/health-check/dependencies`** is protected by `authorize`, so an operator
-  reaches it with a client and a user id. After this they need a PAT, which
-  works only if the route is outside the admin exclusions, or a client scope
-  (`scope_ops`) instead of a user role. Which?
-- **Are 365 days and 600 requests a minute the right PAT limits** for research
-  scripts that page through datasets overnight?
-- **Does the BFF reach the gatekeeper through the internal network or through
-  the public `/api/v1`?** It changes who could capture an assertion in transit,
-  and so how much a `jti` store is worth.
-- **Do we want the `jti` store in PR 1** rather than later? One insert per user
-  request against the cost of a one-minute replay window.
-- **Should `GET /users/providers/...` and `POST /users` move under `/auth`**
-  so that "client-only, pre-session" routes have one prefix that a scope can
-  name?
+- **Are the four likely-stale client rows actually unused?** The proposal in
+  *Existing direct API clients* is to disable them at the deploy. The
+  `clients` table has no `last_used` column, so this is checked in the access
+  log and `datamap_requests_total` by name, not a column; the owner confirms
+  each row individually before it is disabled, not after.
