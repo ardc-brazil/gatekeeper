@@ -119,6 +119,8 @@ class TestValidation(unittest.TestCase):
             "lba_legacy",
             "public",
             "",
+            "atto\n",
+            "atto\r",
         ):
             with self.subTest(invalid=invalid):
                 self.assertFalse(namespace_is_valid(invalid))
