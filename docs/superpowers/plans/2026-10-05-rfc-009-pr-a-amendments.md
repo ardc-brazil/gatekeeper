@@ -9,6 +9,10 @@ Decided by the lead after the plan was written. Implementers read this together 
 - Ownership/inviter checks stay in the services.
 - Tests: an owner with only `datasets_write` withdraws an invitation (204) and revokes a share (204); a non-owner with `datasets_write` gets the service's refusal. Replace any test that pinned the 401.
 - Applies to: the casbin/schema task (Task 3) and the invitations task (Task 12) + Task 16 integration.
+- **As shipped** (supersedes the `.*` patterns above): the rows are tightened to concrete ids, and a third row covers anonymous-link revocation, which neither earlier row reached. All three are `datasets_write`, `DELETE`, `allow`:
+  - `/api/v1/datasets/[0-9a-fA-F-]{36}/share/(permissions|invitations)/[0-9a-fA-F-]{36}$`
+  - `/api/v1/datasets/[0-9a-fA-F-]{36}/tenancy-invitations/[0-9a-fA-F-]{36}$`
+  - `/api/v1/datasets/[0-9a-fA-F-]{36}/anonymous-links/[0-9a-fA-F-]{36}$`
 
 ## A2. Creating a dataset requires membership of the target tenancy
 `POST /datasets` never checked that the caller belongs to the target tenancy; with `datasets_write` for everyone, any account could create in any tenancy.
