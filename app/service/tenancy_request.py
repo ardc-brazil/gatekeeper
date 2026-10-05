@@ -168,6 +168,9 @@ class TenancyRequestService:
         if (tenancy is None) == (new_tenancy is None):
             raise IllegalStateException("invalid_request")
         request = self._pending(request_id)
+        requester = self._users.fetch_by_id(id=request.user_id, is_enabled=True)
+        if requester is None:
+            raise NotFoundException("no_account")
         if tenancy is not None:
             path, display_name = tenancy.strip(), None
             self._membership_service.require_open_for_members(path)
@@ -177,8 +180,7 @@ class TenancyRequestService:
             path, display_name = self._membership_service.check_new_tenancy(
                 new_tenancy.display_name, new_tenancy.namespace
             )
-            requester = self._users.fetch_any_by_id(request.user_id)
-            if requester is None or requester.email_verified_at is None:
+            if requester.email_verified_at is None:
                 raise ConflictException("requester_email_unverified")
         approved, event_id = self._requests.approve(
             request_id, admin_id, path, display_name, self._clock()

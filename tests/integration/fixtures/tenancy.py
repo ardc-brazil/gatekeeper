@@ -194,3 +194,22 @@ def request_access(
         json={"tenancy_name": name, "reason": reason},
         headers=as_user(user_id),
     )
+
+
+def pending_invitation(http_client: HttpClient, tenancy: str, invitee_id: str) -> str:
+    inviter = new_account(http_client, name=unique("Inviter"))
+    join(inviter["id"], tenancy)
+    dataset = create_dataset(http_client, inviter["id"], tenancy)
+    response = http_client.post(
+        f"/datasets/{dataset['id']}/tenancy-invitations",
+        json={"user_id": invitee_id},
+        headers=as_user(inviter["id"], tenancy),
+    )
+    assert_status_code(response, 201)
+    return response.json()["id"]
+
+
+def invitation_status(invitation_id: str) -> str:
+    return execute(
+        f"SELECT status FROM tenancy_invitations WHERE id = '{invitation_id}'"
+    )

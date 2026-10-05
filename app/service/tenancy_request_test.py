@@ -196,6 +196,7 @@ class AdminQueueTestCase(RequestServiceTestCase):
             self.requester.id: self.requester,
         }
         self.users.fetch_any_by_id.side_effect = people.get
+        self.users.fetch_by_id.side_effect = lambda id, is_enabled=True: people.get(id)
         self.tenancies.list_all.return_value = [
             tenancy_row(ATTO, "ATTO"),
             tenancy_row(DEFAULT_TENANCY, "Public"),
@@ -400,6 +401,13 @@ class TestApprove(AdminQueueTestCase):
 
         self.assertEqual(self.code(ATTO), "already_member")
         self.memberships.is_member.assert_called_once_with(self.requester.id, ATTO)
+
+    def test_a_disabled_or_deleted_requester_has_no_account(self):
+        self.users.fetch_by_id.side_effect = lambda id, is_enabled=True: None
+
+        self.assertEqual(self.code(ATTO), "no_account")
+        self.users.fetch_by_id.assert_called_with(id=self.requester.id, is_enabled=True)
+        self.requests.approve.assert_not_called()
 
     def test_a_new_tenancy_needs_a_confirmed_email(self):
         self.membership_service.check_new_tenancy.return_value = (

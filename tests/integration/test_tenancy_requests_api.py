@@ -1,6 +1,11 @@
 import pytest
 
-from tests.integration.fixtures.account import ADMIN_ADDRESS, newest_text, outbox
+from tests.integration.fixtures.account import (
+    ADMIN_ADDRESS,
+    disable,
+    newest_text,
+    outbox,
+)
 from tests.integration.fixtures.sharing import random_orcid
 from tests.integration.fixtures.tenancy import (
     ADMIN_ID,
@@ -12,9 +17,11 @@ from tests.integration.fixtures.tenancy import (
     display_name,
     event_types,
     events,
+    invitation_status,
     join,
     new_account,
     new_tenancy,
+    pending_invitation,
     request_access,
     tenancies_of,
     unique,
@@ -294,6 +301,46 @@ class TestApproving:
             "request_not_pending",
         )
         _refused(_decline(http_client, request["id"]), 409, "request_not_pending")
+
+    def test_approving_withdraws_a_pending_invitation_to_the_same_tenancy(
+        self, http_client
+    ):
+        tenancy = new_tenancy(display_name=unique("Both Ways"))
+        account = new_account(http_client)
+        invitation_id = pending_invitation(http_client, tenancy, account["id"])
+        request = request_access(
+            http_client, account["id"], name=display_name(tenancy)
+        ).json()
+
+        approved = _approve(http_client, request["id"], {"tenancy": tenancy})
+
+        assert_status_code(approved, 200)
+        assert invitation_status(invitation_id) == "withdrawn"
+        (withdrawn,) = events(
+            f"invitation_id = '{invitation_id}' "
+            "AND event_type = 'invitation_withdrawn'"
+        )
+        assert withdrawn["actor_id"] == ADMIN_ID
+
+    def test_a_disabled_requester_cannot_be_approved(self, http_client):
+        tenancy = new_tenancy(display_name=unique("Disabled"))
+        account = new_account(http_client)
+        request = request_access(http_client, account["id"]).json()
+        disable(http_client, account["id"])
+
+        _refused(
+            _approve(http_client, request["id"], {"tenancy": tenancy}),
+            404,
+            "no_account",
+        )
+        assert (
+            execute(f"SELECT status FROM tenancy_requests WHERE id = '{request['id']}'")
+            == "pending"
+        )
+        assert not execute(
+            "SELECT 1 FROM users_tenancies "
+            f"WHERE user_id = '{account['id']}' AND tenancy = '{tenancy}'"
+        )
 
     def test_into_a_new_tenancy(self, http_client):
         account = new_account(http_client, confirmed=True)

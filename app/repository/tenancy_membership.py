@@ -30,6 +30,48 @@ def insert_membership(session: Session, user_id: UUID, tenancy: str) -> bool:
     return result.rowcount == 1
 
 
+def join_tenancy(
+    session: Session,
+    tenancy: str,
+    user_id: UUID,
+    actor_id: UUID,
+    request_id: UUID | None = None,
+) -> UUID | None:
+    if not insert_membership(session, user_id, tenancy):
+        return None
+    added = add_event(
+        session,
+        tenancy=tenancy,
+        event_type=TenancyEventType.MEMBER_ADDED,
+        user_id=user_id,
+        actor_id=actor_id,
+        request_id=request_id,
+    )
+    pending = (
+        session.query(TenancyInvitation)
+        .filter(
+            TenancyInvitation.tenancy == tenancy,
+            TenancyInvitation.user_id == user_id,
+            TenancyInvitation.status == TenancyInvitationStatus.PENDING,
+        )
+        .with_for_update()
+        .all()
+    )
+    for invitation in pending:
+        invitation.status = TenancyInvitationStatus.WITHDRAWN
+        invitation.closed_by = actor_id
+        invitation.closed_at = func.now()
+        add_event(
+            session,
+            tenancy=tenancy,
+            event_type=TenancyEventType.INVITATION_WITHDRAWN,
+            user_id=user_id,
+            actor_id=actor_id,
+            invitation_id=invitation.id,
+        )
+    return added.id
+
+
 class TenancyMembershipRepository:
     def __init__(
         self, session_factory: Callable[..., AbstractContextManager[Session]]
@@ -121,16 +163,9 @@ class TenancyMembershipRepository:
 
     def add(self, tenancy: str, user_id: UUID, actor_id: UUID) -> UUID | None:
         with self._session_factory() as session:
-            if not insert_membership(session, user_id, tenancy):
+            event_id = join_tenancy(session, tenancy, user_id, actor_id)
+            if event_id is None:
                 return None
-            event = add_event(
-                session,
-                tenancy=tenancy,
-                event_type=TenancyEventType.MEMBER_ADDED,
-                user_id=user_id,
-                actor_id=actor_id,
-            )
-            event_id = event.id
             session.commit()
             return event_id
 

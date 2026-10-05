@@ -14,7 +14,7 @@ from app.model.db.user import User
 from app.model.tenancy import TenancyEventType, TenancyRequestStatus
 from app.repository.integrity import violates
 from app.repository.tenancy_event import add_event
-from app.repository.tenancy_membership import insert_membership
+from app.repository.tenancy_membership import join_tenancy
 from app.repository.user import user_matches
 
 CLOSED = (TenancyRequestStatus.APPROVED, TenancyRequestStatus.DECLINED)
@@ -198,17 +198,11 @@ class TenancyRequestRepository:
                         actor_id=decided_by,
                         request_id=request.id,
                     )
-                if not insert_membership(session, request.user_id, tenancy):
-                    raise ConflictException("already_member")
-                member_added = add_event(
-                    session,
-                    tenancy=tenancy,
-                    event_type=TenancyEventType.MEMBER_ADDED,
-                    user_id=request.user_id,
-                    actor_id=decided_by,
-                    request_id=request.id,
+                event_id = join_tenancy(
+                    session, tenancy, request.user_id, decided_by, request.id
                 )
-                event_id = member_added.id
+                if event_id is None:
+                    raise ConflictException("already_member")
                 request.status = TenancyRequestStatus.APPROVED
                 request.tenancy = tenancy
                 request.created_tenancy = display_name is not None

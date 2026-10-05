@@ -15,9 +15,11 @@ from tests.integration.fixtures.tenancy import (
     create_dataset,
     display_name,
     events,
+    invitation_status,
     join,
     new_account,
     new_tenancy,
+    pending_invitation,
     set_roles,
     tenancies_of,
     unique,
@@ -215,6 +217,28 @@ class TestMembers:
         assert listed["members"]["total_count"] == 1
         assert listed["members"]["items"][0]["id"] == account["id"]
         assert listed["invitations"] == []
+
+    def test_adding_someone_withdraws_their_pending_invitation(self, http_client):
+        tenancy = new_tenancy(display_name=unique("Invited"))
+        account = new_account(http_client)
+        invitation_id = pending_invitation(http_client, tenancy, account["id"])
+
+        assert_status_code(_add(http_client, tenancy, account["id"]), 201)
+
+        assert invitation_status(invitation_id) == "withdrawn"
+        (withdrawn,) = events(
+            f"invitation_id = '{invitation_id}' "
+            "AND event_type = 'invitation_withdrawn'"
+        )
+        assert withdrawn["actor_id"] == ADMIN_ID
+        listed = http_client.get(_members_path(tenancy), headers=admin()).json()
+        assert listed["invitations"] == []
+        mine = http_client.get(
+            f"/users/{account['id']}/tenancy-invitations",
+            headers=as_user(account["id"]),
+        )
+        assert_status_code(mine, 200)
+        assert mine.json() == []
 
     def test_adding_refusals(self, http_client):
         tenancy = new_tenancy()
