@@ -65,7 +65,6 @@ class AdminServiceTestCase(unittest.TestCase):
             membership_service=self.membership_service,
             invitations=self.invitations,
             users=self.users,
-            clock=lambda: NOW,
         )
 
 
@@ -215,6 +214,8 @@ class TestAddAndRemove(AdminServiceTestCase):
         self.memberships.is_member.return_value = False
         event_id = uuid4()
         self.memberships.add.return_value = event_id
+        added = NOW - timedelta(seconds=2)
+        self.memberships.added_at.return_value = {self.member.id: added}
 
         view = self.service.add(ATTO, self.member.id, self.admin.id)
 
@@ -226,7 +227,7 @@ class TestAddAndRemove(AdminServiceTestCase):
             self.member.id, self.admin.id, ATTO, event_id
         )
         self.assertEqual(
-            (view.id, view.since, view.invited_by), (self.member.id, NOW, None)
+            (view.id, view.since, view.invited_by), (self.member.id, added, None)
         )
 
     def test_adding_refusals(self):

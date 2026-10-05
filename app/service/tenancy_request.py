@@ -46,6 +46,10 @@ LATEST = 5
 MAX_PAGE = 100
 
 
+def _kind(request, index: dict[str, TenancySummary]) -> str:
+    return "join" if match_key(request.requested_name) in index else "new"
+
+
 class TenancyRequestService:
     def __init__(
         self,
@@ -95,7 +99,7 @@ class TenancyRequestService:
     def counts(self) -> RequestCounts:
         index = self._suggestion_index()
         pending = self._requests.list_pending(None)
-        join = sum(1 for r in pending if match_key(r.requested_name) in index)
+        join = sum(1 for r in pending if _kind(r, index) == "join")
         return RequestCounts(
             open=len(pending),
             join=join,
@@ -123,12 +127,14 @@ class TenancyRequestService:
                 limit=limit,
                 offset=offset,
             )
-        views = [self._admin_view(r, index) for r in self._requests.list_pending(term)]
-        if kind is not None:
-            views = [v for v in views if v.kind == kind]
+        rows = [
+            r
+            for r in self._requests.list_pending(term)
+            if kind is None or _kind(r, index) == kind
+        ]
         return Page(
-            items=views[offset : offset + limit],
-            total_count=len(views),
+            items=[self._admin_view(r, index) for r in rows[offset : offset + limit]],
+            total_count=len(rows),
             limit=limit,
             offset=offset,
         )
@@ -251,7 +257,7 @@ class TenancyRequestService:
             requested_name=request.requested_name,
             reason=request.reason,
             status=TenancyRequestStatus(request.status).value,
-            kind="join" if suggestion else "new",
+            kind=_kind(request, index),
             suggested_tenancy=suggestion,
             created_at=request.created_at,
             tenancy=self._membership_service.summary(request.tenancy)

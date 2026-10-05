@@ -21,14 +21,9 @@ from app.repository.email import EmailRepository
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.tenancy_event import TenancyEventRepository
+from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.tenancy_request import TenancyRequestRepository
-from app.repository.tenancy_invitation import TenancyInvitationRepository
-from app.service.tenancy_invitation import TenancyInvitationService
-from app.service.tenancy_admin import TenancyAdminService
-from app.service.tenancy_request import TenancyRequestService
-from app.service.tenancy_membership import TenancyMembershipService
-from app.service.tenancy_notifier import TenancyNotifier
 from app.repository.user import UserRepository
 
 from app.service.account import AccountService
@@ -48,6 +43,11 @@ from app.service.notification import EmbargoNotificationService
 from app.service.password import PasswordHasher
 from app.service.permission import PermissionService
 from app.service.share import ShareService
+from app.service.tenancy_admin import TenancyAdminService
+from app.service.tenancy_invitation import TenancyInvitationService
+from app.service.tenancy_membership import TenancyMembershipService
+from app.service.tenancy_notifier import TenancyNotifier
+from app.service.tenancy_request import TenancyRequestService
 from app.service.tus import TusService
 from app.service.user import UserService
 

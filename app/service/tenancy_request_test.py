@@ -246,6 +246,17 @@ class TestQueue(AdminQueueTestCase):
         self.assertEqual([r.requested_name for r in page.items], ["Another new"])
         self.assertEqual((page.limit, page.offset), (1, 1))
 
+    def test_only_the_rows_on_the_page_are_built(self):
+        self.requests.list_pending.return_value = [
+            self.pending("ATTO"),
+            self.pending("New one"),
+            self.pending("Another new"),
+        ]
+
+        self.service.queue("open", "new", None, 1, 1)
+
+        self.users.fetch_any_by_id.assert_called_once_with(self.requester.id)
+
     def test_closed_is_paged_by_the_repository_and_ignores_kind(self):
         decided = request_row(
             self.requester.id,

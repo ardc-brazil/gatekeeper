@@ -130,7 +130,7 @@ class TenancyRequestRepository:
         with self._session_factory() as session:
             return (
                 self._queue(session, term, [TenancyRequestStatus.PENDING])
-                .order_by(TenancyRequest.created_at.asc())
+                .order_by(TenancyRequest.created_at.asc(), TenancyRequest.id.asc())
                 .all()
             )
 

@@ -95,7 +95,7 @@ class TenancyMembershipRepository:
                     TenancyInvitation.status == TenancyInvitationStatus.ACCEPTED,
                     TenancyInvitation.user_id.in_(user_ids),
                 )
-                .order_by(TenancyInvitation.closed_at.asc())
+                .order_by(TenancyInvitation.closed_at.asc().nullsfirst())
                 .all()
             )
             return {

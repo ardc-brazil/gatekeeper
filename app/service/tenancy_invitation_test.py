@@ -407,3 +407,19 @@ class TestShareAdditions(InvitationServiceTestCase):
         self.assertFalse(
             self.service.may_invite(self.dataset, AccessLevel.OWNER, CALLER)
         )
+
+    def test_a_disabled_production_tenancy_cannot_be_invited_to(self):
+        self.tenancies.fetch_any.side_effect = lambda path: SimpleNamespace(
+            name=path, display_name=None, is_enabled=False
+        )
+
+        self.assertFalse(
+            self.service.may_invite(self.dataset, AccessLevel.OWNER, CALLER)
+        )
+
+    def test_an_owner_outside_the_tenancy_may_not_invite(self):
+        self.members = set()
+
+        self.assertFalse(
+            self.service.may_invite(self.dataset, AccessLevel.OWNER, CALLER)
+        )

@@ -153,3 +153,11 @@ class TestAnnounceAccess(MembershipServiceTestCase):
         self.assertEqual(
             self.notifier.access_granted.call_args.args[1], "An administrator"
         )
+
+    def test_nobody_is_told_when_the_user_no_longer_exists(self):
+        self.users.fetch_any_by_id.return_value = None
+
+        self.service.announce_access(uuid4(), uuid4(), ATTO, uuid4())
+
+        self.notifier.access_granted.assert_not_called()
+        self.tenancies.count_datasets.assert_not_called()

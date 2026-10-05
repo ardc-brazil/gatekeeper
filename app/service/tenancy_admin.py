@@ -1,11 +1,10 @@
 from datetime import datetime
-from typing import Callable, List
+from typing import List
 from uuid import UUID
 
 from app.exception.conflict import ConflictException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
-from app.model.dataset_access import utcnow
 from app.model.tenancy import (
     display_name_of,
     is_default,
@@ -41,14 +40,12 @@ class TenancyAdminService:
         membership_service: TenancyMembershipService,
         invitations: TenancyInvitationRepository,
         users: UserRepository,
-        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._tenancies = tenancies
         self._memberships = memberships
         self._membership_service = membership_service
         self._invitations = invitations
         self._users = users
-        self._clock = clock
 
     def list(self) -> List[AdminTenancyView]:
         members = self._tenancies.member_counts()
@@ -114,9 +111,7 @@ class TenancyAdminService:
             raise NotFoundException("member_not_found")
         in_tenancy, shared, owned = self._memberships.removal_counts(path, user_id)
         return RemovalImpactView(
-            member_since=self._memberships.added_at(path, [user_id]).get(
-                user_id, user.created_at
-            ),
+            member_since=self._member_since(path, user),
             datasets_in_tenancy=in_tenancy,
             shared_with_user=shared,
             owned_by_user=owned,
@@ -137,9 +132,12 @@ class TenancyAdminService:
             id=user.id,
             name=user.name,
             email=user.email,
-            since=self._clock(),
+            since=self._member_since(path, user),
             invited_by=None,
         )
+
+    def _member_since(self, path: str, user) -> datetime:
+        return self._memberships.added_at(path, [user.id]).get(user.id, user.created_at)
 
     def remove(self, path: str, user_id: UUID, admin_id: UUID) -> None:
         self._existing(path)

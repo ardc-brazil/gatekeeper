@@ -22,8 +22,8 @@ from app.controller.v1.tenancy.access_resource import (
     UserBriefResponse,
     UserIdBody,
 )
-from app.service.tenancy_admin import TenancyAdminService
 from app.model.tenancy_access import NewTenancy
+from app.service.tenancy_admin import TenancyAdminService
 from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_request import TenancyRequestService
 

@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
+from app.model.tenancy_access import DatasetTenancyInvitationView
+
 
 @dataclass
 class ShareUser:
@@ -66,7 +68,9 @@ class ShareState:
     invitations: list[InvitationView] = field(default_factory=list)
     anonymous_links: list[AnonymousLinkView] = field(default_factory=list)
     tenancy: TenancyAccess | None = None
-    tenancy_invitations: list = field(default_factory=list)
+    tenancy_invitations: list[DatasetTenancyInvitationView] = field(
+        default_factory=list
+    )
     can_invite_to_tenancy: bool = False
 
 
