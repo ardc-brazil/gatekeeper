@@ -188,6 +188,31 @@ class TestTenancyCRUDOperations:
         assert_status_code(response, 200)
         # PUT returns empty response body
 
+    def test_renaming_onto_an_existing_path_keeps_the_legacy_conflict(
+        self, http_client, valid_headers
+    ):
+        suffix = str(uuid.uuid4())[:8]
+        source = f"datamap/production/rename-{suffix}"
+        taken = f"datamap/production/taken-{suffix}"
+        for name in (source, taken):
+            created = http_client.post(
+                "/tenancies/",
+                json={"name": name, "is_enabled": True},
+                headers=valid_headers,
+            )
+            assert_status_code(created, 201)
+
+        response = http_client.put(
+            f"/tenancies/{source}",
+            json={"name": taken, "is_enabled": True},
+            headers=valid_headers,
+        )
+
+        assert_status_code(response, 409)
+        assert_response_matches_dict(
+            response, {"detail": f"tenancy_already_exists: {taken}"}
+        )
+
     def test_update_tenancy_not_found_404(self, http_client, valid_headers):
         """Test updating a non-existent tenancy returns 404."""
         # Arrange

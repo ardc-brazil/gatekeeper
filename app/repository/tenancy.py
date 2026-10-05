@@ -54,6 +54,8 @@ class TenancyRepository:
             return session.query(Tenancy).all()
 
     def upsert(self, tenancy: Tenancy) -> Tenancy:
+        # Read before the session: after a failed commit the instance is expired.
+        name = tenancy.name
         try:
             with self._session_factory() as session:
                 session.add(tenancy)
@@ -65,7 +67,7 @@ class TenancyRepository:
                 raise ConflictException(
                     NEW_TENANCY_CONFLICTS[DISPLAY_NAME_INDEX]
                 ) from error
-            raise ConflictException(f"tenancy_already_exists: {tenancy.name}")
+            raise ConflictException(f"tenancy_already_exists: {name}") from error
 
     def fetch_any(self, tenancy: str) -> Tenancy | None:
         with self._session_factory() as session:
