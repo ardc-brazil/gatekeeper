@@ -360,6 +360,7 @@ class TestWorkspaceRoutes(SelfRoutesTestCase):
             tenancy_member=False,
             invitation_pending=False,
             can_invite=True,
+            datasets=12,
         )
 
         response = self.client.get(
@@ -369,6 +370,7 @@ class TestWorkspaceRoutes(SelfRoutesTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["user"]["email"], None)
         self.assertTrue(response.json()["can_invite"])
+        self.assertEqual(response.json()["datasets"], 12)
         self.invitations.lookup.assert_called_once_with(
             self.user_id, ATTO, "0000-0002-1825-0097"
         )
@@ -390,3 +392,50 @@ class TestWorkspaceRoutes(SelfRoutesTestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json(), {"detail": "tenancy_not_found"})
+
+    def test_a_namespace_named_like_a_route_suffix_is_routed_by_the_last_segment(
+        self,
+    ):
+        self.invitations.members.return_value = Page(
+            items=[], total_count=0, limit=50, offset=0
+        )
+        self.invitations.pending_in.return_value = []
+        self.invitations.lookup.return_value = InviteeLookupView(
+            user=UserBrief(id=uuid4(), name="Bruna", email=None),
+            tenancy_member=False,
+            invitation_pending=False,
+            can_invite=True,
+            datasets=0,
+        )
+        users = f"/v1/users/{self.user_id}/tenancies"
+
+        for namespace in ("members", "invitations", "lookup"):
+            path = f"datamap/production/{namespace}"
+            with self.subTest(namespace=namespace):
+                self.invitations.reset_mock()
+
+                members = self.client.get(f"{users}/{path}/members")
+                pending = self.client.get(f"{users}/{path}/invitations")
+                invitation_id = uuid4()
+                withdrawn = self.client.delete(
+                    f"{users}/{path}/invitations/{invitation_id}"
+                )
+
+                found = self.client.get(
+                    f"{users}/{path}/lookup", params={"value": "bruna@usp.br"}
+                )
+
+                self.assertEqual(
+                    [r.status_code for r in (members, pending, withdrawn, found)],
+                    [200, 200, 204, 200],
+                )
+                self.invitations.members.assert_called_once_with(
+                    self.user_id, path, 50, 0
+                )
+                self.invitations.pending_in.assert_called_once_with(self.user_id, path)
+                self.invitations.withdraw.assert_called_once_with(
+                    self.user_id, path, invitation_id
+                )
+                self.invitations.lookup.assert_called_once_with(
+                    self.user_id, path, "bruna@usp.br"
+                )

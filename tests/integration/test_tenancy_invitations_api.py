@@ -284,11 +284,16 @@ class TestInviting:
             assert_status_code(response, 401)
         assert _status_of_any(world.tenancy) == ""
 
-    def test_an_admin_who_is_not_a_member_is_let_through(self, http_client, world):
-        response = invite(http_client, ADMIN_ID, world.tenancy, world.invitee["id"])
+    def test_an_admin_who_is_not_a_member_gets_tenancy_not_found(
+        self, http_client, world
+    ):
+        responses = _every_route(
+            http_client, ADMIN_ID, world.tenancy, world.invitee["id"]
+        )
 
-        assert_status_code(response, 201)
-        assert_status_code(_members(http_client, ADMIN_ID, world.tenancy), 200)
+        for response in responses:
+            refused(response, 404, "tenancy_not_found")
+        assert _status_of_any(world.tenancy) == ""
 
 
 class TestTheMembersPage:
@@ -363,6 +368,8 @@ class TestLookup:
         )
         caller, tenancy = world.member["id"], world.tenancy
         email = world.invitee["email"]
+        create_dataset(http_client, caller, tenancy)
+        create_dataset(http_client, caller, tenancy)
 
         by_email = _lookup(http_client, caller, tenancy, email.upper())
         by_orcid = _lookup(http_client, caller, tenancy, orcid)
@@ -381,6 +388,7 @@ class TestLookup:
             "tenancy_member": False,
             "invitation_pending": False,
             "can_invite": True,
+            "datasets": 2,
         }
         assert_status_code(by_orcid, 200)
         assert by_orcid.json()["user"] == {

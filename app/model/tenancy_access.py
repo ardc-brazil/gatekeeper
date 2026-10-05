@@ -119,6 +119,7 @@ class InviteeLookupView:
     tenancy_member: bool
     invitation_pending: bool
     can_invite: bool
+    datasets: int
 
 
 @dataclass

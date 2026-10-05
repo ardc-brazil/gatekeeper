@@ -425,7 +425,6 @@ class Container(containers.DeclarativeContainer):
         membership_service=tenancy_membership_service,
         tenancies=tenancy_repository,
         users=user_repository,
-        user_service=user_service,
         notifier=tenancy_notifier,
     )
 

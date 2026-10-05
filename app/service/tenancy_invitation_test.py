@@ -1,3 +1,4 @@
+import inspect
 import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -20,7 +21,6 @@ from app.repository.user import UserRepository
 from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_notifier import TenancyNotifier
-from app.service.user import UserService
 
 NOW = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 ATTO = "datamap/production/atto"
@@ -60,8 +60,6 @@ class InvitationServiceTestCase(unittest.TestCase):
         )
         self.tenancies.count_datasets.return_value = 12
         self.users = Mock(spec=UserRepository)
-        self.user_service = Mock(spec=UserService)
-        self.user_service.roles_of.return_value = ["datasets_write"]
         self.notifier = Mock(spec=TenancyNotifier)
         self.caller = SimpleNamespace(
             id=CALLER, name="Alan Calheiros", email="alan@usp.br"
@@ -89,15 +87,11 @@ class InvitationServiceTestCase(unittest.TestCase):
             membership_service=self.membership_service,
             tenancies=self.tenancies,
             users=self.users,
-            user_service=self.user_service,
             notifier=self.notifier,
         )
 
     def outsider(self) -> None:
         self.members = set()
-
-    def admin(self) -> None:
-        self.user_service.roles_of.return_value = ["admin"]
 
 
 class TestWhoReachesTheWorkspace(InvitationServiceTestCase):
@@ -137,19 +131,17 @@ class TestWhoReachesTheWorkspace(InvitationServiceTestCase):
                     self.assertEqual(str(raised.exception), code)
         self.invitations.create.assert_not_called()
 
-    def test_an_admin_who_is_not_a_member_is_let_through(self):
+    def test_an_admin_who_is_not_a_member_gets_tenancy_not_found(self):
         self.outsider()
-        self.admin()
 
-        self.service.invite(CALLER, ATTO, self.invitee.id)
+        with self.assertRaises(NotFoundException) as raised:
+            self.service.invite(CALLER, ATTO, self.invitee.id)
 
-        self.invitations.create.assert_called_once_with(ATTO, self.invitee.id, CALLER)
-        self.membership_service.require_open_for_members.assert_called_once_with(ATTO)
-
-    def test_a_member_is_not_asked_for_roles(self):
-        self.service.pending_in(CALLER, ATTO)
-
-        self.user_service.roles_of.assert_not_called()
+        self.assertEqual(str(raised.exception), "tenancy_not_found")
+        self.assertNotIn(
+            "user_service", inspect.signature(TenancyInvitationService).parameters
+        )
+        self.invitations.create.assert_not_called()
 
 
 class TestMembers(InvitationServiceTestCase):
@@ -265,6 +257,8 @@ class TestLookup(InvitationServiceTestCase):
         self.assertFalse(found.tenancy_member)
         self.assertFalse(found.invitation_pending)
         self.assertTrue(found.can_invite)
+        self.assertEqual(found.datasets, 12)
+        self.tenancies.count_datasets.assert_called_once_with(ATTO)
 
     def test_an_orcid_is_looked_up_as_a_provider(self):
         self.users.fetch_by_provider.return_value = self.invitee

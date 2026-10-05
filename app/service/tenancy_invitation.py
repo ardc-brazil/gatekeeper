@@ -21,7 +21,6 @@ from app.model.tenancy_access import (
     WorkspaceInvitationView,
     WorkspaceMemberView,
 )
-from app.model.user import is_admin
 from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
@@ -33,7 +32,6 @@ from app.service.share_identity import (
 )
 from app.service.tenancy_membership import TenancyMembershipService, require_page
 from app.service.tenancy_notifier import TenancyNotifier, after_commit
-from app.service.user import UserService
 from app.service.user_refs import orcid_of, user_brief, user_ref
 
 PENDING = TenancyInvitationStatus.PENDING
@@ -47,7 +45,6 @@ class TenancyInvitationService:
         membership_service: TenancyMembershipService,
         tenancies: TenancyRepository,
         users: UserRepository,
-        user_service: UserService,
         notifier: TenancyNotifier,
     ) -> None:
         self._invitations = invitations
@@ -55,7 +52,6 @@ class TenancyInvitationService:
         self._membership_service = membership_service
         self._tenancies = tenancies
         self._users = users
-        self._user_service = user_service
         self._notifier = notifier
         self._logger = logging.getLogger("service:TenancyInvitationService")
 
@@ -110,6 +106,7 @@ class TenancyInvitationService:
             tenancy_member=member,
             invitation_pending=pending,
             can_invite=not member and not pending,
+            datasets=self._tenancies.count_datasets(tenancy),
         )
 
     def invite(
@@ -182,9 +179,7 @@ class TenancyInvitationService:
         self._close(invitation.id, TenancyInvitationStatus.DECLINED, user_id)
 
     def _require_workspace(self, user_id: UUID, tenancy: str) -> None:
-        if not self._memberships.is_member(user_id, tenancy) and not is_admin(
-            self._user_service.roles_of(user_id)
-        ):
+        if not self._memberships.is_member(user_id, tenancy):
             raise NotFoundException("tenancy_not_found")
         self._membership_service.require_open_for_members(tenancy)
 
