@@ -132,7 +132,7 @@ class TestOwnerName(unittest.TestCase):
         )
         self.owner_id = uuid4()
         self.repository.fetch.return_value = SimpleNamespace(
-            owner_id=self.owner_id, members_can_edit=True
+            owner_id=self.owner_id, tenancy="t", members_can_edit=True
         )
         self.service._determine_tenancies = Mock(return_value=["t"])
         self.service._adapt_dataset = Mock(

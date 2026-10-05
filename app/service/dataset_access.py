@@ -6,6 +6,7 @@ from app.exception.not_found import NotFoundException
 from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.dataset_access import AccessLevel, DatasetAccess, DatasetAction, utcnow
 from app.model.embargo import Embargo, embargo_active
+from app.model.tenancy import DEFAULT_TENANCY
 from app.repository.permission import PermissionRepository
 from app.service.user import UserService
 
@@ -34,8 +35,7 @@ _OWNER_ONLY_ACTIONS = frozenset(
 
 
 def allows_member_edits(dataset: DatasetDBModel) -> bool:
-    # None is an unflushed row whose column default is true, not a read-only one.
-    return dataset.members_can_edit is not False
+    return dataset.tenancy != DEFAULT_TENANCY and bool(dataset.members_can_edit)
 
 
 class DatasetAccessService:

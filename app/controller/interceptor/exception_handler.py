@@ -35,7 +35,7 @@ async def unauthorized_exception_handler(request: Request, exc: UnauthorizedExce
 
 async def forbidden_exception_handler(request: Request, exc: ForbiddenException):
     logger.info(f"Forbidden exception: {exc}")
-    return JSONResponse(status_code=403, content={"detail": "forbidden"})
+    return JSONResponse(status_code=403, content={"detail": exc.detail})
 
 
 async def too_many_requests_exception_handler(

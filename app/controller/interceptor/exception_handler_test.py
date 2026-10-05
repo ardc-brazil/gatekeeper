@@ -11,7 +11,7 @@ from app.controller.interceptor.exception_handler import (
     generic_exception_handler,
 )
 from app.exception.bad_request import BadRequestException, ErrorDetails
-from app.exception.forbidden import ForbiddenException
+from app.exception.forbidden import ForbiddenException, NotAMemberOfTenancyException
 from app.exception.too_many_requests import TooManyRequestsException
 
 
@@ -96,6 +96,19 @@ class TestForbiddenHandler(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json(), {"detail": "forbidden"})
+
+    def test_a_caller_outside_the_tenancy_is_told_why(self):
+        app = FastAPI()
+        setup.setup_error_handlers(app)
+
+        @app.post("/datasets")
+        def create():
+            raise NotAMemberOfTenancyException("user x is not in tenancy y")
+
+        response = TestClient(app, raise_server_exceptions=False).post("/datasets")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": "not_a_member_of_tenancy"})
 
 
 class TestTooManyRequestsHandler(unittest.TestCase):

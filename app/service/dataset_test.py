@@ -9,12 +9,12 @@ from prometheus_client import REGISTRY
 from unittest.mock import Mock, patch
 from uuid import uuid4
 from app.exception.bad_request import BadRequestException
-from app.exception.forbidden import ForbiddenException
+from app.exception.forbidden import ForbiddenException, NotAMemberOfTenancyException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
 from app.gateway.object_storage.object_storage import ObjectStorageGateway
-from app.model.tenancy import Tenancy
+from app.model.tenancy import DEFAULT_TENANCY, Tenancy
 from app.repository.datafile import DataFileRepository
 from app.repository.dataset import DatasetRepository
 from app.repository.dataset_version import DatasetVersionRepository
@@ -90,10 +90,28 @@ class TestDatasetService(unittest.TestCase):
             dataset_bucket="dataset_bucket",
         )
 
-    def mock_user(self, tenancies):
+    def mock_user(self, tenancies, roles=None):
         user = Mock(spec=User)
         user.tenancies = tenancies
+        user.roles = roles or []
         return user
+
+    def _creatable(self, user, tenancy_enabled=True):
+        self.user_service.fetch_by_id.return_value = user
+        self.tenancy_service.fetch.return_value = Tenancy(
+            name="tenancy1", is_enabled=tenancy_enabled
+        )
+        created = Mock(spec=DatasetDBModel)
+        created.tenancy = "tenancy1"
+        created.visibility = None
+        created.versions = []
+        self.dataset_repository.upsert.return_value = created
+
+    def _create(self, user_id=None):
+        return self.dataset_service.create_dataset(
+            dataset=Dataset(name="d", data={}, tenancy="tenancy1"),
+            user_id=user_id or uuid4(),
+        )
 
     def test_fetch_dataset_not_found(self):
         dataset_id = uuid4()
@@ -214,7 +232,9 @@ class TestDatasetService(unittest.TestCase):
         dataset = Mock(spec=Dataset)
         dataset.name = "test"
         dataset.data = {}
+        dataset.tenancy = "tenancy1"
         user_id = uuid4()
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
         file = Mock(spec=DataFileDBModel)
         file.size_bytes = 0
         created_dataset_db = Mock(spec=DatasetDBModel)
@@ -233,6 +253,96 @@ class TestDatasetService(unittest.TestCase):
         result = self.dataset_service.create_dataset(dataset=dataset, user_id=user_id)
         self.assertIsNotNone(result)
         self.dataset_repository.upsert.assert_called_once()
+        stored = self.dataset_repository.upsert.call_args.kwargs["dataset"]
+        self.assertIs(stored.members_can_edit, False)
+
+    def test_a_member_of_the_tenancy_creates_a_dataset_in_it(self):
+        user_id = uuid4()
+        self._creatable(self.mock_user(["tenancy1"]))
+
+        self._create(user_id=user_id)
+
+        self.user_service.fetch_by_id.assert_called_once_with(id=user_id)
+        self.dataset_repository.upsert.assert_called_once()
+
+    def test_someone_who_is_not_a_member_cannot_create_in_the_tenancy(self):
+        self._creatable(self.mock_user(["other"]))
+
+        with self.assertRaises(NotAMemberOfTenancyException):
+            self._create()
+
+        self.dataset_repository.upsert.assert_not_called()
+
+    def test_a_member_of_a_disabled_tenancy_cannot_create_in_it(self):
+        self._creatable(self.mock_user(["tenancy1"]))
+        self.tenancy_service.fetch.return_value = None
+
+        with self.assertRaises(NotAMemberOfTenancyException):
+            self._create()
+
+        self.dataset_repository.upsert.assert_not_called()
+
+    def test_an_admin_who_is_not_a_member_still_creates(self):
+        self._creatable(self.mock_user([], roles=["admin"]))
+
+        self._create()
+
+        self.dataset_repository.upsert.assert_called_once()
+
+    def test_an_unknown_or_disabled_account_cannot_create(self):
+        self._creatable(self.mock_user(["tenancy1"]))
+        self.user_service.fetch_by_id.side_effect = NotFoundException("gone")
+
+        with self.assertRaises(UnauthorizedException):
+            self._create()
+
+        self.dataset_repository.upsert.assert_not_called()
+
+    def test_moving_a_dataset_into_public_closes_it_to_members(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        dataset_db = Mock(spec=DatasetDBModel)
+        dataset_db.tenancy = "tenancy1"
+        dataset_db.members_can_edit = True
+        version = Mock(spec=DatasetVersionDBModel)
+        version.name = "1"
+        version.is_enabled = True
+        version.design_state = DesignState.DRAFT
+        version.doi = None
+        dataset_db.versions = [version]
+        self.dataset_repository.fetch.return_value = dataset_db
+        request = Dataset(name="n", data={}, tenancy=DEFAULT_TENANCY)
+
+        self.dataset_service.update_dataset(
+            dataset_id=uuid4(),
+            dataset_request=request,
+            user_id=uuid4(),
+            tenancies=["tenancy1"],
+        )
+
+        self.assertEqual(dataset_db.tenancy, DEFAULT_TENANCY)
+        self.assertIs(dataset_db.members_can_edit, False)
+
+    def test_an_edit_outside_public_keeps_what_the_owner_chose(self):
+        self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
+        dataset_db = Mock(spec=DatasetDBModel)
+        dataset_db.tenancy = "tenancy1"
+        dataset_db.members_can_edit = True
+        version = Mock(spec=DatasetVersionDBModel)
+        version.name = "1"
+        version.is_enabled = True
+        version.design_state = DesignState.DRAFT
+        version.doi = None
+        dataset_db.versions = [version]
+        self.dataset_repository.fetch.return_value = dataset_db
+
+        self.dataset_service.update_dataset(
+            dataset_id=uuid4(),
+            dataset_request=Dataset(name="n", data={}, tenancy="tenancy1"),
+            user_id=uuid4(),
+            tenancies=["tenancy1"],
+        )
+
+        self.assertIs(dataset_db.members_can_edit, True)
 
     def test_disable_dataset_not_found(self):
         dataset_id = uuid4()
@@ -3104,6 +3214,7 @@ class TestDatasetServiceMetrics(unittest.TestCase):
 
     def test_creating_a_dataset_is_counted(self):
         self.repository.upsert.side_effect = lambda dataset: dataset
+        self.user_service.fetch_by_id.return_value = Mock(tenancies=["t"], roles=[])
         before = _sample("datamap_dataset_events_total", action="created")
 
         with patch.object(DatasetService, "_adapt_dataset"):

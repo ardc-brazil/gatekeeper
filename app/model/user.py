@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 DEFAULT_ROLE = "datasets_write"
+ADMIN_ROLE = "admin"
 
 
 @dataclass

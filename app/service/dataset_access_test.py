@@ -10,6 +10,7 @@ from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.db.dataset_access import DatasetPermission as DatasetPermissionDBModel
 from app.model.dataset_access import AccessLevel, DatasetAction
 from app.repository.permission import PermissionRepository
+from app.model.tenancy import DEFAULT_TENANCY
 from app.service.dataset_access import DatasetAccessService, allows_member_edits
 from app.service.user import UserService
 
@@ -399,13 +400,40 @@ class TestMembersAccess(unittest.TestCase):
         self.assertFalse(self._permits(read_only, DatasetAction.WRITE))
         self.assertTrue(self._permits(editable, DatasetAction.WRITE))
 
-    def test_a_row_not_yet_flushed_reads_as_the_default(self):
+    def test_a_row_not_yet_flushed_reads_as_the_default_which_is_closed(self):
         dataset = _dataset(owner_id=uuid4())
         dataset.members_can_edit = None
 
-        self.assertTrue(allows_member_edits(dataset))
-        self.assertTrue(self._permits(dataset, DatasetAction.WRITE))
+        self.assertFalse(allows_member_edits(dataset))
+        self.assertFalse(self._permits(dataset, DatasetAction.WRITE))
         self.assertFalse(allows_member_edits(_dataset(members_can_edit=False)))
+
+    def test_public_is_never_member_editable_whatever_the_column_says(self):
+        dataset = _dataset(
+            owner_id=uuid4(), tenancy=DEFAULT_TENANCY, members_can_edit=True
+        )
+
+        self.assertFalse(allows_member_edits(dataset))
+        self.assertTrue(
+            self._permits(dataset, DatasetAction.READ_METADATA, (DEFAULT_TENANCY,))
+        )
+        self.assertTrue(
+            self._permits(dataset, DatasetAction.READ_FILES, (DEFAULT_TENANCY,))
+        )
+        self.assertFalse(
+            self._permits(dataset, DatasetAction.WRITE, (DEFAULT_TENANCY,))
+        )
+        self.assertFalse(
+            self._permits(dataset, DatasetAction.DELETE, (DEFAULT_TENANCY,))
+        )
+
+    def test_in_public_the_owner_and_a_write_permission_still_edit(self):
+        owned = _dataset(owner_id=self.user_id, tenancy=DEFAULT_TENANCY)
+        self.assertTrue(self._permits(owned, DatasetAction.WRITE, (DEFAULT_TENANCY,)))
+
+        self._grant("write")
+        shared = _dataset(owner_id=uuid4(), tenancy=DEFAULT_TENANCY)
+        self.assertTrue(self._permits(shared, DatasetAction.WRITE, (DEFAULT_TENANCY,)))
 
     def test_only_the_owner_changes_what_members_can_do(self):
         dataset = _dataset(owner_id=self.user_id)

@@ -4,6 +4,8 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from app.exception.forbidden import ForbiddenException
+from app.exception.illegal_state import IllegalStateException
+from app.model.tenancy import DEFAULT_TENANCY
 from app.model.dataset import VisibilityStatus
 from app.model.dataset_access import AccessEventType, AccessLevel, DatasetAction
 from app.model.db.dataset import Dataset as DatasetDBModel
@@ -110,3 +112,31 @@ class TestMembersAccessService(unittest.TestCase):
         self.assertTrue(self.dataset.members_can_edit)
         self.repository.upsert.assert_not_called()
         self.audit.record.assert_not_called()
+
+    def test_opening_a_public_dataset_to_members_is_refused(self):
+        self.dataset.tenancy = DEFAULT_TENANCY
+        self.dataset.members_can_edit = False
+
+        with self.assertRaises(IllegalStateException) as raised:
+            self._set(True)
+
+        self.assertEqual(str(raised.exception), "public_members_cannot_edit")
+        self.repository.upsert.assert_not_called()
+        self.audit.record.assert_not_called()
+
+    def test_closing_a_public_dataset_is_a_no_op_even_when_the_column_is_true(self):
+        self.dataset.tenancy = DEFAULT_TENANCY
+        self.dataset.members_can_edit = True
+
+        result = self._set(False)
+
+        self.assertFalse(result.members_can_edit)
+        self.repository.upsert.assert_not_called()
+        self.audit.record.assert_not_called()
+
+    def test_the_owner_check_comes_before_the_public_rule(self):
+        self.dataset.tenancy = DEFAULT_TENANCY
+        self.datasets.fetch_authorized.side_effect = ForbiddenException("forbidden")
+
+        with self.assertRaises(ForbiddenException):
+            self._set(True)
