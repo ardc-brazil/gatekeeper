@@ -13,12 +13,10 @@ from app.model.tenancy import (
     closed_to_members,
 )
 from app.model.tenancy_access import (
-    DatasetRef,
     DatasetTenancyInvitationView,
     ShareLookupView,
     TenancyInvitationView,
     UserBrief,
-    UserRef,
 )
 from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_invitation import TenancyInvitationRepository
@@ -32,6 +30,7 @@ from app.service.share_identity import (
 )
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_notifier import TenancyNotifier
+from app.service.user_refs import dataset_ref, user_brief, user_ref
 
 EDITORS = (AccessLevel.OWNER, AccessLevel.WRITE)
 PENDING = TenancyInvitationStatus.PENDING
@@ -145,12 +144,8 @@ class TenancyInvitationService:
             TenancyInvitationView(
                 id=invitation.id,
                 tenancy=self._membership_service.summary(invitation.tenancy),
-                invited_by=self._ref(invitation.invited_by),
-                dataset=DatasetRef(
-                    id=invitation.dataset_id, name=names[invitation.dataset_id]
-                )
-                if invitation.dataset_id in names
-                else None,
+                invited_by=user_ref(self._users, invitation.invited_by),
+                dataset=dataset_ref(names, invitation.dataset_id),
                 datasets=self._tenancies.count_datasets(invitation.tenancy),
                 created_at=invitation.created_at,
             )
@@ -214,22 +209,10 @@ class TenancyInvitationService:
     def _dataset_view(self, invitation, user_id: UUID) -> DatasetTenancyInvitationView:
         return DatasetTenancyInvitationView(
             id=invitation.id,
-            user=self._brief(invitation.user_id),
-            invited_by=self._brief(invitation.invited_by)
+            user=user_brief(self._users, invitation.user_id),
+            invited_by=user_brief(self._users, invitation.invited_by)
             if invitation.invited_by
             else None,
             created_at=invitation.created_at,
             can_withdraw=invitation.invited_by == user_id,
         )
-
-    def _brief(self, user_id: UUID) -> UserBrief:
-        user = self._users.fetch_any_by_id(user_id)
-        if user is None:
-            return UserBrief(id=user_id, name="Deleted account", email=None)
-        return UserBrief(id=user.id, name=user.name, email=user.email)
-
-    def _ref(self, user_id: UUID | None) -> UserRef | None:
-        if user_id is None:
-            return None
-        user = self._users.fetch_any_by_id(user_id)
-        return UserRef(id=user.id, name=user.name) if user else None

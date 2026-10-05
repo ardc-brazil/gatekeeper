@@ -29,7 +29,6 @@ from app.model.tenancy_access import (
     RequestCounts,
     Requester,
     TenancyRequestView,
-    UserRef,
 )
 from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
@@ -37,6 +36,7 @@ from app.repository.tenancy_request import TenancyRequestRepository
 from app.repository.user import UserRepository
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_notifier import TenancyNotifier
+from app.service.user_refs import user_ref
 
 DAILY_LIMIT = 3
 WINDOW = timedelta(hours=24)
@@ -237,7 +237,7 @@ class TenancyRequestService:
             else None,
             created_tenancy=bool(request.created_tenancy),
             decision_message=request.decision_message,
-            decided_by=self._user_ref(request.decided_by),
+            decided_by=user_ref(self._users, request.decided_by),
             decided_at=request.decided_at,
         )
 
@@ -259,12 +259,6 @@ class TenancyRequestService:
             email_verified=user.email_verified_at is not None,
             orcid=orcid,
         )
-
-    def _user_ref(self, user_id: UUID | None) -> UserRef | None:
-        if user_id is None:
-            return None
-        user = self._users.fetch_any_by_id(user_id)
-        return UserRef(id=user.id, name=user.name) if user else None
 
     def _user_view(self, request) -> TenancyRequestView:
         return TenancyRequestView(

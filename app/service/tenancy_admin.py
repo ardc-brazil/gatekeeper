@@ -15,19 +15,18 @@ from app.model.tenancy import (
 from app.model.tenancy_access import (
     AdminTenancyInvitationView,
     AdminTenancyView,
-    DatasetRef,
     Page,
     RemovalImpactView,
     TenancyMembersView,
     TenancyMemberView,
     UserBrief,
-    UserRef,
 )
 from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.user import UserRepository
 from app.service.tenancy_membership import TenancyMembershipService
+from app.service.user_refs import dataset_ref, user_brief, user_ref
 
 MAX_PAGE = 100
 SEARCH_LIMIT = 10
@@ -97,7 +96,7 @@ class TenancyAdminService:
                 name=user.name,
                 email=user.email,
                 since=since.get(user.id, user.created_at),
-                invited_by=self._ref(inviters.get(user.id)),
+                invited_by=user_ref(self._users, inviters.get(user.id)),
             )
             for user in users
         ]
@@ -170,26 +169,10 @@ class TenancyAdminService:
         return [
             AdminTenancyInvitationView(
                 id=invitation.id,
-                user=self._brief(invitation.user_id),
-                invited_by=self._ref(invitation.invited_by),
-                dataset=DatasetRef(
-                    id=invitation.dataset_id, name=names[invitation.dataset_id]
-                )
-                if invitation.dataset_id in names
-                else None,
+                user=user_brief(self._users, invitation.user_id),
+                invited_by=user_ref(self._users, invitation.invited_by),
+                dataset=dataset_ref(names, invitation.dataset_id),
                 created_at=invitation.created_at,
             )
             for invitation in invitations
         ]
-
-    def _brief(self, user_id: UUID) -> UserBrief:
-        user = self._users.fetch_any_by_id(user_id)
-        if user is None:
-            return UserBrief(id=user_id, name="Deleted account", email=None)
-        return UserBrief(id=user.id, name=user.name, email=user.email)
-
-    def _ref(self, user_id: UUID | None) -> UserRef | None:
-        if user_id is None:
-            return None
-        user = self._users.fetch_any_by_id(user_id)
-        return UserRef(id=user.id, name=user.name) if user else None

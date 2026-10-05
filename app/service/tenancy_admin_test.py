@@ -194,6 +194,21 @@ class TestRemovalImpact(AdminServiceTestCase):
 
         self.assertEqual(str(raised.exception), "member_not_found")
 
+    def test_tenancy_not_found(self):
+        with self.assertRaises(NotFoundException) as raised:
+            self.service.removal_impact("datamap/production/missing", self.member.id)
+
+        self.assertEqual(str(raised.exception), "tenancy_not_found")
+
+    def test_member_not_found_when_account_is_missing(self):
+        missing_user_id = uuid4()
+
+        with self.assertRaises(NotFoundException) as raised:
+            self.service.removal_impact(ATTO, missing_user_id)
+
+        self.assertEqual(str(raised.exception), "member_not_found")
+        self.memberships.is_member.assert_not_called()
+
 
 class TestAddAndRemove(AdminServiceTestCase):
     def test_adding_a_member_records_and_announces_it(self):
