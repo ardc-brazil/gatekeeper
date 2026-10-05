@@ -16,6 +16,7 @@ from tests.integration.fixtures.tenancy import (
     display_name,
     events,
     invitation_status,
+    invite,
     join,
     new_account,
     new_tenancy,
@@ -390,12 +391,7 @@ class TestRemoving:
         owner = new_account(http_client, name=unique("Owner"))
         invitee = new_account(http_client)
         join(owner["id"], tenancy)
-        dataset = create_dataset(http_client, owner["id"], tenancy)
-        invitation = http_client.post(
-            f"/datasets/{dataset['id']}/tenancy-invitations",
-            json={"user_id": invitee["id"]},
-            headers=as_user(owner["id"], tenancy),
-        ).json()
+        invitation = invite(http_client, owner["id"], tenancy, invitee["id"]).json()
         pending = http_client.get(_members_path(tenancy), headers=admin()).json()[
             "invitations"
         ]

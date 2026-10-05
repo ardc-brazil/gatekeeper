@@ -294,7 +294,7 @@ class TestOutsidePublic:
         )
 
 
-class TestShareCandidatesAndLookup:
+class TestShareCandidates:
     def test_candidates_are_empty_for_a_dataset_in_public(self, http_client):
         owner = new_account(http_client)
         dataset = create_dataset(http_client, owner["id"], PUBLIC)
@@ -325,68 +325,6 @@ class TestShareCandidatesAndLookup:
         )
 
         assert [user["id"] for user in response.json()] == [member["id"]]
-
-    def test_lookup_by_exact_email_orcid_and_unknown(self, http_client):
-        tenancy = new_tenancy()
-        owner = new_account(http_client)
-        join(owner["id"], tenancy)
-        dataset = create_dataset(http_client, owner["id"], tenancy)
-        target = new_account(http_client)
-        orcid = random_orcid()
-        holder = new_account(
-            http_client, providers=[{"name": "orcid", "reference": orcid}]
-        )
-        headers = as_user(owner["id"], tenancy)
-        path = f"/datasets/{dataset['id']}/share/lookup"
-
-        by_email = http_client.get(
-            path, params={"value": target["email"].upper()}, headers=headers
-        )
-        by_orcid = http_client.get(path, params={"value": orcid}, headers=headers)
-        unknown = http_client.get(
-            path, params={"value": "ghost@example.com"}, headers=headers
-        )
-        malformed = http_client.get(
-            path, params={"value": "not an address"}, headers=headers
-        )
-
-        assert_status_code(by_email, 200)
-        assert by_email.json() == {
-            "user": {
-                "id": target["id"],
-                "name": "Bruna Costa",
-                "email": target["email"],
-            },
-            "tenancy_member": False,
-            "invitation_pending": False,
-            "can_invite": True,
-        }
-        assert_status_code(by_orcid, 200)
-        assert by_orcid.json()["user"] == {
-            "id": holder["id"],
-            "name": "Bruna Costa",
-            "email": None,
-        }
-        assert_status_code(unknown, 404)
-        assert unknown.json() == {"detail": "no_account"}
-        assert_status_code(malformed, 400)
-        assert malformed.json() == {"detail": "invalid_request"}
-
-    def test_lookup_does_not_match_a_prefix_of_an_email(self, http_client):
-        tenancy = new_tenancy()
-        owner = new_account(http_client)
-        join(owner["id"], tenancy)
-        dataset = create_dataset(http_client, owner["id"], tenancy)
-        target = new_account(http_client)
-
-        response = http_client.get(
-            f"/datasets/{dataset['id']}/share/lookup",
-            params={"value": target["email"][:-1]},
-            headers=as_user(owner["id"], tenancy),
-        )
-
-        assert_status_code(response, 404)
-        assert response.json() == {"detail": "no_account"}
 
 
 class TestSelfRoutes:

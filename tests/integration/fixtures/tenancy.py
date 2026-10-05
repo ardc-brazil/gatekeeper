@@ -196,15 +196,20 @@ def request_access(
     )
 
 
+def invite(
+    http_client: HttpClient, inviter_id: str, tenancy: str, invitee_id: str
+) -> requests.Response:
+    return http_client.post(
+        f"/users/{inviter_id}/tenancies/{tenancy}/invitations",
+        json={"user_id": invitee_id},
+        headers=as_user(inviter_id),
+    )
+
+
 def pending_invitation(http_client: HttpClient, tenancy: str, invitee_id: str) -> str:
     inviter = new_account(http_client, name=unique("Inviter"))
     join(inviter["id"], tenancy)
-    dataset = create_dataset(http_client, inviter["id"], tenancy)
-    response = http_client.post(
-        f"/datasets/{dataset['id']}/tenancy-invitations",
-        json={"user_id": invitee_id},
-        headers=as_user(inviter["id"], tenancy),
-    )
+    response = invite(http_client, inviter["id"], tenancy, invitee_id)
     assert_status_code(response, 201)
     return response.json()["id"]
 
