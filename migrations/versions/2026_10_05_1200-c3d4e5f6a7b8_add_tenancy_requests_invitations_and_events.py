@@ -220,7 +220,8 @@ def upgrade() -> None:
         f"""
         WITH retired AS (
             UPDATE email_messages SET status = 'skipped'
-            WHERE template = '{RETIRED_TEMPLATE}' AND status = 'pending'
+            WHERE template = '{RETIRED_TEMPLATE}'
+            AND status IN ('pending', 'sending')
             RETURNING id
         )
         INSERT INTO email_events (message_id, event, detail)

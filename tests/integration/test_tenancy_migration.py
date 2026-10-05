@@ -73,13 +73,13 @@ def _dataset(tenancy: str) -> str:
     return dataset_id
 
 
-def _queued_email(template: str) -> str:
+def _queued_email(template: str, status: str = "pending") -> str:
     email_id = str(uuid.uuid4())
     execute(
         "INSERT INTO email_messages (id, template, template_version, recipient, "
         "subject, body_text, context, status, next_attempt_at) "
         f"VALUES ('{email_id}', '{template}', '1', '{email_id}@example.com', "
-        "'s', 'b', '{}'::jsonb, 'pending', now() + interval '1 day')"
+        f"'s', 'b', '{{}}'::jsonb, '{status}', now() + interval '1 day')"
     )
     return email_id
 
@@ -116,6 +116,7 @@ class TestTheMigration:
             f"VALUES ('{plain}', '{DATA_AMAZON}')"
         )
         retired = _queued_email("new_account_pending")
+        interrupted = _queued_email("new_account_pending", status="sending")
         current = _queued_email("tenancy_access_granted")
         execute(f"DELETE FROM casbin_rule WHERE {DATASETS_WRITE_DELETE_RULES}")
 
@@ -162,6 +163,7 @@ class TestTheMigration:
             == "1"
         )
         assert _email_status(retired) == "skipped|skipped|template retired"
+        assert _email_status(interrupted) == "skipped|skipped|template retired"
         assert _email_status(current) == "pending||"
         assert "lower((display_name)::text)" in execute(
             "SELECT indexdef FROM pg_indexes "
