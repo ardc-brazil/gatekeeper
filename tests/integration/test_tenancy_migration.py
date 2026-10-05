@@ -133,6 +133,12 @@ class TestTheMigration:
         ]
         assert (
             execute(
+                "SELECT count(*) FROM casbin_rule WHERE v1 LIKE '%tenancy-invitations%'"
+            )
+            == "0"
+        )
+        assert (
+            execute(
                 f"SELECT display_name, is_enabled FROM tenancies WHERE name = '{PUBLIC}'"
             )
             == "Public|t"

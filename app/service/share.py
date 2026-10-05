@@ -41,6 +41,7 @@ from app.service.share_identity import (
 )
 from app.service.share_token import hash_token, new_token
 from app.service.user import UserService
+from app.service.user_refs import orcid_of
 from app.model.tenancy import is_default
 from app.repository.tenancy import TenancyRepository
 from app.service.tenancy_membership import TenancyMembershipService
@@ -466,14 +467,7 @@ class ShareService:
     def claim(self, user_id: UUID) -> list[AcceptResult]:
         user = self._user_service.fetch_by_id(user_id)
         email = user.email.lower() if deliverable(user.email) else None
-        orcid = next(
-            (
-                provider.reference
-                for provider in (user.providers or [])
-                if provider.name == "orcid"
-            ),
-            None,
-        )
+        orcid = orcid_of(user)
         accepted = []
         for invitation in self._invitations.list_pending_for(email, orcid):
             result = self._accept(invitation, user.id)
