@@ -80,8 +80,8 @@ class Dataset(Base):
     members_can_edit = Column(
         Boolean,
         nullable=False,
-        default=True,
-        server_default=sqlalchemy.true(),
+        default=False,
+        server_default=sqlalchemy.false(),
     )
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")

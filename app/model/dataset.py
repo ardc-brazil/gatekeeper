@@ -91,7 +91,7 @@ class Dataset:
     embargo: Embargo | None = None
     access: DatasetAccess | None = None
     owner_name: str | None = None
-    members_can_edit: bool = True
+    members_can_edit: bool = False
 
 
 @dataclass
