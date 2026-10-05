@@ -282,7 +282,7 @@ class TestDetail(AdminQueueTestCase):
         self.membership_service.summaries_for.return_value = [
             summary_of(DEFAULT_TENANCY, "Public")
         ]
-        self.memberships.count.return_value = 4
+        self.users.count_in_tenancy.return_value = 4
 
         detail = self.service.detail(request.id)
 
@@ -291,7 +291,7 @@ class TestDetail(AdminQueueTestCase):
             detail.requester_tenancies, [summary_of(DEFAULT_TENANCY, "Public")]
         )
         self.assertEqual(detail.suggested_tenancy_members, 4)
-        self.memberships.count.assert_called_once_with(ATTO)
+        self.users.count_in_tenancy.assert_called_once_with(ATTO)
 
     def test_without_a_suggestion_there_is_no_member_count(self):
         request = self.pending("Nothing like it")

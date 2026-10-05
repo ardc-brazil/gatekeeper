@@ -143,7 +143,7 @@ class TenancyRequestService:
                 for f in dataclasses.fields(AdminTenancyRequestView)
             },
             requester_tenancies=self._membership_service.summaries_for(request.user_id),
-            suggested_tenancy_members=self._memberships.count(suggested.path)
+            suggested_tenancy_members=self._users.count_in_tenancy(suggested.path)
             if suggested
             else None,
         )

@@ -14,7 +14,9 @@ from app.model.db.dataset_access import DatasetPermission
 from app.model.db.tenancy import Tenancy, TenancyEvent, TenancyInvitation
 from app.model.db.user import User, user_tenancy_association
 from app.model.tenancy import TenancyEventType, TenancyInvitationStatus, is_default
+from app.repository.tenancy import datasets_in
 from app.repository.tenancy_event import add_event
+from app.repository.user import enabled_members
 
 _member = user_tenancy_association.c
 
@@ -52,22 +54,11 @@ class TenancyMembershipRepository:
                 .all()
             )
 
-    def _members(self, session: Session, tenancy: str):
-        return (
-            session.query(User)
-            .join(user_tenancy_association, _member.user_id == User.id)
-            .filter(_member.tenancy == tenancy, User.is_enabled == true())
-        )
-
-    def count(self, tenancy: str) -> int:
-        with self._session_factory() as session:
-            return self._members(session, tenancy).count()
-
     def list_members(
         self, tenancy: str, limit: int, offset: int
     ) -> tuple[list[User], int]:
         with self._session_factory() as session:
-            query = self._members(session, tenancy)
+            query = enabled_members(session, tenancy)
             total = query.count()
             users = (
                 query.order_by(func.lower(User.name), User.id)
@@ -115,9 +106,7 @@ class TenancyMembershipRepository:
 
     def removal_counts(self, tenancy: str, user_id: UUID) -> tuple[int, int, int]:
         with self._session_factory() as session:
-            in_tenancy = session.query(func.count(Dataset.id)).filter(
-                Dataset.tenancy == tenancy, Dataset.is_enabled == true()
-            )
+            in_tenancy = datasets_in(session, tenancy)
             shared = (
                 session.query(func.count(DatasetPermission.dataset_id))
                 .join(Dataset, Dataset.id == DatasetPermission.dataset_id)

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Generic, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -6,6 +7,16 @@ from pydantic import BaseModel, ConfigDict
 
 class _FromViews(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+Item = TypeVar("Item")
+
+
+class PageResponse(_FromViews, Generic[Item]):
+    items: list[Item]
+    total_count: int
+    limit: int
+    offset: int
 
 
 class TenancySummaryResponse(_FromViews):
@@ -100,11 +111,8 @@ class AdminTenancyRequestDetailResponse(AdminTenancyRequestResponse):
     suggested_tenancy_members: int | None
 
 
-class AdminTenancyRequestPage(_FromViews):
-    items: list[AdminTenancyRequestResponse]
-    total_count: int
-    limit: int
-    offset: int
+class AdminTenancyRequestPage(PageResponse[AdminTenancyRequestResponse]):
+    pass
 
 
 class RequestCountsResponse(_FromViews):
@@ -132,11 +140,8 @@ class TenancyMemberResponse(_FromViews):
     invited_by: UserRefResponse | None
 
 
-class TenancyMemberPage(_FromViews):
-    items: list[TenancyMemberResponse]
-    total_count: int
-    limit: int
-    offset: int
+class TenancyMemberPage(PageResponse[TenancyMemberResponse]):
+    pass
 
 
 class AdminTenancyInvitationResponse(_FromViews):

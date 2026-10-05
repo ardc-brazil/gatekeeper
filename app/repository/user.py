@@ -23,6 +23,16 @@ def like_pattern(term: str) -> str:
     return f"%{escaped}%"
 
 
+def enabled_members(session: Session, tenancy: str) -> Query:
+    return (
+        session.query(User)
+        .join(user_tenancy_association, user_tenancy_association.c.user_id == User.id)
+        .filter(
+            user_tenancy_association.c.tenancy == tenancy, User.is_enabled == true()
+        )
+    )
+
+
 def user_matches(term: str):
     pattern = like_pattern(term)
     orcid_holders = (
@@ -207,18 +217,7 @@ class UserRepository:
 
     def count_in_tenancy(self, tenancy: str) -> int:
         with self._session_factory() as session:
-            return (
-                session.query(func.count(User.id))
-                .join(
-                    user_tenancy_association,
-                    user_tenancy_association.c.user_id == User.id,
-                )
-                .filter(
-                    user_tenancy_association.c.tenancy == tenancy,
-                    User.is_enabled == true(),
-                )
-                .scalar()
-            )
+            return enabled_members(session, tenancy).count()
 
     def fetch_any_by_id(self, id: UUID) -> User | None:
         with self._session_factory() as session:

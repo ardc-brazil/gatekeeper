@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 from sqlalchemy.sql.expression import true
 
 from app.exception.conflict import ConflictException
@@ -14,6 +14,12 @@ from app.model.db.user import User, user_tenancy_association
 from app.model.tenancy import TenancyEventType
 from app.repository.integrity import violates
 from app.repository.tenancy_event import add_event
+
+
+def datasets_in(session: Session, tenancy: str) -> Query:
+    return session.query(func.count(Dataset.id)).filter(
+        Dataset.tenancy == tenancy, Dataset.is_enabled == true()
+    )
 
 
 class TenancyRepository:
@@ -100,8 +106,4 @@ class TenancyRepository:
 
     def count_datasets(self, tenancy: str) -> int:
         with self._session_factory() as session:
-            return (
-                session.query(func.count(Dataset.id))
-                .filter(Dataset.tenancy == tenancy, Dataset.is_enabled == true())
-                .scalar()
-            )
+            return datasets_in(session, tenancy).scalar()

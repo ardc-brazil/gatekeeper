@@ -4,7 +4,7 @@ from app.model.tenancy import Tenancy
 from app.repository.tenancy import TenancyRepository
 from app.exception.conflict import ConflictException
 from app.exception.not_found import NotFoundException
-from app.model.tenancy import DEFAULT_TENANCY
+from app.model.tenancy import is_default
 
 
 class TenancyService:
@@ -40,7 +40,7 @@ class TenancyService:
         self._repository.upsert(tenancy)
 
     def update(self, old_name: str, updated_tenancy: Tenancy) -> None:
-        if old_name == DEFAULT_TENANCY:
+        if is_default(old_name):
             raise ConflictException("public_tenancy_locked")
         old_tenancy: DBModel = self._repository.fetch(tenancy=old_name)
         if old_tenancy is None:
@@ -51,7 +51,7 @@ class TenancyService:
         self._repository.upsert(tenancy=old_tenancy)
 
     def disable(self, name: str) -> None:
-        if name == DEFAULT_TENANCY:
+        if is_default(name):
             raise ConflictException("public_tenancy_locked")
         tenancy: DBModel = self._repository.fetch(tenancy=name)
         if tenancy is None:

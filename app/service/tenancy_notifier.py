@@ -43,16 +43,14 @@ class TenancyNotifier:
             "requested_at": moment(request.created_at),
             "review_url": f"{self._base_url}/app/admin/requests?request={request.id}",
         }
-        for address in self._admins:
-            self._queue(
-                EmailTemplate.TENANCY_REQUEST_RECEIVED,
-                recipient=address,
-                context=context,
-                related_type="tenancy_request",
-                related_id=request.id,
-                triggered_by=requester.id,
-                dedup_key=f"tenancy_request_received:{request.id}:{address_hash(address)}",
-            )
+        self._notify_admins(
+            EmailTemplate.TENANCY_REQUEST_RECEIVED,
+            context=context,
+            related_type="tenancy_request",
+            related_id=request.id,
+            dedup_prefix=f"tenancy_request_received:{request.id}",
+            triggered_by=requester.id,
+        )
 
     def access_granted(
         self,
@@ -140,14 +138,23 @@ class TenancyNotifier:
             "dataset_name": dataset_name,
             "tenancy_url": f"{self._base_url}/app/admin/tenancies?tenancy={tenancy.path}",
         }
+        self._notify_admins(
+            EmailTemplate.TENANCY_INVITATION_NOTICE,
+            context=context,
+            related_type="tenancy_invitation",
+            related_id=invitation_id,
+            dedup_prefix=f"tenancy_invitation_notice:{invitation_id}",
+        )
+
+    def _notify_admins(
+        self, template: EmailTemplate, dedup_prefix: str, **kwargs: Any
+    ) -> None:
         for address in self._admins:
             self._queue(
-                EmailTemplate.TENANCY_INVITATION_NOTICE,
+                template,
                 recipient=address,
-                context=context,
-                related_type="tenancy_invitation",
-                related_id=invitation_id,
-                dedup_key=f"tenancy_invitation_notice:{invitation_id}:{address_hash(address)}",
+                dedup_key=f"{dedup_prefix}:{address_hash(address)}",
+                **kwargs,
             )
 
     def _queue(self, template: EmailTemplate, **kwargs: Any) -> None:
