@@ -271,6 +271,36 @@ class TestOutsidePublic:
             == elsewhere
         )
 
+    def test_a_write_share_holder_cannot_move_the_dataset_but_still_edits(
+        self, http_client
+    ):
+        tenancy, elsewhere = new_tenancy(), new_tenancy()
+        owner, holder = new_account(http_client), new_account(http_client)
+        join(owner["id"], tenancy)
+        for place in (tenancy, elsewhere):
+            join(holder["id"], place)
+        dataset = create_dataset(http_client, owner["id"], tenancy)
+        grant(http_client, dataset["id"], holder["id"], "write")
+
+        moved = http_client.put(
+            f"/datasets/{dataset['id']}",
+            json={"name": "moved", "data": {}, "tenancy": elsewhere},
+            headers=as_user(holder["id"], tenancy),
+        )
+        after_move = execute(
+            f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'"
+        )
+        edited = update_dataset(http_client, holder["id"], dataset)
+
+        assert_status_code(moved, 403)
+        assert moved.json() == {"detail": "forbidden"}
+        assert after_move == f"{dataset['name']}|{tenancy}"
+        assert_status_code(edited, 200)
+        assert (
+            execute(f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'")
+            == f"edited|{tenancy}"
+        )
+
 
 class TestShareCandidatesAndLookup:
     def test_candidates_are_empty_for_a_dataset_in_public(self, http_client):

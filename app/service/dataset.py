@@ -354,16 +354,19 @@ class DatasetService:
             action=DatasetAction.WRITE,
         )
 
-        moves = (
-            dataset_request.tenancy
-            and level in (AccessLevel.OWNER, AccessLevel.TENANCY)
-            and dataset_request.tenancy != dataset_db.tenancy
+        changes_tenancy = bool(
+            dataset_request.tenancy and dataset_request.tenancy != dataset_db.tenancy
         )
+        if (
+            changes_tenancy
+            and level != AccessLevel.OWNER
+            and not self._is_admin(user_id)
+        ):
+            raise ForbiddenException(
+                f"forbidden: move {dataset_id} by {user_id} who is not the owner"
+            )
+        moves = changes_tenancy and level in (AccessLevel.OWNER, AccessLevel.TENANCY)
         if moves:
-            if level != AccessLevel.OWNER and not self._is_admin(user_id):
-                raise ForbiddenException(
-                    f"forbidden: move {dataset_id} by {user_id} who is not the owner"
-                )
             self._require_membership(user_id=user_id, tenancy=dataset_request.tenancy)
 
         dataset_db.name = dataset_request.name

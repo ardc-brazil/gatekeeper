@@ -395,6 +395,40 @@ class TestDatasetService(unittest.TestCase):
         self.assertEqual(dataset_db.name, "n")
         self.dataset_repository.upsert.assert_called_once()
 
+    def test_a_write_share_holder_who_changes_the_tenancy_is_refused(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1", "tenancy2"]), level=AccessLevel.WRITE
+        )
+
+        with self.assertRaises(ForbiddenException) as raised:
+            self._move()
+
+        self.assertEqual(raised.exception.detail, "forbidden")
+        self.assertEqual(dataset_db.tenancy, "tenancy1")
+        self.assertEqual(dataset_db.name, "before")
+        self.dataset_repository.upsert.assert_not_called()
+
+    def test_a_write_share_holder_still_edits_in_place(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1"]), level=AccessLevel.WRITE
+        )
+
+        self._move(target="tenancy1")
+
+        self.assertEqual(dataset_db.name, "n")
+        self.dataset_repository.upsert.assert_called_once()
+
+    def test_an_admin_editing_through_a_write_share_keeps_the_tenancy(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1"], roles=["admin"]), level=AccessLevel.WRITE
+        )
+
+        self._move()
+
+        self.assertEqual(dataset_db.tenancy, "tenancy1")
+        self.assertEqual(dataset_db.name, "n")
+        self.dataset_repository.upsert.assert_called_once()
+
     def test_an_admin_editing_as_a_tenancy_member_still_moves_the_dataset(self):
         dataset_db = self._movable(
             self.mock_user(["tenancy1"], roles=["admin"]), level=AccessLevel.TENANCY
@@ -3442,19 +3476,6 @@ class TestDatasetServiceAuthorization(TestDatasetService):
         )
 
         self.assertEqual(dataset.owner_id, owner)
-
-    def test_a_permission_holder_cannot_move_the_dataset_to_another_tenancy(self):
-        self.dataset_access.require.return_value = AccessLevel.WRITE
-        dataset = self._fetched(owner_id=uuid4(), tenancy="t1", data={})
-        self.dataset_service._should_create_new_version = Mock(return_value=False)
-
-        self.dataset_service.update_dataset(
-            dataset_id=dataset.id,
-            dataset_request=Dataset(id=dataset.id, name="n", data={}, tenancy="t2"),
-            user_id=uuid4(),
-        )
-
-        self.assertEqual(dataset.tenancy, "t1")
 
     def test_writes_are_refused_when_the_rule_forbids_them(self):
         self._fetched()
