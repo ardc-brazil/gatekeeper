@@ -8,11 +8,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import true
 
+from app.exception.conflict import ConflictException
 from app.model.db.dataset import Dataset
 from app.model.db.dataset_access import DatasetPermission
 from app.model.db.tenancy import Tenancy, TenancyEvent, TenancyInvitation
 from app.model.db.user import User, user_tenancy_association
-from app.model.tenancy import TenancyEventType, TenancyInvitationStatus
+from app.model.tenancy import TenancyEventType, TenancyInvitationStatus, is_default
 from app.repository.tenancy_event import add_event
 
 _member = user_tenancy_association.c
@@ -145,6 +146,8 @@ class TenancyMembershipRepository:
             return event_id
 
     def remove(self, tenancy: str, user_id: UUID, actor_id: UUID) -> bool:
+        if is_default(tenancy):
+            raise ConflictException("public_tenancy_locked")
         with self._session_factory() as session:
             deleted = session.execute(
                 user_tenancy_association.delete().where(

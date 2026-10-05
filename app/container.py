@@ -25,6 +25,7 @@ from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.tenancy_request import TenancyRequestRepository
 from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.service.tenancy_invitation import TenancyInvitationService
+from app.service.tenancy_admin import TenancyAdminService
 from app.service.tenancy_request import TenancyRequestService
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_notifier import TenancyNotifier
@@ -426,6 +427,15 @@ class Container(containers.DeclarativeContainer):
         tenancies=tenancy_repository,
         users=user_repository,
         notifier=tenancy_notifier,
+    )
+
+    tenancy_admin_service = providers.Factory(
+        TenancyAdminService,
+        tenancies=tenancy_repository,
+        memberships=tenancy_membership_repository,
+        membership_service=tenancy_membership_service,
+        invitations=tenancy_invitation_repository,
+        users=user_repository,
     )
 
     share_service = providers.Factory(

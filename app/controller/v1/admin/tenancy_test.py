@@ -14,11 +14,17 @@ from app.controller.interceptor.authorization import authorize
 from app.exception.conflict import ConflictException
 from app.model.tenancy_access import (
     AdminTenancyRequestView,
+    AdminTenancyView,
     NewTenancy,
     Page,
+    RemovalImpactView,
     RequestCounts,
     Requester,
+    TenancyMembersView,
+    TenancyMemberView,
+    UserBrief,
 )
+from app.service.tenancy_admin import TenancyAdminService
 from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_request import TenancyRequestService
 
@@ -210,3 +216,103 @@ class TestAdminInvitationRoutes(AdminRoutesTestCase):
 
         self.assertEqual(response.status_code, 204)
         self.invitations.withdraw_as_admin.assert_called_once_with(invitation_id, ADMIN)
+
+
+class TestAdminTenancyRoutes(AdminRoutesTestCase):
+    def setUp(self):
+        super().setUp()
+        self.admin_service = Mock(spec=TenancyAdminService)
+        self.container.tenancy_admin_service.override(
+            providers.Object(self.admin_service)
+        )
+
+    def tearDown(self):
+        self.container.tenancy_admin_service.reset_override()
+        super().tearDown()
+
+    def test_list_and_create(self):
+        view = AdminTenancyView(
+            path="datamap/production/atto",
+            display_name="ATTO",
+            members=4,
+            datasets=9,
+            is_default=False,
+            is_legacy=False,
+            is_enabled=True,
+        )
+        self.admin_service.list.return_value = [view]
+        self.admin_service.create.return_value = view
+
+        listed = self.client.get("/v1/admin/tenancies", headers=self.headers)
+        created = self.client.post(
+            "/v1/admin/tenancies",
+            json={"display_name": "ATTO", "namespace": "atto"},
+            headers=self.headers,
+        )
+
+        self.assertEqual(listed.json()[0]["members"], 4)
+        self.assertEqual(created.status_code, 201)
+        self.admin_service.create.assert_called_once_with(ADMIN, "ATTO", "atto")
+
+    def test_the_tenancy_path_travels_unencoded(self):
+        self.admin_service.members.return_value = TenancyMembersView(
+            members=Page(items=[], total_count=0, limit=50, offset=0), invitations=[]
+        )
+        user_id = uuid4()
+        self.admin_service.removal_impact.return_value = RemovalImpactView(
+            member_since=AT, datasets_in_tenancy=1, shared_with_user=0, owned_by_user=0
+        )
+
+        members = self.client.get(
+            "/v1/admin/tenancies/datamap/production/atto/members?limit=50&offset=0",
+            headers=self.headers,
+        )
+        impact = self.client.get(
+            f"/v1/admin/tenancies/datamap/production/atto/members/{user_id}",
+            headers=self.headers,
+        )
+        removed = self.client.delete(
+            f"/v1/admin/tenancies/datamap/production/atto/members/{user_id}",
+            headers=self.headers,
+        )
+
+        self.assertEqual(members.status_code, 200)
+        self.admin_service.members.assert_called_once_with(
+            "datamap/production/atto", 50, 0
+        )
+        self.assertEqual(impact.json()["datasets_in_tenancy"], 1)
+        self.admin_service.removal_impact.assert_called_once_with(
+            "datamap/production/atto", user_id
+        )
+        self.assertEqual(removed.status_code, 204)
+        self.admin_service.remove.assert_called_once_with(
+            "datamap/production/atto", user_id, ADMIN
+        )
+
+    def test_adding_a_member_answers_201_with_the_member(self):
+        user_id = uuid4()
+        self.admin_service.add.return_value = TenancyMemberView(
+            id=user_id, name="Ana", email="a@usp.br", since=AT, invited_by=None
+        )
+
+        response = self.client.post(
+            "/v1/admin/tenancies/datamap/production/atto/members",
+            json={"user_id": str(user_id)},
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["id"], str(user_id))
+        self.admin_service.add.assert_called_once_with(
+            "datamap/production/atto", user_id, ADMIN
+        )
+
+    def test_user_search(self):
+        self.admin_service.search_users.return_value = [
+            UserBrief(id=uuid4(), name="Ana", email="a@usp.br")
+        ]
+
+        response = self.client.get("/v1/admin/users?q=an", headers=self.headers)
+
+        self.assertEqual(response.json()[0]["name"], "Ana")
+        self.admin_service.search_users.assert_called_once_with("an")

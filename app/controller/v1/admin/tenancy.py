@@ -11,10 +11,18 @@ from app.controller.v1.tenancy.access_resource import (
     AdminTenancyRequestDetailResponse,
     AdminTenancyRequestPage,
     AdminTenancyRequestResponse,
+    AdminTenancyResponse,
     ApproveBody,
     DeclineBody,
+    RemovalImpactResponse,
     RequestCountsResponse,
+    TenancyCreateBody,
+    TenancyMemberResponse,
+    TenancyMembersResponse,
+    UserBriefResponse,
+    UserIdBody,
 )
+from app.service.tenancy_admin import TenancyAdminService
 from app.model.tenancy_access import NewTenancy
 from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_request import TenancyRequestService
@@ -120,3 +128,84 @@ def withdraw_invitation(
 ) -> Response:
     service.withdraw_as_admin(invitation_id, user_id)
     return Response(status_code=204)
+
+
+@router.get("/tenancies", response_model=list[AdminTenancyResponse])
+@inject
+def list_tenancies(
+    service: TenancyAdminService = Depends(Provide[Container.tenancy_admin_service]),
+) -> list[AdminTenancyResponse]:
+    return [AdminTenancyResponse.model_validate(v) for v in service.list()]
+
+
+@router.post("/tenancies", status_code=201, response_model=AdminTenancyResponse)
+@inject
+def create_tenancy(
+    body: TenancyCreateBody,
+    user_id: UUID = Depends(parse_user_header),
+    service: TenancyAdminService = Depends(Provide[Container.tenancy_admin_service]),
+) -> AdminTenancyResponse:
+    return AdminTenancyResponse.model_validate(
+        service.create(user_id, body.display_name, body.namespace)
+    )
+
+
+@router.get(
+    "/tenancies/{path:path}/members/{member_id}", response_model=RemovalImpactResponse
+)
+@inject
+def removal_impact(
+    path: str,
+    member_id: UUID,
+    service: TenancyAdminService = Depends(Provide[Container.tenancy_admin_service]),
+) -> RemovalImpactResponse:
+    return RemovalImpactResponse.model_validate(service.removal_impact(path, member_id))
+
+
+@router.delete("/tenancies/{path:path}/members/{member_id}", status_code=204)
+@inject
+def remove_member(
+    path: str,
+    member_id: UUID,
+    user_id: UUID = Depends(parse_user_header),
+    service: TenancyAdminService = Depends(Provide[Container.tenancy_admin_service]),
+) -> Response:
+    service.remove(path, member_id, user_id)
+    return Response(status_code=204)
+
+
+@router.get("/tenancies/{path:path}/members", response_model=TenancyMembersResponse)
+@inject
+def list_members(
+    path: str,
+    limit: int = 50,
+    offset: int = 0,
+    service: TenancyAdminService = Depends(Provide[Container.tenancy_admin_service]),
+) -> TenancyMembersResponse:
+    return TenancyMembersResponse.model_validate(service.members(path, limit, offset))
+
+
+@router.post(
+    "/tenancies/{path:path}/members",
+    status_code=201,
+    response_model=TenancyMemberResponse,
+)
+@inject
+def add_member(
+    path: str,
+    body: UserIdBody,
+    user_id: UUID = Depends(parse_user_header),
+    service: TenancyAdminService = Depends(Provide[Container.tenancy_admin_service]),
+) -> TenancyMemberResponse:
+    return TenancyMemberResponse.model_validate(
+        service.add(path, body.user_id, user_id)
+    )
+
+
+@router.get("/users", response_model=list[UserBriefResponse])
+@inject
+def search_users(
+    q: str = "",
+    service: TenancyAdminService = Depends(Provide[Container.tenancy_admin_service]),
+) -> list[UserBriefResponse]:
+    return [UserBriefResponse.model_validate(hit) for hit in service.search_users(q)]
