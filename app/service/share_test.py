@@ -25,6 +25,11 @@ from app.service.permission import PermissionService
 from app.service.share import ShareService
 from app.service.share_token import hash_token
 from app.service.user import UserService
+from app.model.tenancy import DEFAULT_TENANCY, summary_of
+from app.model.tenancy_access import DatasetTenancyInvitationView, UserBrief
+from app.repository.tenancy import TenancyRepository
+from app.service.tenancy_invitation import TenancyInvitationService
+from app.service.tenancy_membership import TenancyMembershipService
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
 OWNER = uuid4()
@@ -74,6 +79,14 @@ class ShareServiceTestCase(unittest.TestCase):
         self.users.fetch_by_id.side_effect = lambda id, is_enabled=True: user_row(
             id, name="Caller"
         )
+        self.tenancy_repository = Mock(spec=TenancyRepository)
+        self.tenancy_repository.count_datasets.return_value = 0
+        self.membership_service = Mock(spec=TenancyMembershipService)
+        self.membership_service.summary.side_effect = lambda path: summary_of(
+            path, None
+        )
+        self.tenancy_invitations = Mock(spec=TenancyInvitationService)
+        self.tenancy_invitations.share_additions.return_value = ([], False)
         self.service = ShareService(
             dataset_service=self.datasets,
             dataset_repository=self.dataset_repository,
@@ -86,6 +99,9 @@ class ShareServiceTestCase(unittest.TestCase):
             audit=self.audit,
             email_service=self.email,
             public_base_url="https://datamap.pcs.usp.br",
+            tenancy_repository=self.tenancy_repository,
+            membership_service=self.membership_service,
+            tenancy_invitations=self.tenancy_invitations,
             clock=lambda: NOW,
         )
 
@@ -366,4 +382,50 @@ class TestManage(ShareServiceTestCase):
         self.assertEqual([user.name for user in found], ["Ana Lima"])
         self.users.search_share_candidates.assert_called_once_with(
             tenancy=self.dataset.tenancy, term="ana", exclude_ids=[OWNER, holder]
+        )
+
+
+class TestTenancyInShareState(ShareServiceTestCase):
+    def setUp(self):
+        super().setUp()
+        self.invitations.list_for_dataset.return_value = []
+        self.anonymous_links.list_with_views.return_value = []
+        self.users.count_in_tenancy.return_value = 3
+        self.dataset.embargo_until = None
+
+    def test_candidates_are_off_in_public(self):
+        self.dataset.tenancy = DEFAULT_TENANCY
+
+        self.assertEqual(self.service.candidates(self.dataset.id, CALLER, "ana"), [])
+        self.users.search_share_candidates.assert_not_called()
+
+    def test_the_tenancy_row_names_public_and_never_lets_members_edit(self):
+        self.dataset.tenancy = DEFAULT_TENANCY
+        self.dataset.members_can_edit = True
+        self.tenancy_repository.count_datasets.return_value = 40
+
+        tenancy = self.service.state(self.dataset.id, OWNER).tenancy
+
+        self.assertEqual(tenancy.name, "Public")
+        self.assertTrue(tenancy.is_default)
+        self.assertFalse(tenancy.is_legacy)
+        self.assertEqual(tenancy.datasets, 40)
+        self.assertFalse(tenancy.members_can_edit)
+
+    def test_pending_tenancy_invitations_and_whether_the_caller_may_invite(self):
+        view = DatasetTenancyInvitationView(
+            id=uuid4(),
+            user=UserBrief(id=uuid4(), name="Bruna"),
+            invited_by=None,
+            created_at=NOW,
+            can_withdraw=True,
+        )
+        self.tenancy_invitations.share_additions.return_value = ([view], True)
+
+        state = self.service.state(self.dataset.id, OWNER)
+
+        self.assertEqual(state.tenancy_invitations, [view])
+        self.assertTrue(state.can_invite_to_tenancy)
+        self.tenancy_invitations.share_additions.assert_called_once_with(
+            self.dataset, AccessLevel.OWNER, OWNER
         )

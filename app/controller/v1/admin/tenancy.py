@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.container import Container
 from app.controller.interceptor.authentication import authenticate
@@ -16,6 +16,7 @@ from app.controller.v1.tenancy.access_resource import (
     RequestCountsResponse,
 )
 from app.model.tenancy_access import NewTenancy
+from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_request import TenancyRequestService
 
 router = APIRouter(
@@ -106,3 +107,16 @@ def decline_request(
     return AdminTenancyRequestResponse.model_validate(
         service.decline(request_id, user_id, body.message if body else None)
     )
+
+
+@router.delete("/tenancy-invitations/{invitation_id}", status_code=204)
+@inject
+def withdraw_invitation(
+    invitation_id: UUID,
+    user_id: UUID = Depends(parse_user_header),
+    service: TenancyInvitationService = Depends(
+        Provide[Container.tenancy_invitation_service]
+    ),
+) -> Response:
+    service.withdraw_as_admin(invitation_id, user_id)
+    return Response(status_code=204)

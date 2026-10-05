@@ -23,6 +23,8 @@ from app.repository.permission import PermissionRepository
 from app.repository.tenancy_event import TenancyEventRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.tenancy_request import TenancyRequestRepository
+from app.repository.tenancy_invitation import TenancyInvitationRepository
+from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_request import TenancyRequestService
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_notifier import TenancyNotifier
@@ -76,6 +78,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.dataset.embargo_status",
             "app.controller.v1.dataset.members_access",
             "app.controller.v1.dataset.share",
+            "app.controller.v1.dataset.tenancy_invitation",
             "app.controller.v1.dataset.anonymous_link",
             "app.controller.v1.invitation.invitation",
             "app.controller.v1.anonymous.anonymous",
@@ -409,6 +412,22 @@ class Container(containers.DeclarativeContainer):
         anonymous_link_repository=dataset_anonymous_link_repository,
     )
 
+    tenancy_invitation_repository = providers.Factory(
+        TenancyInvitationRepository,
+        session_factory=db.provided.session,
+    )
+
+    tenancy_invitation_service = providers.Factory(
+        TenancyInvitationService,
+        dataset_service=dataset_service,
+        invitations=tenancy_invitation_repository,
+        memberships=tenancy_membership_repository,
+        membership_service=tenancy_membership_service,
+        tenancies=tenancy_repository,
+        users=user_repository,
+        notifier=tenancy_notifier,
+    )
+
     share_service = providers.Factory(
         ShareService,
         dataset_service=dataset_service,
@@ -422,6 +441,9 @@ class Container(containers.DeclarativeContainer):
         audit=dataset_access_audit,
         email_service=email_service,
         public_base_url=config.PUBLIC_BASE_URL,
+        tenancy_repository=tenancy_repository,
+        membership_service=tenancy_membership_service,
+        tenancy_invitations=tenancy_invitation_service,
     )
 
     anonymous_link_service = providers.Factory(

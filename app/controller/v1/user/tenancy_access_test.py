@@ -14,7 +14,13 @@ from app.controller.interceptor.authorization import authorize, authorize_self
 from app.exception.conflict import ConflictException
 from app.exception.not_found import NotFoundException
 from app.model.tenancy import DEFAULT_TENANCY, summary_of
-from app.model.tenancy_access import TenancyRequestView
+from app.model.tenancy_access import (
+    DatasetRef,
+    TenancyInvitationView,
+    TenancyRequestView,
+    UserRef,
+)
+from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_request import TenancyRequestService
 
@@ -164,3 +170,68 @@ class TestRequestRoutes(SelfRoutesTestCase):
                     f"/v1/users/{self.user_id}/tenancies"
                 )
                 self.assertIn(response.status_code, (404, 405))
+
+
+class TestInvitationRoutes(SelfRoutesTestCase):
+    def setUp(self):
+        super().setUp()
+        self.invitations = Mock(spec=TenancyInvitationService)
+        self.container.tenancy_invitation_service.override(
+            providers.Object(self.invitations)
+        )
+
+    def tearDown(self):
+        self.container.tenancy_invitation_service.reset_override()
+        super().tearDown()
+
+    def test_pending_invitations(self):
+        self.invitations.pending_for_user.return_value = [
+            TenancyInvitationView(
+                id=uuid4(),
+                tenancy=summary_of("datamap/production/atto", "ATTO"),
+                invited_by=UserRef(id=uuid4(), name="Alan"),
+                dataset=DatasetRef(id=uuid4(), name="Ozone"),
+                datasets=12,
+                created_at=AT,
+            )
+        ]
+
+        response = self.client.get(f"/v1/users/{self.user_id}/tenancy-invitations")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["datasets"], 12)
+        self.assertEqual(response.json()[0]["tenancy"]["display_name"], "ATTO")
+
+    def test_accept_answers_the_tenancy(self):
+        invitation_id = uuid4()
+        self.invitations.accept.return_value = summary_of(
+            "datamap/production/atto", "ATTO"
+        )
+
+        response = self.client.post(
+            f"/v1/users/{self.user_id}/tenancy-invitations/{invitation_id}/accept"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["tenancy"]["path"], "datamap/production/atto")
+        self.invitations.accept.assert_called_once_with(self.user_id, invitation_id)
+
+    def test_decline_answers_204(self):
+        invitation_id = uuid4()
+
+        response = self.client.post(
+            f"/v1/users/{self.user_id}/tenancy-invitations/{invitation_id}/decline"
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.invitations.decline.assert_called_once_with(self.user_id, invitation_id)
+
+    def test_an_invitation_that_is_not_theirs_is_404(self):
+        self.invitations.accept.side_effect = NotFoundException("invitation_not_found")
+
+        response = self.client.post(
+            f"/v1/users/{self.user_id}/tenancy-invitations/{uuid4()}/accept"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "invitation_not_found"})

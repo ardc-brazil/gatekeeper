@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from app.controller.v1.tenancy.access_resource import DatasetTenancyInvitationResponse
 from app.model.sharing import (
     GrantResult,
     InvitationPreview,
@@ -61,7 +62,10 @@ class TenancyAccessResponse(BaseModel):
     name: str
     path: str
     members: int
-    members_can_edit: bool = True
+    members_can_edit: bool = False
+    is_default: bool = False
+    is_legacy: bool = False
+    datasets: int = 0
 
 
 class ShareStateResponse(BaseModel):
@@ -70,6 +74,8 @@ class ShareStateResponse(BaseModel):
     invitations: list[InvitationResponse]
     anonymous_links: list[AnonymousLinkResponse]
     tenancy: TenancyAccessResponse | None = None
+    tenancy_invitations: list[DatasetTenancyInvitationResponse] = []
+    can_invite_to_tenancy: bool = False
 
 
 class GrantRequestBody(BaseModel):
@@ -183,9 +189,17 @@ def adapt_share_state(state: ShareState) -> ShareStateResponse:
             path=state.tenancy.path,
             members=state.tenancy.members,
             members_can_edit=state.tenancy.members_can_edit,
+            is_default=state.tenancy.is_default,
+            is_legacy=state.tenancy.is_legacy,
+            datasets=state.tenancy.datasets,
         )
         if state.tenancy
         else None,
+        tenancy_invitations=[
+            DatasetTenancyInvitationResponse.model_validate(view)
+            for view in state.tenancy_invitations
+        ],
+        can_invite_to_tenancy=state.can_invite_to_tenancy,
     )
 
 

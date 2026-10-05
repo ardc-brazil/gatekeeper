@@ -7,10 +7,13 @@ from app.container import Container
 from app.controller.interceptor.authentication import authenticate
 from app.controller.interceptor.authorization import authorize_self
 from app.controller.v1.tenancy.access_resource import (
+    AcceptedInvitationResponse,
+    TenancyInvitationResponse,
     TenancyRequestBody,
     TenancyRequestResponse,
     TenancySummaryResponse,
 )
+from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_request import TenancyRequestService
 
@@ -69,4 +72,48 @@ def withdraw_request(
     ),
 ) -> Response:
     service.withdraw(id, request_id)
+    return Response(status_code=204)
+
+
+@router.get("/{id}/tenancy-invitations", response_model=list[TenancyInvitationResponse])
+@inject
+def my_invitations(
+    id: UUID,
+    service: TenancyInvitationService = Depends(
+        Provide[Container.tenancy_invitation_service]
+    ),
+) -> list[TenancyInvitationResponse]:
+    return [
+        TenancyInvitationResponse.model_validate(v)
+        for v in service.pending_for_user(id)
+    ]
+
+
+@router.post(
+    "/{id}/tenancy-invitations/{invitation_id}/accept",
+    response_model=AcceptedInvitationResponse,
+)
+@inject
+def accept_invitation(
+    id: UUID,
+    invitation_id: UUID,
+    service: TenancyInvitationService = Depends(
+        Provide[Container.tenancy_invitation_service]
+    ),
+) -> AcceptedInvitationResponse:
+    return AcceptedInvitationResponse(
+        tenancy=TenancySummaryResponse.model_validate(service.accept(id, invitation_id))
+    )
+
+
+@router.post("/{id}/tenancy-invitations/{invitation_id}/decline", status_code=204)
+@inject
+def decline_invitation(
+    id: UUID,
+    invitation_id: UUID,
+    service: TenancyInvitationService = Depends(
+        Provide[Container.tenancy_invitation_service]
+    ),
+) -> Response:
+    service.decline(id, invitation_id)
     return Response(status_code=204)

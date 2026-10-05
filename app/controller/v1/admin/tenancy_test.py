@@ -19,6 +19,7 @@ from app.model.tenancy_access import (
     RequestCounts,
     Requester,
 )
+from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_request import TenancyRequestService
 
 AT = datetime(2026, 10, 5, 9, 30, tzinfo=timezone.utc)
@@ -186,3 +187,26 @@ class TestRequestQueueRoutes(AdminRoutesTestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json(), {"detail": "request_not_pending"})
+
+
+class TestAdminInvitationRoutes(AdminRoutesTestCase):
+    def setUp(self):
+        super().setUp()
+        self.invitations = Mock(spec=TenancyInvitationService)
+        self.container.tenancy_invitation_service.override(
+            providers.Object(self.invitations)
+        )
+
+    def tearDown(self):
+        self.container.tenancy_invitation_service.reset_override()
+        super().tearDown()
+
+    def test_an_admin_withdraws_an_invitation(self):
+        invitation_id = uuid4()
+
+        response = self.client.delete(
+            f"/v1/admin/tenancy-invitations/{invitation_id}", headers=self.headers
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.invitations.withdraw_as_admin.assert_called_once_with(invitation_id, ADMIN)

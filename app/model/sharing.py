@@ -53,7 +53,10 @@ class TenancyAccess:
     name: str
     path: str
     members: int
-    members_can_edit: bool = True
+    members_can_edit: bool = False
+    is_default: bool = False
+    is_legacy: bool = False
+    datasets: int = 0
 
 
 @dataclass
@@ -63,6 +66,8 @@ class ShareState:
     invitations: list[InvitationView] = field(default_factory=list)
     anonymous_links: list[AnonymousLinkView] = field(default_factory=list)
     tenancy: TenancyAccess | None = None
+    tenancy_invitations: list = field(default_factory=list)
+    can_invite_to_tenancy: bool = False
 
 
 @dataclass

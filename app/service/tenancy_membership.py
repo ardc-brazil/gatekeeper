@@ -8,9 +8,8 @@ from app.model.tenancy import (
     DISPLAY_NAME_MAX_LENGTH,
     PRODUCTION_PREFIX,
     TenancySummary,
+    closed_to_members,
     display_name_of,
-    is_default,
-    is_legacy,
     is_production,
     namespace_is_valid,
     summary_of,
@@ -49,14 +48,11 @@ class TenancyMembershipService:
 
     def require_open_for_members(self, path: str) -> TenancyDBModel:
         row = self._tenancies.fetch_any(path)
+        code = closed_to_members(path, row.is_enabled if row else None)
         if row is None:
-            raise NotFoundException("tenancy_not_found")
-        if is_default(path):
-            raise ConflictException("public_tenancy_locked")
-        if is_legacy(path):
-            raise ConflictException("legacy_tenancy_read_only")
-        if not row.is_enabled or not is_production(path):
-            raise ConflictException("tenancy_disabled")
+            raise NotFoundException(code)
+        if code is not None:
+            raise ConflictException(code)
         return row
 
     def check_new_tenancy(self, display_name: str, namespace: str) -> tuple[str, str]:

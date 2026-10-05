@@ -31,6 +31,9 @@ from app.controller.v1.dataset.embargo import router as embargo_router
 from app.controller.v1.dataset.embargo_status import router as embargo_status_router
 from app.controller.v1.dataset.members_access import router as members_access_router
 from app.controller.v1.dataset.share import router as share_router
+from app.controller.v1.dataset.tenancy_invitation import (
+    router as tenancy_invitation_router,
+)
 from app.controller.v1.dataset.anonymous_link import router as anonymous_link_router
 from app.controller.v1.invitation.invitation import router as invitation_router
 from app.controller.v1.anonymous.anonymous import router as anonymous_router
@@ -204,6 +207,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(dataset_filter_router, prefix="/v1")
     fastAPIApp.include_router(dataset_router, prefix="/v1")
     fastAPIApp.include_router(share_router, prefix="/v1")
+    fastAPIApp.include_router(tenancy_invitation_router, prefix="/v1")
     fastAPIApp.include_router(anonymous_link_router, prefix="/v1")
     fastAPIApp.include_router(invitation_router, prefix="/v1")
     fastAPIApp.include_router(anonymous_router, prefix="/v1")
