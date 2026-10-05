@@ -384,6 +384,44 @@ class TestDefaultAccess(unittest.TestCase):
             ],
         )
 
+    def test_datasets_write_is_granted_on_top_of_datasets_read(self):
+        self.service.create(self.account(roles=["datasets_read"]))
+
+        self.assertEqual(
+            self.casbin_enforcer.add_grouping_policy.call_args_list,
+            [
+                call(str(self.user_id), "datasets_read"),
+                call(str(self.user_id), "datasets_write"),
+            ],
+        )
+
+    def test_a_failed_role_grant_does_not_undo_the_account(self):
+        self.casbin_enforcer.add_grouping_policy.side_effect = [
+            RuntimeError("policy store gone"),
+            True,
+        ]
+
+        with self.assertLogs("service:UserService", level="ERROR") as logs:
+            user_id = self.service.create(
+                self.account(roles=["admin"], tenancies=[DEFAULT_TENANCY])
+            )
+
+        self.assertEqual(user_id, self.user_id)
+        self.assertEqual(logs.records[0].role, "admin")
+        self.assertEqual(logs.records[0].user_id, str(self.user_id))
+        self.assertEqual(
+            self.casbin_enforcer.add_grouping_policy.call_args_list,
+            [
+                call(str(self.user_id), "admin"),
+                call(str(self.user_id), "datasets_write"),
+            ],
+        )
+        self.events.append.assert_called_once_with(
+            tenancy=DEFAULT_TENANCY,
+            event_type=TenancyEventType.MEMBER_ADDED,
+            user_id=self.user_id,
+        )
+
     def test_a_failure_to_record_does_not_undo_the_account(self):
         self.events.append.side_effect = RuntimeError("database gone")
 

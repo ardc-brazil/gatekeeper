@@ -98,11 +98,22 @@ class UserService:
         created = self._repository.upsert(user=dbUser)
         user_id = created.id
 
-        for role in dict.fromkeys([*(user.roles or []), DEFAULT_ROLE]):
-            self._casbin_enforcer.add_grouping_policy(str(user_id), role)
-
+        self._grant_roles(
+            user_id, list(dict.fromkeys([*(user.roles or []), DEFAULT_ROLE]))
+        )
         self._record_memberships(user_id, tenancies)
         return user_id
+
+    def _grant_roles(self, user_id: UUID, roles: list[str]) -> None:
+        for role in roles:
+            try:
+                self._casbin_enforcer.add_grouping_policy(str(user_id), role)
+            except Exception:
+                self._logger.error(
+                    "role not granted",
+                    exc_info=True,
+                    extra=fields(user_id=str(user_id), role=role),
+                )
 
     def _record_memberships(self, user_id: UUID, tenancies: list[str]) -> None:
         if self._tenancy_events is None:
