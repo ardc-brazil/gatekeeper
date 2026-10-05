@@ -26,9 +26,7 @@ from app.service.share import ShareService
 from app.service.share_token import hash_token
 from app.service.user import UserService
 from app.model.tenancy import DEFAULT_TENANCY, summary_of
-from app.model.tenancy_access import DatasetTenancyInvitationView, UserBrief
 from app.repository.tenancy import TenancyRepository
-from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_membership import TenancyMembershipService
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -85,8 +83,6 @@ class ShareServiceTestCase(unittest.TestCase):
         self.membership_service.summary.side_effect = lambda path: summary_of(
             path, None
         )
-        self.tenancy_invitations = Mock(spec=TenancyInvitationService)
-        self.tenancy_invitations.share_additions.return_value = ([], False)
         self.service = ShareService(
             dataset_service=self.datasets,
             dataset_repository=self.dataset_repository,
@@ -101,7 +97,6 @@ class ShareServiceTestCase(unittest.TestCase):
             public_base_url="https://datamap.pcs.usp.br",
             tenancy_repository=self.tenancy_repository,
             membership_service=self.membership_service,
-            tenancy_invitations=self.tenancy_invitations,
             clock=lambda: NOW,
         )
 
@@ -412,42 +407,9 @@ class TestTenancyInShareState(ShareServiceTestCase):
         self.assertEqual(tenancy.datasets, 40)
         self.assertFalse(tenancy.members_can_edit)
 
-    def test_pending_tenancy_invitations_and_whether_the_caller_may_invite(self):
-        view = DatasetTenancyInvitationView(
-            id=uuid4(),
-            user=UserBrief(id=uuid4(), name="Bruna"),
-            invited_by=None,
-            created_at=NOW,
-            can_withdraw=True,
-        )
-        self.tenancy_invitations.share_additions.return_value = ([view], True)
-
-        state = self.service.state(self.dataset.id, OWNER)
-
-        self.assertEqual(state.tenancy_invitations, [view])
-        self.assertTrue(state.can_invite_to_tenancy)
-        self.tenancy_invitations.share_additions.assert_called_once_with(
-            self.dataset, AccessLevel.OWNER, OWNER
-        )
-
-    def test_an_embargoed_dataset_hides_the_tenancy_but_lists_pending_invitations(
-        self,
-    ):
+    def test_an_embargoed_dataset_hides_the_tenancy(self):
         self.dataset.embargo_until = NOW + timedelta(days=30)
-        view = DatasetTenancyInvitationView(
-            id=uuid4(),
-            user=UserBrief(id=uuid4(), name="Bruna"),
-            invited_by=None,
-            created_at=NOW,
-            can_withdraw=True,
-        )
-        self.tenancy_invitations.share_additions.return_value = ([view], False)
 
         state = self.service.state(self.dataset.id, OWNER)
 
         self.assertIsNone(state.tenancy)
-        self.assertEqual(state.tenancy_invitations, [view])
-        self.assertFalse(state.can_invite_to_tenancy)
-        self.tenancy_invitations.share_additions.assert_called_once_with(
-            self.dataset, AccessLevel.OWNER, OWNER
-        )

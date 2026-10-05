@@ -43,7 +43,6 @@ from app.service.share_token import hash_token, new_token
 from app.service.user import UserService
 from app.model.tenancy import is_default
 from app.repository.tenancy import TenancyRepository
-from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_membership import TenancyMembershipService
 
 PLACEHOLDER_EMAIL_DOMAIN = "@fake.mail.com"
@@ -77,7 +76,6 @@ class ShareService:
         public_base_url: str,
         tenancy_repository: TenancyRepository,
         membership_service: TenancyMembershipService,
-        tenancy_invitations: TenancyInvitationService,
         clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         self._datasets = dataset_service
@@ -94,7 +92,6 @@ class ShareService:
         self._clock = clock
         self._tenancies = tenancy_repository
         self._membership_service = membership_service
-        self._tenancy_invitations = tenancy_invitations
         self._logger = logging.getLogger("service:ShareService")
 
     def invitation_link(self, token: str) -> str:
@@ -204,12 +201,7 @@ class ShareService:
         )
 
     def state(self, dataset_id: UUID, user_id: UUID) -> ShareState:
-        dataset, _, level = self._datasets.fetch_authorized(
-            dataset_id=dataset_id,
-            user_id=user_id,
-            tenancies=None,
-            action=DatasetAction.WRITE,
-        )
+        dataset = self._authorized(dataset_id, user_id)
         invitations = self._invitations.list_for_dataset(dataset.id)
         invited_as = {
             invitation.accepted_by: self._address(invitation)
@@ -236,9 +228,6 @@ class ShareService:
                 is_legacy=summary.is_legacy,
                 datasets=self._tenancies.count_datasets(dataset.tenancy),
             )
-        tenancy_invitations, can_invite = self._tenancy_invitations.share_additions(
-            dataset, level, user_id
-        )
         return ShareState(
             owner=self._share_user(dataset.owner_id),
             permissions=permissions,
@@ -259,8 +248,6 @@ class ShareService:
                 )
             ],
             tenancy=tenancy,
-            tenancy_invitations=tenancy_invitations,
-            can_invite_to_tenancy=can_invite,
         )
 
     def grant(
