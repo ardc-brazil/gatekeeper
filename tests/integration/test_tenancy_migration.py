@@ -13,9 +13,9 @@ DATA_AMAZON = "datamap/production/data-amazon"
 THIS_REVISION = "c3d4e5f6a7b8"
 PREVIOUS_REVISION = "b1c2d3e4f5a6"
 DATASETS_WRITE_DELETE_PATHS = (
-    "/api/v1/datasets/[0-9a-f-]{36}/share/(permissions|invitations)/[0-9a-f-]{36}$",
-    "/api/v1/datasets/[0-9a-f-]{36}/tenancy-invitations/[0-9a-f-]{36}$",
-    "/api/v1/datasets/[0-9a-f-]{36}/anonymous-links/[0-9a-f-]{36}$",
+    "/api/v1/datasets/[0-9a-fA-F-]{36}/share/(permissions|invitations)/[0-9a-fA-F-]{36}$",
+    "/api/v1/datasets/[0-9a-fA-F-]{36}/tenancy-invitations/[0-9a-fA-F-]{36}$",
+    "/api/v1/datasets/[0-9a-fA-F-]{36}/anonymous-links/[0-9a-fA-F-]{36}$",
 )
 DATASETS_WRITE_DELETE_RULES = (
     "ptype = 'p' AND v0 = 'datasets_write' AND v2 = 'DELETE' AND v1 IN ("

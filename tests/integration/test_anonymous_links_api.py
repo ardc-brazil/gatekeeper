@@ -219,3 +219,19 @@ class TestAnOwnerWithOnlyDatasetsWrite:
         assert still_active is None
         assert_status_code(by_owner, 204)
         assert link_state(http_client, headers, dataset["id"])["revoked_at"] is not None
+
+    def test_revokes_through_a_path_with_upper_case_ids(self, http_client):
+        owner = new_account(http_client)
+        dataset = create_dataset(http_client, owner["id"], PUBLIC)
+        headers = as_user(owner["id"], PUBLIC)
+        assert_status_code(
+            embargo_for(http_client, dataset["id"], headers, visible=False), 200
+        )
+        link = create_link(http_client, headers, dataset["id"])
+
+        revoked = http_client.delete(
+            f"/datasets/{dataset['id'].upper()}/anonymous-links/{link['id'].upper()}",
+            headers=headers,
+        )
+
+        assert_status_code(revoked, 204)
