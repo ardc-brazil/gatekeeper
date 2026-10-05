@@ -5,7 +5,7 @@
 {% block label %}Tenancy invitation{% endblock %}
 {% block content %}
 {{ m.heading("A member invited someone to a tenancy") }}
-{{ m.details([{"label": "Inviter", "value": inviter_name}, {"label": "Invitee", "value": invitee_name ~ " · " ~ (invitee_email or "No email")}, {"label": "Tenancy", "value": tenancy_display_name ~ " · " ~ tenancy_path}, {"label": "Dataset", "value": dataset_name}]) }}
+{{ m.details([{"label": "Inviter", "value": inviter_name}, {"label": "Invitee", "value": invitee_name ~ " · " ~ (invitee_email or "No email")}, {"label": "Tenancy", "value": tenancy_display_name ~ " · " ~ tenancy_path}]) }}
 {% call m.paragraph() %}No approval is needed. You can withdraw it, or remove {{ invitee_name }} later, from Admin › Tenancies.{% endcall %}
 {{ m.button("Open tenancy", tenancy_url) }}
 {% endblock %}

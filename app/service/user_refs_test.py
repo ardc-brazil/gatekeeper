@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 from app.repository.user import UserRepository
-from app.service.user_refs import dataset_ref, user_brief, user_ref
+from app.service.user_refs import orcid_of, user_brief, user_ref
 
 
 def user_row(name="Ana Lima", email="ana@usp.br"):
@@ -62,16 +62,18 @@ class TestUserRef(unittest.TestCase):
         self.users.fetch_any_by_id.assert_not_called()
 
 
-class TestDatasetRef(unittest.TestCase):
-    def test_present(self):
-        dataset_id = uuid4()
-        names = {dataset_id: "atto-flux"}
+class TestOrcidOf(unittest.TestCase):
+    def test_the_orcid_provider_reference(self):
+        user = SimpleNamespace(
+            providers=[
+                SimpleNamespace(name="github", reference="ana"),
+                SimpleNamespace(name="orcid", reference="0000-0002-1825-0097"),
+            ]
+        )
 
-        ref = dataset_ref(names, dataset_id)
+        self.assertEqual(orcid_of(user), "0000-0002-1825-0097")
 
-        self.assertEqual((ref.id, ref.name), (dataset_id, "atto-flux"))
-
-    def test_absent(self):
-        ref = dataset_ref({}, uuid4())
-
-        self.assertIsNone(ref)
+    def test_none_without_one(self):
+        for providers in ([], None):
+            with self.subTest(providers=providers):
+                self.assertIsNone(orcid_of(SimpleNamespace(providers=providers)))

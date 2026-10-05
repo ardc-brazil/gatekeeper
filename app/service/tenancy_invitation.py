@@ -1,6 +1,4 @@
 import logging
-from datetime import datetime
-from typing import Callable
 from uuid import UUID
 
 from app.exception.bad_request import BadRequestException
@@ -9,62 +7,83 @@ from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.logging_config import fields
-from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
-from app.model.embargo import embargo_active
 from app.model.tenancy import (
     TenancyEventType,
     TenancyInvitationStatus,
     TenancySummary,
-    closed_to_members,
 )
 from app.model.tenancy_access import (
-    DatasetTenancyInvitationView,
-    ShareLookupView,
+    InviteeLookupView,
+    Page,
     TenancyInvitationView,
     UserBrief,
+    UserRef,
+    WorkspaceInvitationView,
+    WorkspaceMemberView,
 )
+from app.model.user import is_admin
 from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.user import UserRepository
-from app.service.dataset import DatasetService
 from app.service.share_identity import (
     find_account,
     normalise_email,
     normalise_orcid,
 )
-from app.service.tenancy_membership import TenancyMembershipService
+from app.service.tenancy_membership import TenancyMembershipService, require_page
 from app.service.tenancy_notifier import TenancyNotifier, after_commit
-from app.service.user_refs import dataset_ref, user_brief, user_ref
+from app.service.user import UserService
+from app.service.user_refs import orcid_of, user_brief, user_ref
 
-EDITORS = (AccessLevel.OWNER, AccessLevel.WRITE)
 PENDING = TenancyInvitationStatus.PENDING
 
 
 class TenancyInvitationService:
     def __init__(
         self,
-        dataset_service: DatasetService,
         invitations: TenancyInvitationRepository,
         memberships: TenancyMembershipRepository,
         membership_service: TenancyMembershipService,
         tenancies: TenancyRepository,
         users: UserRepository,
+        user_service: UserService,
         notifier: TenancyNotifier,
-        clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        self._datasets = dataset_service
         self._invitations = invitations
         self._memberships = memberships
         self._membership_service = membership_service
         self._tenancies = tenancies
         self._users = users
+        self._user_service = user_service
         self._notifier = notifier
-        self._clock = clock
         self._logger = logging.getLogger("service:TenancyInvitationService")
 
-    def lookup(self, dataset_id: UUID, user_id: UUID, value: str) -> ShareLookupView:
-        dataset, level = self._authorized(dataset_id, user_id)
+    def members(
+        self, user_id: UUID, tenancy: str, limit: int, offset: int
+    ) -> Page[WorkspaceMemberView]:
+        self._require_workspace(user_id, tenancy)
+        require_page(limit, offset)
+        users, total = self._memberships.list_members(tenancy, limit, offset)
+        return Page(
+            items=[
+                WorkspaceMemberView(id=user.id, name=user.name, orcid=orcid_of(user))
+                for user in users
+            ],
+            total_count=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    def pending_in(self, user_id: UUID, tenancy: str) -> list[WorkspaceInvitationView]:
+        self._require_workspace(user_id, tenancy)
+        return [
+            self._workspace_view(invitation, user_id)
+            for invitation in self._invitations.pending_for_tenancy(tenancy)
+        ]
+
+    def lookup(self, user_id: UUID, tenancy: str, value: str) -> InviteeLookupView:
+        self._require_workspace(user_id, tenancy)
         text = (value or "").strip()
         by_email = "@" in text
         target = None
@@ -72,18 +91,17 @@ class TenancyInvitationService:
             target = self._resolve(text, by_email)
         finally:
             self._logger.info(
-                "share lookup",
+                "invitee lookup",
                 extra=fields(
                     user_id=str(user_id),
-                    dataset_id=str(dataset_id),
+                    tenancy=tenancy,
                     lookup_by="email" if by_email else "orcid",
                     matched=target is not None,
                 ),
             )
-        tenancy = dataset.tenancy
-        member = bool(tenancy) and self._memberships.is_member(target.id, tenancy)
-        pending = bool(tenancy) and self._invitations.has_pending(tenancy, target.id)
-        return ShareLookupView(
+        member = self._memberships.is_member(target.id, tenancy)
+        pending = self._invitations.has_pending(tenancy, target.id)
+        return InviteeLookupView(
             user=UserBrief(
                 id=target.id,
                 name=target.name,
@@ -91,35 +109,13 @@ class TenancyInvitationService:
             ),
             tenancy_member=member,
             invitation_pending=pending,
-            can_invite=not member
-            and not pending
-            and self.may_invite(dataset, level, user_id),
-        )
-
-    def may_invite(self, dataset, level: AccessLevel, user_id: UUID) -> bool:
-        if not self._is_inviter(dataset, level, user_id):
-            return False
-        row = self._tenancies.fetch_any(dataset.tenancy)
-        return (
-            closed_to_members(dataset.tenancy, row.is_enabled if row else None) is None
-        )
-
-    def _is_inviter(self, dataset, level: AccessLevel, user_id: UUID) -> bool:
-        return (
-            level in EDITORS
-            and bool(dataset.tenancy)
-            and not embargo_active(dataset.embargo_until, self._clock())
-            and self._memberships.is_member(user_id, dataset.tenancy)
+            can_invite=not member and not pending,
         )
 
     def invite(
-        self, dataset_id: UUID, user_id: UUID, invitee_id: UUID
-    ) -> DatasetTenancyInvitationView:
-        dataset, level = self._authorized(dataset_id, user_id)
-        tenancy = dataset.tenancy
-        if not self._is_inviter(dataset, level, user_id):
-            raise ForbiddenException(f"forbidden: invite to {tenancy} by {user_id}")
-        self._membership_service.require_open_for_members(tenancy)
+        self, user_id: UUID, tenancy: str, invitee_id: UUID
+    ) -> WorkspaceInvitationView:
+        self._require_workspace(user_id, tenancy)
         invitee = self._users.fetch_by_id(id=invitee_id, is_enabled=True)
         if invitee is None:
             raise NotFoundException("no_account")
@@ -127,31 +123,27 @@ class TenancyInvitationService:
             raise ConflictException("already_member")
         if self._invitations.has_pending(tenancy, invitee.id):
             raise ConflictException("invitation_pending")
-        invitation = self._invitations.create(tenancy, invitee.id, user_id, dataset.id)
+        invitation = self._invitations.create(tenancy, invitee.id, user_id)
         after_commit(
-            lambda: self._tell_invited(invitee, user_id, dataset, invitation),
+            lambda: self._tell_invited(invitee, user_id, invitation),
             "invitation",
             invitation_id=str(invitation.id),
         )
-        return self._dataset_view(invitation, user_id)
+        return self._workspace_view(invitation, user_id)
 
-    def _tell_invited(self, invitee, inviter_id: UUID, dataset, invitation) -> None:
+    def _tell_invited(self, invitee, inviter_id: UUID, invitation) -> None:
         inviter = self._users.fetch_any_by_id(inviter_id)
         inviter_name = inviter.name if inviter else "A DataMap user"
         summary = self._membership_service.summary(invitation.tenancy)
-        self._notifier.invitation(
-            invitee, inviter_name, summary, dataset.name, invitation.id
-        )
-        self._notifier.invitation_notice(
-            invitee, inviter_name, summary, dataset.name, invitation.id
-        )
+        self._notifier.invitation(invitee, inviter_name, summary, invitation.id)
+        self._notifier.invitation_notice(invitee, inviter_name, summary, invitation.id)
 
-    def withdraw(self, dataset_id: UUID, user_id: UUID, invitation_id: UUID) -> None:
-        dataset, _ = self._authorized(dataset_id, user_id)
+    def withdraw(self, user_id: UUID, tenancy: str, invitation_id: UUID) -> None:
+        self._require_workspace(user_id, tenancy)
         invitation = self._invitations.fetch(invitation_id)
         if (
             invitation is None
-            or invitation.dataset_id != dataset.id
+            or invitation.tenancy != tenancy
             or TenancyInvitationStatus(invitation.status) != PENDING
         ):
             raise NotFoundException("invitation_not_found")
@@ -164,28 +156,16 @@ class TenancyInvitationService:
     def withdraw_as_admin(self, invitation_id: UUID, admin_id: UUID) -> None:
         self._close(invitation_id, TenancyInvitationStatus.WITHDRAWN, admin_id)
 
-    def share_additions(
-        self, dataset, level: AccessLevel, user_id: UUID
-    ) -> tuple[list[DatasetTenancyInvitationView], bool]:
-        views = [
-            self._dataset_view(invitation, user_id)
-            for invitation in self._invitations.pending_for_dataset(dataset.id)
-        ]
-        return views, self.may_invite(dataset, level, user_id)
-
     def pending_for_user(self, user_id: UUID) -> list[TenancyInvitationView]:
-        invitations = self._invitations.pending_for_user(user_id)
-        names = self._invitations.dataset_names([i.dataset_id for i in invitations])
         return [
             TenancyInvitationView(
                 id=invitation.id,
                 tenancy=self._membership_service.summary(invitation.tenancy),
                 invited_by=user_ref(self._users, invitation.invited_by),
-                dataset=dataset_ref(names, invitation.dataset_id),
                 datasets=self._tenancies.count_datasets(invitation.tenancy),
                 created_at=invitation.created_at,
             )
-            for invitation in invitations
+            for invitation in self._invitations.pending_for_user(user_id)
         ]
 
     def accept(self, user_id: UUID, invitation_id: UUID) -> TenancySummary:
@@ -200,6 +180,13 @@ class TenancyInvitationService:
     def decline(self, user_id: UUID, invitation_id: UUID) -> None:
         invitation = self._theirs(user_id, invitation_id)
         self._close(invitation.id, TenancyInvitationStatus.DECLINED, user_id)
+
+    def _require_workspace(self, user_id: UUID, tenancy: str) -> None:
+        if not self._memberships.is_member(user_id, tenancy) and not is_admin(
+            self._user_service.roles_of(user_id)
+        ):
+            raise NotFoundException("tenancy_not_found")
+        self._membership_service.require_open_for_members(tenancy)
 
     def _theirs(self, user_id: UUID, invitation_id: UUID):
         invitation = self._invitations.fetch(invitation_id)
@@ -221,15 +208,6 @@ class TenancyInvitationService:
         if not self._invitations.close(invitation_id, status, actor_id, event_type):
             raise NotFoundException("invitation_not_found")
 
-    def _authorized(self, dataset_id: UUID, user_id: UUID):
-        dataset, _, level = self._datasets.fetch_authorized(
-            dataset_id=dataset_id,
-            user_id=user_id,
-            tenancies=None,
-            action=DatasetAction.WRITE,
-        )
-        return dataset, level
-
     def _resolve(self, text: str, by_email: bool):
         try:
             email = normalise_email(text) if by_email else None
@@ -241,13 +219,12 @@ class TenancyInvitationService:
             raise NotFoundException("no_account")
         return user
 
-    def _dataset_view(self, invitation, user_id: UUID) -> DatasetTenancyInvitationView:
-        return DatasetTenancyInvitationView(
+    def _workspace_view(self, invitation, user_id: UUID) -> WorkspaceInvitationView:
+        invitee = user_brief(self._users, invitation.user_id)
+        return WorkspaceInvitationView(
             id=invitation.id,
-            user=user_brief(self._users, invitation.user_id),
-            invited_by=user_brief(self._users, invitation.invited_by)
-            if invitation.invited_by
-            else None,
+            user=UserRef(id=invitee.id, name=invitee.name),
+            invited_by=user_ref(self._users, invitation.invited_by),
             created_at=invitation.created_at,
             can_withdraw=invitation.invited_by == user_id,
         )

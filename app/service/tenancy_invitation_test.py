@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
@@ -8,9 +8,7 @@ from app.exception.conflict import ConflictException
 from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
-from app.model.dataset_access import AccessLevel, DatasetAction
 from app.model.tenancy import (
-    DEFAULT_TENANCY,
     TenancyEventType,
     TenancyInvitationStatus,
     summary_of,
@@ -19,18 +17,20 @@ from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.user import UserRepository
-from app.service.dataset import DatasetService
 from app.service.tenancy_invitation import TenancyInvitationService
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_notifier import TenancyNotifier
+from app.service.user import UserService
 
 NOW = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 ATTO = "datamap/production/atto"
 CALLER = uuid4()
 
 
-def person(name="Bruna Costa", email="bruna@usp.br"):
-    return SimpleNamespace(id=uuid4(), name=name, email=email)
+def person(name="Bruna Costa", email="bruna@usp.br", providers=()):
+    return SimpleNamespace(
+        id=uuid4(), name=name, email=email, providers=list(providers)
+    )
 
 
 def invitation_row(**overrides):
@@ -39,7 +39,6 @@ def invitation_row(**overrides):
         tenancy=ATTO,
         user_id=uuid4(),
         invited_by=CALLER,
-        dataset_id=uuid4(),
         status=TenancyInvitationStatus.PENDING,
         created_at=NOW,
     )
@@ -49,7 +48,6 @@ def invitation_row(**overrides):
 
 class InvitationServiceTestCase(unittest.TestCase):
     def setUp(self):
-        self.datasets = Mock(spec=DatasetService)
         self.invitations = Mock(spec=TenancyInvitationRepository)
         self.memberships = Mock(spec=TenancyMembershipRepository)
         self.membership_service = Mock(spec=TenancyMembershipService)
@@ -62,6 +60,8 @@ class InvitationServiceTestCase(unittest.TestCase):
         )
         self.tenancies.count_datasets.return_value = 12
         self.users = Mock(spec=UserRepository)
+        self.user_service = Mock(spec=UserService)
+        self.user_service.roles_of.return_value = ["datasets_write"]
         self.notifier = Mock(spec=TenancyNotifier)
         self.caller = SimpleNamespace(
             id=CALLER, name="Alan Calheiros", email="alan@usp.br"
@@ -72,110 +72,146 @@ class InvitationServiceTestCase(unittest.TestCase):
         self.users.fetch_by_id.side_effect = (
             lambda id, is_enabled=True: self.people.get(id)
         )
-        self.dataset = SimpleNamespace(
-            id=uuid4(), name="Ozone at ATTO", tenancy=ATTO, embargo_until=None
-        )
-        self.level = AccessLevel.OWNER
-        self.datasets.fetch_authorized.side_effect = lambda **kwargs: (
-            self.dataset,
-            [ATTO],
-            self.level,
-        )
         self.members = {(CALLER, ATTO)}
         self.memberships.is_member.side_effect = lambda user_id, tenancy: (
             (user_id, tenancy) in self.members
         )
         self.invitations.has_pending.return_value = False
+        self.invitations.pending_for_tenancy.return_value = []
         self.invitations.create.side_effect = (
-            lambda tenancy, user_id, invited_by, dataset_id: invitation_row(
-                tenancy=tenancy,
-                user_id=user_id,
-                invited_by=invited_by,
-                dataset_id=dataset_id,
+            lambda tenancy, user_id, invited_by: invitation_row(
+                tenancy=tenancy, user_id=user_id, invited_by=invited_by
             )
         )
         self.service = TenancyInvitationService(
-            dataset_service=self.datasets,
             invitations=self.invitations,
             memberships=self.memberships,
             membership_service=self.membership_service,
             tenancies=self.tenancies,
             users=self.users,
+            user_service=self.user_service,
             notifier=self.notifier,
-            clock=lambda: NOW,
         )
 
-    def embargo(self, days: int = 30) -> None:
-        self.dataset.embargo_until = NOW + timedelta(days=days)
-
-
-class TestWhoMayInvite(InvitationServiceTestCase):
-    def invite(self):
-        return self.service.invite(self.dataset.id, CALLER, self.invitee.id)
-
-    def test_the_owner_who_is_a_member_invites(self):
-        view = self.invite()
-
-        self.invitations.create.assert_called_once_with(
-            ATTO, self.invitee.id, CALLER, self.dataset.id
-        )
-        self.assertEqual(view.user.name, "Bruna Costa")
-        self.assertEqual(view.invited_by.name, "Alan Calheiros")
-        self.assertTrue(view.can_withdraw)
-        self.assertEqual(
-            self.datasets.fetch_authorized.call_args.kwargs["action"],
-            DatasetAction.WRITE,
-        )
-
-    def test_a_write_collaborator_who_is_a_member_invites(self):
-        self.level = AccessLevel.WRITE
-
-        self.invite()
-
-        self.invitations.create.assert_called_once()
-
-    def test_a_member_who_edits_only_because_members_can_edit_may_not(self):
-        self.level = AccessLevel.TENANCY
-
-        with self.assertRaises(ForbiddenException):
-            self.invite()
-
-    def test_a_write_collaborator_outside_the_tenancy_may_not(self):
-        self.level = AccessLevel.WRITE
+    def outsider(self) -> None:
         self.members = set()
 
-        with self.assertRaises(ForbiddenException):
-            self.invite()
+    def admin(self) -> None:
+        self.user_service.roles_of.return_value = ["admin"]
+
+
+class TestWhoReachesTheWorkspace(InvitationServiceTestCase):
+    def calls(self):
+        return {
+            "members": lambda: self.service.members(CALLER, ATTO, 50, 0),
+            "pending_in": lambda: self.service.pending_in(CALLER, ATTO),
+            "lookup": lambda: self.service.lookup(CALLER, ATTO, "bruna@usp.br"),
+            "invite": lambda: self.service.invite(CALLER, ATTO, self.invitee.id),
+            "withdraw": lambda: self.service.withdraw(CALLER, ATTO, uuid4()),
+        }
+
+    def test_a_non_member_gets_tenancy_not_found_everywhere(self):
+        self.outsider()
+
+        for name, call in self.calls().items():
+            with self.subTest(route=name):
+                with self.assertRaises(NotFoundException) as raised:
+                    call()
+                self.assertEqual(str(raised.exception), "tenancy_not_found")
+        self.invitations.create.assert_not_called()
+        self.memberships.list_members.assert_not_called()
+
+    def test_a_tenancy_closed_to_members_answers_its_code_everywhere(self):
+        for code in (
+            "public_tenancy_locked",
+            "legacy_tenancy_read_only",
+            "tenancy_disabled",
+        ):
+            self.membership_service.require_open_for_members.side_effect = (
+                ConflictException(code)
+            )
+            for name, call in self.calls().items():
+                with self.subTest(route=name, code=code):
+                    with self.assertRaises(ConflictException) as raised:
+                        call()
+                    self.assertEqual(str(raised.exception), code)
         self.invitations.create.assert_not_called()
 
-    def test_nobody_invites_while_the_dataset_is_embargoed(self):
-        self.embargo()
+    def test_an_admin_who_is_not_a_member_is_let_through(self):
+        self.outsider()
+        self.admin()
 
-        with self.assertRaises(ForbiddenException) as raised:
-            self.invite()
+        self.service.invite(CALLER, ATTO, self.invitee.id)
 
-        self.assertEqual(raised.exception.detail, "forbidden")
-        self.invitations.create.assert_not_called()
+        self.invitations.create.assert_called_once_with(ATTO, self.invitee.id, CALLER)
+        self.membership_service.require_open_for_members.assert_called_once_with(ATTO)
 
-    def test_an_embargo_that_has_ended_does_not_stop_an_invitation(self):
-        self.embargo(days=-1)
+    def test_a_member_is_not_asked_for_roles(self):
+        self.service.pending_in(CALLER, ATTO)
 
-        self.invite()
+        self.user_service.roles_of.assert_not_called()
 
-        self.invitations.create.assert_called_once()
 
-    def test_a_reader_may_not(self):
-        self.datasets.fetch_authorized.side_effect = ForbiddenException("forbidden")
+class TestMembers(InvitationServiceTestCase):
+    def test_names_and_orcid_ids_without_emails(self):
+        orcid = SimpleNamespace(name="orcid", reference="0000-0002-1825-0097")
+        ana, bruna = person("Ana", "ana@usp.br", [orcid]), person()
+        self.memberships.list_members.return_value = ([ana, bruna], 7)
 
-        with self.assertRaises(ForbiddenException):
-            self.invite()
+        page = self.service.members(CALLER, ATTO, 2, 4)
+
+        self.memberships.list_members.assert_called_once_with(ATTO, 2, 4)
+        self.assertEqual(
+            [(m.id, m.name, m.orcid) for m in page.items],
+            [(ana.id, "Ana", "0000-0002-1825-0097"), (bruna.id, "Bruna Costa", None)],
+        )
+        self.assertFalse(any(hasattr(m, "email") for m in page.items))
+        self.assertEqual((page.total_count, page.limit, page.offset), (7, 2, 4))
+
+    def test_a_page_out_of_bounds_is_invalid_request(self):
+        for limit, offset in ((0, 0), (101, 0), (10, -1)):
+            with self.subTest(limit=limit, offset=offset):
+                with self.assertRaises(IllegalStateException) as raised:
+                    self.service.members(CALLER, ATTO, limit, offset)
+                self.assertEqual(str(raised.exception), "invalid_request")
+
+
+class TestPendingInTheWorkspace(InvitationServiceTestCase):
+    def test_only_the_inviter_may_withdraw_and_no_email_is_shown(self):
+        mine = invitation_row(user_id=self.invitee.id)
+        theirs = invitation_row(user_id=self.invitee.id, invited_by=None)
+        self.invitations.pending_for_tenancy.return_value = [mine, theirs]
+
+        views = self.service.pending_in(CALLER, ATTO)
+
+        self.invitations.pending_for_tenancy.assert_called_once_with(ATTO)
+        self.assertEqual([v.can_withdraw for v in views], [True, False])
+        self.assertEqual(views[0].user.name, "Bruna Costa")
+        self.assertEqual(views[0].invited_by.name, "Alan Calheiros")
+        self.assertIsNone(views[1].invited_by)
+        self.assertFalse(hasattr(views[0].user, "email"))
+
+    def test_a_deleted_invitee_is_named_as_such(self):
+        self.invitations.pending_for_tenancy.return_value = [invitation_row()]
+
+        (view,) = self.service.pending_in(CALLER, ATTO)
+
+        self.assertEqual(view.user.name, "Deleted account")
 
 
 class TestInviteRules(InvitationServiceTestCase):
     def code(self) -> str:
         with self.assertRaises((ConflictException, NotFoundException)) as raised:
-            self.service.invite(self.dataset.id, CALLER, self.invitee.id)
+            self.service.invite(CALLER, ATTO, self.invitee.id)
         return str(raised.exception)
+
+    def test_a_member_invites(self):
+        view = self.service.invite(CALLER, ATTO, self.invitee.id)
+
+        self.invitations.create.assert_called_once_with(ATTO, self.invitee.id, CALLER)
+        self.assertEqual(view.user.name, "Bruna Costa")
+        self.assertEqual(view.invited_by.name, "Alan Calheiros")
+        self.assertTrue(view.can_withdraw)
 
     def test_the_tenancy_must_be_open_for_members(self):
         self.membership_service.require_open_for_members.side_effect = (
@@ -201,28 +237,18 @@ class TestInviteRules(InvitationServiceTestCase):
         self.assertEqual(self.code(), "invitation_pending")
 
     def test_the_invitee_and_the_admins_are_told(self):
-        view = self.service.invite(self.dataset.id, CALLER, self.invitee.id)
+        view = self.service.invite(CALLER, ATTO, self.invitee.id)
 
-        self.notifier.invitation.assert_called_once_with(
-            self.invitee,
-            "Alan Calheiros",
-            summary_of(ATTO, "ATTO"),
-            "Ozone at ATTO",
-            view.id,
-        )
-        self.notifier.invitation_notice.assert_called_once_with(
-            self.invitee,
-            "Alan Calheiros",
-            summary_of(ATTO, "ATTO"),
-            "Ozone at ATTO",
-            view.id,
-        )
+        for notify in (self.notifier.invitation, self.notifier.invitation_notice):
+            notify.assert_called_once_with(
+                self.invitee, "Alan Calheiros", summary_of(ATTO, "ATTO"), view.id
+            )
 
     def test_a_failed_notice_still_returns_the_committed_invitation(self):
         self.notifier.invitation.side_effect = RuntimeError("smtp")
 
         with self.assertLogs("service:TenancyNotifier", "ERROR"):
-            view = self.service.invite(self.dataset.id, CALLER, self.invitee.id)
+            view = self.service.invite(CALLER, ATTO, self.invitee.id)
 
         self.assertEqual(view.user.name, "Bruna Costa")
         self.invitations.create.assert_called_once()
@@ -232,7 +258,7 @@ class TestLookup(InvitationServiceTestCase):
     def test_an_exact_email_outside_the_tenancy_can_be_invited(self):
         self.users.fetch_by_email_insensitive.return_value = self.invitee
 
-        found = self.service.lookup(self.dataset.id, CALLER, "  Bruna@USP.br ")
+        found = self.service.lookup(CALLER, ATTO, "  Bruna@USP.br ")
 
         self.users.fetch_by_email_insensitive.assert_called_once_with("bruna@usp.br")
         self.assertEqual(found.user.email, "bruna@usp.br")
@@ -243,9 +269,7 @@ class TestLookup(InvitationServiceTestCase):
     def test_an_orcid_is_looked_up_as_a_provider(self):
         self.users.fetch_by_provider.return_value = self.invitee
 
-        self.service.lookup(
-            self.dataset.id, CALLER, "https://orcid.org/0000-0002-1825-0097"
-        )
+        self.service.lookup(CALLER, ATTO, "https://orcid.org/0000-0002-1825-0097")
 
         self.users.fetch_by_provider.assert_called_once_with(
             provider_name="orcid", reference="0000-0002-1825-0097"
@@ -255,7 +279,7 @@ class TestLookup(InvitationServiceTestCase):
         self.users.fetch_by_provider.return_value = self.invitee
         self.members.add((self.invitee.id, ATTO))
 
-        found = self.service.lookup(self.dataset.id, CALLER, "0000-0002-1825-0097")
+        found = self.service.lookup(CALLER, ATTO, "0000-0002-1825-0097")
 
         self.assertEqual(
             (found.user.id, found.user.name, found.user.email),
@@ -270,9 +294,9 @@ class TestLookup(InvitationServiceTestCase):
         orcid, email = "0000-0002-1825-0097", "ghost@usp.br"
 
         with self.assertLogs("service:TenancyInvitationService", "INFO") as logs:
-            self.service.lookup(self.dataset.id, CALLER, orcid)
+            self.service.lookup(CALLER, ATTO, orcid)
             with self.assertRaises(NotFoundException):
-                self.service.lookup(self.dataset.id, CALLER, email)
+                self.service.lookup(CALLER, ATTO, email)
 
         found, missing = logs.records
         for record, lookup_by, matched in (
@@ -280,62 +304,45 @@ class TestLookup(InvitationServiceTestCase):
             (missing, "email", False),
         ):
             self.assertEqual(
-                (record.user_id, record.dataset_id, record.lookup_by, record.matched),
-                (str(CALLER), str(self.dataset.id), lookup_by, matched),
+                (record.user_id, record.tenancy, record.lookup_by, record.matched),
+                (str(CALLER), ATTO, lookup_by, matched),
             )
             logged = repr(vars(record)) + record.getMessage()
             self.assertNotIn(orcid, logged)
             self.assertNotIn(email, logged)
 
-    def test_a_member_or_a_pending_invitee_cannot_be_invited_again(self):
+    def test_a_pending_invitee_cannot_be_invited_again(self):
         self.users.fetch_by_email_insensitive.return_value = self.invitee
         self.invitations.has_pending.return_value = True
 
-        found = self.service.lookup(self.dataset.id, CALLER, "bruna@usp.br")
+        found = self.service.lookup(CALLER, ATTO, "bruna@usp.br")
 
         self.assertTrue(found.invitation_pending)
         self.assertFalse(found.can_invite)
-
-    def test_nobody_can_be_invited_while_the_dataset_is_embargoed(self):
-        self.embargo()
-        self.users.fetch_by_email_insensitive.return_value = self.invitee
-
-        self.assertFalse(
-            self.service.lookup(self.dataset.id, CALLER, "bruna@usp.br").can_invite
-        )
-
-    def test_in_public_nobody_can_be_invited(self):
-        self.dataset.tenancy = DEFAULT_TENANCY
-        self.members.add((CALLER, DEFAULT_TENANCY))
-        self.users.fetch_by_email_insensitive.return_value = self.invitee
-
-        self.assertFalse(
-            self.service.lookup(self.dataset.id, CALLER, "bruna@usp.br").can_invite
-        )
 
     def test_a_malformed_value_is_invalid_request(self):
         for value in ("not an address", "0000-0002-1825-0098", ""):
             with self.subTest(value=value):
                 with self.assertRaises(IllegalStateException) as raised:
-                    self.service.lookup(self.dataset.id, CALLER, value)
+                    self.service.lookup(CALLER, ATTO, value)
                 self.assertEqual(str(raised.exception), "invalid_request")
 
     def test_nobody_found_is_no_account(self):
         self.users.fetch_by_email_insensitive.return_value = None
 
         with self.assertRaises(NotFoundException) as raised:
-            self.service.lookup(self.dataset.id, CALLER, "ghost@usp.br")
+            self.service.lookup(CALLER, ATTO, "ghost@usp.br")
 
         self.assertEqual(str(raised.exception), "no_account")
 
 
 class TestWithdraw(InvitationServiceTestCase):
-    def test_the_inviter_withdraws_through_the_dataset(self):
-        invitation = invitation_row(dataset_id=self.dataset.id)
+    def test_the_inviter_withdraws(self):
+        invitation = invitation_row()
         self.invitations.fetch.return_value = invitation
         self.invitations.close.return_value = True
 
-        self.service.withdraw(self.dataset.id, CALLER, invitation.id)
+        self.service.withdraw(CALLER, ATTO, invitation.id)
 
         self.invitations.close.assert_called_once_with(
             invitation.id,
@@ -344,26 +351,23 @@ class TestWithdraw(InvitationServiceTestCase):
             TenancyEventType.INVITATION_WITHDRAWN,
         )
 
-    def test_another_editor_is_forbidden(self):
-        self.invitations.fetch.return_value = invitation_row(
-            dataset_id=self.dataset.id, invited_by=uuid4()
-        )
+    def test_another_member_is_forbidden(self):
+        self.invitations.fetch.return_value = invitation_row(invited_by=uuid4())
 
         with self.assertRaises(ForbiddenException):
-            self.service.withdraw(self.dataset.id, CALLER, uuid4())
+            self.service.withdraw(CALLER, ATTO, uuid4())
+        self.invitations.close.assert_not_called()
 
-    def test_an_invitation_of_another_dataset_or_not_pending_is_not_found(self):
+    def test_an_invitation_of_another_tenancy_or_not_pending_is_not_found(self):
         for row in (
-            invitation_row(),
-            invitation_row(
-                dataset_id=self.dataset.id, status=TenancyInvitationStatus.ACCEPTED
-            ),
+            invitation_row(tenancy="datamap/production/other"),
+            invitation_row(status=TenancyInvitationStatus.ACCEPTED),
             None,
         ):
             with self.subTest(row=row):
                 self.invitations.fetch.return_value = row
                 with self.assertRaises(NotFoundException) as raised:
-                    self.service.withdraw(self.dataset.id, CALLER, uuid4())
+                    self.service.withdraw(CALLER, ATTO, uuid4())
                 self.assertEqual(str(raised.exception), "invitation_not_found")
 
     def test_an_admin_withdraws_any_pending_one(self):
@@ -387,26 +391,16 @@ class TestWithdraw(InvitationServiceTestCase):
 
 
 class TestInviteeSide(InvitationServiceTestCase):
-    def test_pending_invitations_say_who_from_where_and_how_many_datasets(self):
+    def test_pending_invitations_say_who_and_how_many_datasets(self):
         invitation = invitation_row(user_id=self.invitee.id)
         self.invitations.pending_for_user.return_value = [invitation]
-        self.invitations.dataset_names.return_value = {
-            invitation.dataset_id: "Ozone at ATTO"
-        }
 
         (view,) = self.service.pending_for_user(self.invitee.id)
 
         self.assertEqual(view.tenancy, summary_of(ATTO, "ATTO"))
         self.assertEqual(view.invited_by.name, "Alan Calheiros")
-        self.assertEqual(view.dataset.name, "Ozone at ATTO")
         self.assertEqual(view.datasets, 12)
-
-    def test_a_dataset_that_is_gone_is_null(self):
-        invitation = invitation_row(user_id=self.invitee.id, dataset_id=None)
-        self.invitations.pending_for_user.return_value = [invitation]
-        self.invitations.dataset_names.return_value = {}
-
-        self.assertIsNone(self.service.pending_for_user(self.invitee.id)[0].dataset)
+        self.assertFalse(hasattr(view, "dataset"))
 
     def test_accepting_joins_the_tenancy(self):
         invitation = invitation_row(user_id=self.invitee.id)
@@ -456,60 +450,4 @@ class TestInviteeSide(InvitationServiceTestCase):
             TenancyInvitationStatus.DECLINED,
             self.invitee.id,
             TenancyEventType.INVITATION_DECLINED,
-        )
-
-
-class TestShareAdditions(InvitationServiceTestCase):
-    def test_pending_invitations_of_the_dataset_and_whether_the_caller_may_invite(self):
-        mine = invitation_row(user_id=self.invitee.id, dataset_id=self.dataset.id)
-        theirs = invitation_row(
-            user_id=self.invitee.id, dataset_id=self.dataset.id, invited_by=None
-        )
-        self.invitations.pending_for_dataset.return_value = [mine, theirs]
-
-        views, can_invite = self.service.share_additions(
-            self.dataset, AccessLevel.OWNER, CALLER
-        )
-
-        self.assertEqual([v.can_withdraw for v in views], [True, False])
-        self.assertIsNone(views[1].invited_by)
-        self.assertTrue(can_invite)
-
-    def test_an_embargoed_dataset_lists_its_pending_invitations_but_invites_no_one(
-        self,
-    ):
-        self.embargo()
-        pending = invitation_row(user_id=self.invitee.id, dataset_id=self.dataset.id)
-        self.invitations.pending_for_dataset.return_value = [pending]
-
-        views, can_invite = self.service.share_additions(
-            self.dataset, AccessLevel.OWNER, CALLER
-        )
-
-        self.assertEqual([v.id for v in views], [pending.id])
-        self.assertTrue(views[0].can_withdraw)
-        self.assertFalse(can_invite)
-
-    def test_a_staging_or_disabled_tenancy_cannot_be_invited_to(self):
-        self.dataset.tenancy = "datamap/staging/data-amazon"
-        self.members.add((CALLER, self.dataset.tenancy))
-
-        self.assertFalse(
-            self.service.may_invite(self.dataset, AccessLevel.OWNER, CALLER)
-        )
-
-    def test_a_disabled_production_tenancy_cannot_be_invited_to(self):
-        self.tenancies.fetch_any.side_effect = lambda path: SimpleNamespace(
-            name=path, display_name=None, is_enabled=False
-        )
-
-        self.assertFalse(
-            self.service.may_invite(self.dataset, AccessLevel.OWNER, CALLER)
-        )
-
-    def test_an_owner_outside_the_tenancy_may_not_invite(self):
-        self.members = set()
-
-        self.assertFalse(
-            self.service.may_invite(self.dataset, AccessLevel.OWNER, CALLER)
         )

@@ -83,7 +83,6 @@ class TestInvitationTable(unittest.TestCase):
                 "tenancy",
                 "user_id",
                 "invited_by",
-                "dataset_id",
                 "status",
                 "closed_by",
                 "closed_at",
@@ -99,10 +98,6 @@ class TestInvitationTable(unittest.TestCase):
         self.assertIn(
             "ix_tenancy_invitations_user_status", _indexes(TenancyInvitation.__table__)
         )
-
-    def test_the_dataset_it_came_from_may_disappear(self):
-        (foreign_key,) = TenancyInvitation.__table__.c.dataset_id.foreign_keys
-        self.assertEqual(foreign_key.ondelete, "SET NULL")
 
 
 class TestEventTable(unittest.TestCase):

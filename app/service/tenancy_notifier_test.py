@@ -83,7 +83,7 @@ class TestTenancyNotifier(unittest.TestCase):
         )
 
         notifier.request_received(request, person())
-        notifier.invitation_notice(person(), "Alan", ATTO, "Ozone", uuid4())
+        notifier.invitation_notice(person(), "Alan", ATTO, uuid4())
 
         self.email.enqueue.assert_not_called()
 
@@ -124,12 +124,8 @@ class TestTenancyNotifier(unittest.TestCase):
     def test_the_invitee_and_every_admin_hear_about_an_invitation(self):
         invitee, invitation_id = person(), uuid4()
 
-        self.notifier.invitation(
-            invitee, "Alan Calheiros", ATTO, "Ozone at ATTO", invitation_id
-        )
-        self.notifier.invitation_notice(
-            invitee, "Alan Calheiros", ATTO, "Ozone at ATTO", invitation_id
-        )
+        self.notifier.invitation(invitee, "Alan Calheiros", ATTO, invitation_id)
+        self.notifier.invitation_notice(invitee, "Alan Calheiros", ATTO, invitation_id)
 
         sent = self.sent()
         self.assertEqual(
@@ -152,7 +148,7 @@ class TestTenancyNotifier(unittest.TestCase):
 
     def test_a_user_without_an_email_is_skipped(self):
         self.notifier.access_granted(person(email=None), "Luciana", ATTO, 1, uuid4())
-        self.notifier.invitation(person(email=None), "Alan", ATTO, "Ozone", uuid4())
+        self.notifier.invitation(person(email=None), "Alan", ATTO, uuid4())
 
         self.email.enqueue.assert_not_called()
 

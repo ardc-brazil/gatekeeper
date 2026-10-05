@@ -43,7 +43,7 @@ from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
 from app.service.dataset_access import DatasetAccessService, allows_member_edits
 from app.service.embargo_termination import EmbargoTermination
 from app.model.tenancy import DEFAULT_TENANCY
-from app.model.user import ADMIN_ROLE
+from app.model.user import is_admin
 
 
 def _mode_of(doi: DOI) -> str:
@@ -429,7 +429,7 @@ class DatasetService:
         return new_version
 
     def _is_admin(self, user_id: UUID) -> bool:
-        return ADMIN_ROLE in (self._user_service.roles_of(user_id) or [])
+        return is_admin(self._user_service.roles_of(user_id))
 
     def _require_membership(self, user_id: UUID, tenancy: str) -> None:
         if self._is_admin(user_id):

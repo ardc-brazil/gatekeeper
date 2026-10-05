@@ -34,14 +34,13 @@ from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.tenancy_request import TenancyRequestRepository
 from app.repository.user import UserRepository
-from app.service.tenancy_membership import TenancyMembershipService
+from app.service.tenancy_membership import TenancyMembershipService, require_page
 from app.service.tenancy_notifier import TenancyNotifier, after_commit
-from app.service.user_refs import user_ref
+from app.service.user_refs import orcid_of, user_ref
 
 DAILY_LIMIT = 3
 WINDOW = timedelta(hours=24)
 LATEST = 5
-MAX_PAGE = 100
 
 
 def _kind(request, index: dict[str, TenancySummary]) -> str:
@@ -114,12 +113,8 @@ class TenancyRequestService:
     def queue(
         self, status: str, kind: str | None, q: str | None, limit: int, offset: int
     ) -> Page[AdminTenancyRequestView]:
-        if (
-            status not in ("open", "closed")
-            or kind not in (None, "join", "new")
-            or not 1 <= limit <= MAX_PAGE
-            or offset < 0
-        ):
+        require_page(limit, offset)
+        if status not in ("open", "closed") or kind not in (None, "join", "new"):
             raise IllegalStateException("invalid_request")
         term = (q or "").strip() or None
         index = self._suggestion_index()
@@ -277,13 +272,12 @@ class TenancyRequestService:
                 email_verified=False,
                 orcid=None,
             )
-        orcid = next((p.reference for p in user.providers if p.name == "orcid"), None)
         return Requester(
             id=user.id,
             name=user.name,
             email=user.email,
             email_verified=user.email_verified_at is not None,
-            orcid=orcid,
+            orcid=orcid_of(user),
         )
 
     def _user_view(self, request) -> TenancyRequestView:

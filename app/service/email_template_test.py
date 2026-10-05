@@ -806,7 +806,6 @@ CONTEXTS[EmailTemplate.TENANCY_INVITATION] = {
     "inviter_name": "Alan Calheiros",
     "tenancy_display_name": "ATTO",
     "tenancy_path": "datamap/production/atto",
-    "dataset_name": "Ozone at ATTO",
     "open_url": "https://datamap.example.org/app/home",
 }
 CONTEXTS[EmailTemplate.TENANCY_INVITATION_NOTICE] = {
@@ -815,7 +814,6 @@ CONTEXTS[EmailTemplate.TENANCY_INVITATION_NOTICE] = {
     "invitee_email": "bruna.costa@usp.br",
     "tenancy_display_name": "ATTO",
     "tenancy_path": "datamap/production/atto",
-    "dataset_name": "Ozone at ATTO",
     "tenancy_url": "https://datamap.example.org/app/admin/tenancies?tenancy=datamap/production/atto",
 }
 
@@ -930,10 +928,7 @@ class TestTenancyTemplates(unittest.TestCase):
     def test_the_invitation_cannot_accept_for_you(self):
         email = self.render(EmailTemplate.TENANCY_INVITATION)
 
-        self.assertIn(
-            "Alan Calheiros invited you to join ATTO on DataMap, from the dataset “Ozone at ATTO”.",
-            email.text,
-        )
+        self.assertIn("Alan Calheiros invited you to join ATTO on DataMap.", email.text)
         self.assertIn(
             "Sign in to accept or decline. This email cannot accept for you.",
             email.text,
@@ -946,6 +941,18 @@ class TestTenancyTemplates(unittest.TestCase):
         self.assertIn("No approval is needed.", email.text)
         self.assertIn("remove Bruna Costa later, from Admin › Tenancies", email.text)
         self.assertIn("Open tenancy", email.text)
+
+    def test_neither_invitation_email_names_a_dataset(self):
+        for template in (
+            EmailTemplate.TENANCY_INVITATION,
+            EmailTemplate.TENANCY_INVITATION_NOTICE,
+        ):
+            with self.subTest(template=template):
+                email = self.render(template)
+                for part in (email.text, email.html):
+                    self.assertNotIn("from the dataset", part)
+                    self.assertNotIn(">Dataset<", part)
+                self.assertNotIn("Dataset:", email.text)
 
     def test_a_name_is_escaped_in_html(self):
         email = self.render(

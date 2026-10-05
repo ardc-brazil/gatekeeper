@@ -46,7 +46,6 @@ ENUMS = {
 
 DATASETS_WRITE_DELETE_PATHS = (
     "/api/v1/datasets/[0-9a-fA-F-]{36}/share/(permissions|invitations)/[0-9a-fA-F-]{36}$",
-    "/api/v1/datasets/[0-9a-fA-F-]{36}/tenancy-invitations/[0-9a-fA-F-]{36}$",
     "/api/v1/datasets/[0-9a-fA-F-]{36}/anonymous-links/[0-9a-fA-F-]{36}$",
 )
 
@@ -161,7 +160,6 @@ def upgrade() -> None:
             tenancy VARCHAR(256) NOT NULL REFERENCES tenancies (name),
             user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
             invited_by UUID REFERENCES users (id) ON DELETE SET NULL,
-            dataset_id UUID REFERENCES datasets (id) ON DELETE SET NULL,
             status tenancy_invitation_status NOT NULL DEFAULT 'pending',
             closed_by UUID REFERENCES users (id) ON DELETE SET NULL,
             closed_at TIMESTAMP WITH TIME ZONE,

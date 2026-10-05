@@ -93,7 +93,7 @@ CASES = (
         "uq_tenancy_invitations_pending",
         "invitation_pending",
         lambda factory: TenancyInvitationRepository(factory).create(
-            "datamap/production/atto", uuid4(), uuid4(), None
+            "datamap/production/atto", uuid4(), uuid4()
         ),
     ),
 )

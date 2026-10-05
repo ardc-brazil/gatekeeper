@@ -21,6 +21,13 @@ from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.user import UserRepository
 from app.service.tenancy_notifier import TenancyNotifier
 
+MAX_PAGE = 100
+
+
+def require_page(limit: int, offset: int) -> None:
+    if not 1 <= limit <= MAX_PAGE or offset < 0:
+        raise IllegalStateException("invalid_request")
+
 
 class TenancyMembershipService:
     def __init__(

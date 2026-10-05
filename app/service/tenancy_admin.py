@@ -25,11 +25,10 @@ from app.repository.tenancy import TenancyRepository
 from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.user import UserRepository
-from app.service.tenancy_membership import TenancyMembershipService
+from app.service.tenancy_membership import TenancyMembershipService, require_page
 from app.service.tenancy_notifier import after_commit
-from app.service.user_refs import dataset_ref, user_brief, user_ref
+from app.service.user_refs import user_brief, user_ref
 
-MAX_PAGE = 100
 SEARCH_LIMIT = 10
 SEARCH_MIN_LENGTH = 2
 
@@ -83,8 +82,7 @@ class TenancyAdminService:
 
     def members(self, path: str, limit: int, offset: int) -> TenancyMembersView:
         self._existing(path)
-        if not 1 <= limit <= MAX_PAGE or offset < 0:
-            raise IllegalStateException("invalid_request")
+        require_page(limit, offset)
         users, total = self._memberships.list_members(path, limit, offset)
         ids = [user.id for user in users]
         since = self._memberships.added_at(path, ids)
@@ -170,15 +168,12 @@ class TenancyAdminService:
             raise NotFoundException("tenancy_not_found")
 
     def _pending_invitations(self, path: str) -> List[AdminTenancyInvitationView]:
-        invitations = self._invitations.pending_for_tenancy(path)
-        names = self._invitations.dataset_names([i.dataset_id for i in invitations])
         return [
             AdminTenancyInvitationView(
                 id=invitation.id,
                 user=user_brief(self._users, invitation.user_id),
                 invited_by=user_ref(self._users, invitation.invited_by),
-                dataset=dataset_ref(names, invitation.dataset_id),
                 created_at=invitation.created_at,
             )
-            for invitation in invitations
+            for invitation in self._invitations.pending_for_tenancy(path)
         ]

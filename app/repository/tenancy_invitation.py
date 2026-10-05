@@ -6,7 +6,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.exception.conflict import ConflictException
-from app.model.db.dataset import Dataset
 from app.model.db.tenancy import TenancyInvitation
 from app.model.tenancy import TenancyEventType, TenancyInvitationStatus
 from app.repository.integrity import violates
@@ -23,7 +22,7 @@ class TenancyInvitationRepository:
         self._session_factory = session_factory
 
     def create(
-        self, tenancy: str, user_id: UUID, invited_by: UUID, dataset_id: UUID | None
+        self, tenancy: str, user_id: UUID, invited_by: UUID
     ) -> TenancyInvitation:
         try:
             with self._session_factory() as session:
@@ -32,7 +31,6 @@ class TenancyInvitationRepository:
                     tenancy=tenancy,
                     user_id=user_id,
                     invited_by=invited_by,
-                    dataset_id=dataset_id,
                     status=PENDING,
                 )
                 session.add(invitation)
@@ -78,23 +76,8 @@ class TenancyInvitationRepository:
     def pending_for_user(self, user_id: UUID) -> list[TenancyInvitation]:
         return self._pending(user_id=user_id)
 
-    def pending_for_dataset(self, dataset_id: UUID) -> list[TenancyInvitation]:
-        return self._pending(dataset_id=dataset_id)
-
     def pending_for_tenancy(self, tenancy: str) -> list[TenancyInvitation]:
         return self._pending(tenancy=tenancy)
-
-    def dataset_names(self, dataset_ids: list[UUID | None]) -> dict[UUID, str]:
-        ids = [dataset_id for dataset_id in dataset_ids if dataset_id is not None]
-        if not ids:
-            return {}
-        with self._session_factory() as session:
-            rows = (
-                session.query(Dataset.id, Dataset.name)
-                .filter(Dataset.id.in_(ids))
-                .all()
-            )
-            return {dataset_id: name for dataset_id, name in rows}
 
     def close(
         self,

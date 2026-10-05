@@ -2,7 +2,7 @@
 {% block content %}
 Hi {{ invitee_name }},
 
-{{ inviter_name }} invited you to join {{ tenancy_display_name }} on DataMap, from the dataset “{{ dataset_name }}”.
+{{ inviter_name }} invited you to join {{ tenancy_display_name }} on DataMap.
 
 Tenancy: {{ tenancy_display_name }} ({{ tenancy_path }})
 

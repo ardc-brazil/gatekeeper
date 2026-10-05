@@ -109,11 +109,6 @@ class TenancyInvitation(Base):
     invited_by = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    dataset_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("datasets.id", ondelete="SET NULL"),
-        nullable=True,
-    )
     status = Column(
         Enum(
             TenancyInvitationStatus,

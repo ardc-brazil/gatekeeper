@@ -143,12 +143,10 @@ class TestMembers(AdminServiceTestCase):
             id=uuid4(),
             user_id=self.member.id,
             invited_by=self.admin.id,
-            dataset_id=uuid4(),
             status=TenancyInvitationStatus.PENDING,
             created_at=NOW,
         )
         self.invitations.pending_for_tenancy.return_value = [invitation]
-        self.invitations.dataset_names.return_value = {invitation.dataset_id: "Ozone"}
 
         atto = self.service.members(ATTO, 50, 0)
         public = self.service.members(DEFAULT_TENANCY, 50, 0)
@@ -157,7 +155,7 @@ class TestMembers(AdminServiceTestCase):
         (pending,) = atto.invitations
         self.assertEqual(pending.user.email, "ana@usp.br")
         self.assertEqual(pending.invited_by.name, "Luciana Rizzo")
-        self.assertEqual(pending.dataset.name, "Ozone")
+        self.assertFalse(hasattr(pending, "dataset"))
         self.assertEqual(public.invitations, [])
         self.assertEqual(legacy.invitations, [])
 

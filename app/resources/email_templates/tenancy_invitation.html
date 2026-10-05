@@ -5,8 +5,8 @@
 {% block label %}Invitation{% endblock %}
 {% block content %}
 {{ m.heading("You are invited to a tenancy") }}
-{% call m.paragraph() %}Hi {{ invitee_name }}, {{ inviter_name }} invited you to join {{ m.strong(tenancy_display_name) }} on DataMap, from the dataset “{{ dataset_name }}”.{% endcall %}
-{{ m.details([{"label": "Tenancy", "value": tenancy_display_name ~ " · " ~ tenancy_path}, {"label": "Dataset", "value": dataset_name}]) }}
+{% call m.paragraph() %}Hi {{ invitee_name }}, {{ inviter_name }} invited you to join {{ m.strong(tenancy_display_name) }} on DataMap.{% endcall %}
+{{ m.details([{"label": "Tenancy", "value": tenancy_display_name ~ " · " ~ tenancy_path}]) }}
 {% call m.paragraph() %}Sign in to accept or decline. This email cannot accept for you.{% endcall %}
 {{ m.button("Open DataMap", open_url) }}
 {% endblock %}

@@ -111,7 +111,6 @@ class TenancyNotifier:
         invitee: Any,
         inviter_name: str,
         tenancy: TenancySummary,
-        dataset_name: str,
         invitation_id: UUID,
     ) -> None:
         if not invitee.email:
@@ -124,7 +123,6 @@ class TenancyNotifier:
                 "inviter_name": inviter_name,
                 "tenancy_display_name": tenancy.display_name,
                 "tenancy_path": tenancy.path,
-                "dataset_name": dataset_name,
                 "open_url": f"{self._base_url}/app/home",
             },
             related_type="tenancy_invitation",
@@ -137,7 +135,6 @@ class TenancyNotifier:
         invitee: Any,
         inviter_name: str,
         tenancy: TenancySummary,
-        dataset_name: str,
         invitation_id: UUID,
     ) -> None:
         context = {
@@ -146,7 +143,6 @@ class TenancyNotifier:
             "invitee_email": invitee.email,
             "tenancy_display_name": tenancy.display_name,
             "tenancy_path": tenancy.path,
-            "dataset_name": dataset_name,
             "tenancy_url": f"{self._base_url}/app/admin/tenancies?tenancy={tenancy.path}",
         }
         self._notify_admins(

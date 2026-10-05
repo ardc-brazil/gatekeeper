@@ -22,12 +22,6 @@ class UserBrief:
 
 
 @dataclass
-class DatasetRef:
-    id: UUID
-    name: str
-
-
-@dataclass
 class Page(Generic[T]):
     items: list[T]
     total_count: int
@@ -99,22 +93,28 @@ class TenancyInvitationView:
     id: UUID
     tenancy: TenancySummary
     invited_by: UserRef | None
-    dataset: DatasetRef | None
     datasets: int
     created_at: datetime
 
 
 @dataclass
-class DatasetTenancyInvitationView:
+class WorkspaceMemberView:
     id: UUID
-    user: UserBrief
-    invited_by: UserBrief | None
+    name: str
+    orcid: str | None
+
+
+@dataclass
+class WorkspaceInvitationView:
+    id: UUID
+    user: UserRef
+    invited_by: UserRef | None
     created_at: datetime
     can_withdraw: bool
 
 
 @dataclass
-class ShareLookupView:
+class InviteeLookupView:
     user: UserBrief
     tenancy_member: bool
     invitation_pending: bool
@@ -146,7 +146,6 @@ class AdminTenancyInvitationView:
     id: UUID
     user: UserBrief
     invited_by: UserRef | None
-    dataset: DatasetRef | None
     created_at: datetime
 
 

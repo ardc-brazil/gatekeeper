@@ -5,6 +5,10 @@ DEFAULT_ROLE = "datasets_write"
 ADMIN_ROLE = "admin"
 
 
+def is_admin(roles: list[str] | None) -> bool:
+    return ADMIN_ROLE in (roles or [])
+
+
 @dataclass
 class UserProvider:
     name: str
