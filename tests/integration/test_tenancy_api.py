@@ -313,8 +313,10 @@ class TestTenancyCRUDOperations:
 class TestTenancyPathHandling:
     """Integration tests for Tenancy path handling with slashes."""
 
-    def test_tenancy_path_with_multiple_slashes(self, http_client, valid_headers):
-        """Test tenancy paths with multiple slashes."""
+    def test_a_production_path_is_created_and_read_back_by_its_full_path(
+        self, http_client, valid_headers
+    ):
+        """A datamap/production/{namespace} path round-trips through the URL."""
         # Arrange - Use unique name to avoid conflicts
         unique_name = f"datamap/production/slashes-{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
@@ -334,8 +336,10 @@ class TestTenancyPathHandling:
             response, {"name": unique_name, "is_enabled": True}
         )
 
-    def test_tenancy_path_with_special_characters(self, http_client, valid_headers):
-        """Test tenancy paths with special characters."""
+    def test_a_namespace_with_digits_and_hyphens_is_created_and_read_back(
+        self, http_client, valid_headers
+    ):
+        """A namespace with digits and hyphens round-trips through the URL."""
         # Arrange - Use unique name to avoid conflicts
         unique_name = f"datamap/production/special-chars-123-{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
