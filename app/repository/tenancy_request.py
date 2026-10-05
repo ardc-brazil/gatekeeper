@@ -12,7 +12,8 @@ from app.exception.not_found import NotFoundException
 from app.model.db.tenancy import Tenancy, TenancyRequest
 from app.model.db.user import User
 from app.model.tenancy import TenancyEventType, TenancyRequestStatus
-from app.repository.integrity import violates
+from app.repository.integrity import raise_conflict, violates
+from app.repository.tenancy import NEW_TENANCY_CONFLICTS
 from app.repository.tenancy_event import add_event
 from app.repository.tenancy_membership import join_tenancy
 from app.repository.user import user_matches
@@ -220,8 +221,7 @@ class TenancyRequestRepository:
                 session.refresh(request)
                 return request, event_id
         except IntegrityError as error:
-            if violates(error, "tenancies_pkey"):
-                raise ConflictException("tenancy_exists")
+            raise_conflict(error, NEW_TENANCY_CONFLICTS)
             raise
 
     def decline(

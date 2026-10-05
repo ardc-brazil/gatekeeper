@@ -30,6 +30,18 @@ class Tenancy(Base):
         onupdate=func.now(),
     )
 
+    __table_args__ = (
+        Index(
+            "uq_tenancies_display_name",
+            func.lower(display_name),
+            unique=True,
+            postgresql_where=text(
+                "display_name IS NOT NULL AND is_enabled "
+                "AND name LIKE 'datamap/production/%'"
+            ),
+        ),
+    )
+
 
 class TenancyRequest(Base):
     __tablename__ = "tenancy_requests"

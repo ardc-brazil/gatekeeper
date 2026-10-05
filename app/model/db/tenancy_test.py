@@ -1,5 +1,7 @@
 import unittest
 
+from sqlalchemy.dialects import postgresql
+
 from app.model.db.dataset import Dataset
 from app.model.db.tenancy import (
     Tenancy,
@@ -19,6 +21,19 @@ class TestTenancyTable(unittest.TestCase):
         column = Tenancy.__table__.c.display_name
         self.assertTrue(column.nullable)
         self.assertEqual(column.type.length, 64)
+
+    def test_enabled_production_display_names_are_unique_ignoring_case(self):
+        index = _indexes(Tenancy.__table__)["uq_tenancies_display_name"]
+        self.assertTrue(index.unique)
+        self.assertEqual(
+            [str(e.compile(dialect=postgresql.dialect())) for e in index.expressions],
+            ["lower(tenancies.display_name)"],
+        )
+        self.assertEqual(
+            str(index.dialect_options["postgresql"]["where"]),
+            "display_name IS NOT NULL AND is_enabled "
+            "AND name LIKE 'datamap/production/%'",
+        )
 
 
 class TestRequestTable(unittest.TestCase):

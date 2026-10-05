@@ -57,6 +57,22 @@ CASES = (
         ),
     ),
     (
+        "tenancy created under a taken display name",
+        "uq_tenancies_display_name",
+        "display_name_taken",
+        lambda factory: TenancyRepository(factory).create_with_event(
+            "datamap/production/atto", "ATTO", uuid4()
+        ),
+    ),
+    (
+        "approval creating a tenancy under a taken display name",
+        "uq_tenancies_display_name",
+        "display_name_taken",
+        lambda factory: TenancyRequestRepository(factory).approve(
+            uuid4(), uuid4(), "datamap/production/atto", "ATTO", None
+        ),
+    ),
+    (
         "tenancy request",
         "uq_tenancy_requests_pending",
         "request_pending",

@@ -12,8 +12,14 @@ from app.model.db.dataset import Dataset
 from app.model.db.tenancy import Tenancy
 from app.model.db.user import User, user_tenancy_association
 from app.model.tenancy import TenancyEventType
-from app.repository.integrity import violates
+from app.repository.integrity import raise_conflict
 from app.repository.tenancy_event import add_event
+
+
+NEW_TENANCY_CONFLICTS = {
+    "tenancies_pkey": "tenancy_exists",
+    "uq_tenancies_display_name": "display_name_taken",
+}
 
 
 def _counted_datasets(session: Session, *columns) -> Query:
@@ -82,8 +88,7 @@ class TenancyRepository:
                 session.refresh(tenancy)
                 return tenancy
         except IntegrityError as error:
-            if violates(error, "tenancies_pkey"):
-                raise ConflictException("tenancy_exists")
+            raise_conflict(error, NEW_TENANCY_CONFLICTS)
             raise
 
     def member_counts(self) -> dict[str, int]:

@@ -73,6 +73,25 @@ def _dataset(tenancy: str) -> str:
     return dataset_id
 
 
+def _queued_email(template: str) -> str:
+    email_id = str(uuid.uuid4())
+    execute(
+        "INSERT INTO email_messages (id, template, template_version, recipient, "
+        "subject, body_text, context, status, next_attempt_at) "
+        f"VALUES ('{email_id}', '{template}', '1', '{email_id}@example.com', "
+        "'s', 'b', '{}'::jsonb, 'pending', now() + interval '1 day')"
+    )
+    return email_id
+
+
+def _email_status(email_id: str) -> str:
+    return execute(
+        "SELECT m.status, coalesce(e.event, ''), coalesce(e.detail, '') "
+        "FROM email_messages m LEFT JOIN email_events e ON e.message_id = m.id "
+        f"WHERE m.id = '{email_id}'"
+    )
+
+
 def _roles(user_id: str) -> list[str]:
     return execute(
         f"SELECT v1 FROM casbin_rule WHERE ptype = 'g' AND v0 = '{user_id}' ORDER BY v1"
@@ -92,6 +111,12 @@ class TestTheMigration:
         )
         outside = _dataset(DATA_AMAZON)
         inside = _dataset(PUBLIC)
+        execute(
+            "INSERT INTO users_tenancies (user_id, tenancy) "
+            f"VALUES ('{plain}', '{DATA_AMAZON}')"
+        )
+        retired = _queued_email("new_account_pending")
+        current = _queued_email("tenancy_access_granted")
         execute(f"DELETE FROM casbin_rule WHERE {DATASETS_WRITE_DELETE_RULES}")
 
         down = _alembic("downgrade", PREVIOUS_REVISION)
@@ -128,6 +153,20 @@ class TestTheMigration:
                 )
                 == "1"
             )
+        assert (
+            execute(
+                f"SELECT count(*) FROM tenancy_events WHERE user_id = '{plain}' "
+                f"AND tenancy = '{DATA_AMAZON}' AND event_type = 'member_added' "
+                "AND actor_id IS NULL"
+            )
+            == "1"
+        )
+        assert _email_status(retired) == "skipped|skipped|template retired"
+        assert _email_status(current) == "pending||"
+        assert "lower((display_name)::text)" in execute(
+            "SELECT indexdef FROM pg_indexes "
+            "WHERE indexname = 'uq_tenancies_display_name'"
+        )
         assert _roles(plain) == ["datasets_write"]
         assert _roles(reader) == ["datasets_read"]
         assert _roles(boss) == ["admin"]

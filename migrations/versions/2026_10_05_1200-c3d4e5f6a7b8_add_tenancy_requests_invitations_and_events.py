@@ -18,6 +18,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 PUBLIC = "datamap/production/public"
+RETIRED_TEMPLATE = "new_account_pending"
 
 ENUMS = {
     "tenancy_request_status": ("pending", "approved", "declined", "withdrawn"),
@@ -71,6 +72,12 @@ def upgrade() -> None:
         SET is_enabled = true,
             display_name = COALESCE(tenancies.display_name, 'Public')
         """
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tenancies_display_name "
+        "ON tenancies (lower(display_name)) "
+        "WHERE display_name IS NOT NULL AND is_enabled "
+        "AND name LIKE 'datamap/production/%'"
     )
 
     op.execute(
@@ -196,17 +203,28 @@ def upgrade() -> None:
     )
 
     op.execute(
-        f"""
+        """
         INSERT INTO tenancy_events (tenancy, event_type, user_id)
         SELECT ut.tenancy, 'member_added', ut.user_id
         FROM users_tenancies ut
-        WHERE ut.tenancy = '{PUBLIC}'
-          AND NOT EXISTS (
-              SELECT 1 FROM tenancy_events e
-              WHERE e.tenancy = ut.tenancy
-                AND e.user_id = ut.user_id
-                AND e.event_type = 'member_added'
-          )
+        WHERE NOT EXISTS (
+            SELECT 1 FROM tenancy_events e
+            WHERE e.tenancy = ut.tenancy
+              AND e.user_id = ut.user_id
+              AND e.event_type = 'member_added'
+        )
+        """
+    )
+
+    op.execute(
+        f"""
+        WITH retired AS (
+            UPDATE email_messages SET status = 'skipped'
+            WHERE template = '{RETIRED_TEMPLATE}' AND status = 'pending'
+            RETURNING id
+        )
+        INSERT INTO email_events (message_id, event, detail)
+        SELECT id, 'skipped', 'template retired' FROM retired
         """
     )
 
