@@ -14,6 +14,7 @@ from app.logging_config import (  # noqa: F401
 )
 from app.metrics import metrics
 from app.controller.v1.admin.email import router as admin_email_router
+from app.controller.v1.admin.tenancy import router as admin_tenancy_router
 from app.controller.v1.client.client import router as client_router
 from app.controller.v1.infrastructure.infrastructure import (
     router as infrastructure_router,
@@ -220,6 +221,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(internal_dataset_collocation_router, prefix="/v1")
     fastAPIApp.include_router(internal_notification_router, prefix="/v1")
     fastAPIApp.include_router(admin_email_router, prefix="/v1")
+    fastAPIApp.include_router(admin_tenancy_router, prefix="/v1")
     fastAPIApp.include_router(tus_router, prefix="/v1")
 
 

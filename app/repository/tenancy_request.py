@@ -141,6 +141,7 @@ class TenancyRequestRepository:
                 query.order_by(
                     TenancyRequest.decided_at.desc().nullslast(),
                     TenancyRequest.created_at.desc(),
+                    TenancyRequest.id.desc(),
                 )
                 .limit(limit)
                 .offset(offset)

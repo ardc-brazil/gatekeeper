@@ -86,6 +86,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.internal.dataset_collocation",
             "app.controller.v1.internal.notification",
             "app.controller.v1.admin.email",
+            "app.controller.v1.admin.tenancy",
             "app.controller.v1.infrastructure.infrastructure",
         ]
     )
