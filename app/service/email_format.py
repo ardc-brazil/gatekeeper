@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+from app.model.tenancy import derived_display_name
+
 
 def long_date(value: datetime | date) -> str:
     return f"{value:%B} {value.day}, {value.year}"
@@ -12,13 +14,7 @@ def short_date(value: datetime | date) -> str:
 def tenancy_display_name(tenancy: str | None) -> str:
     if not tenancy:
         return "the workspace"
-    return (
-        tenancy.rstrip("/")
-        .rsplit("/", 1)[-1]
-        .replace("-", " ")
-        .replace("_", " ")
-        .title()
-    )
+    return derived_display_name(tenancy)
 
 
 def first_name(name: str) -> str:
