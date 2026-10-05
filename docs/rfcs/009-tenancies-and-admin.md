@@ -238,7 +238,7 @@ already has part of it:
 
 Downgrade drops the tables, enums and column and restores the `true` server
 default. It leaves the public tenancy, its memberships, the granted roles, the
-two `datasets_write` `DELETE` rows from *Casbin* and the `members_can_edit`
+three `datasets_write` `DELETE` rows from *Casbin* and the `members_can_edit`
 values in place: they are data, and changing them back would alter access
 people already have. A second `upgrade` does not duplicate the Casbin rows: it
 inserts each only when it is missing.
@@ -252,8 +252,10 @@ inserts each only when it is missing.
 (`POST /users`, password sign-up, ORCID email verification) — now:
 
 - appends `DEFAULT_TENANCY` to the tenancies in the payload;
-- adds `datasets_write` to the roles in the payload, so a new account can
-  create, upload to and manage its own datasets with no admin work;
+- gives the account exactly `datasets_write`, so a new account can create,
+  upload to and manage its own datasets with no admin work. `POST /users`
+  ignores the `roles` in its body; an admin grants other roles with
+  `PUT /users/{id}/roles`;
 - writes a `member_added` event with no actor;
 - **no longer enqueues `new_account_pending`.** No account waits for a
   workspace any more, so the email would be wrong; admins hear about requests
@@ -288,6 +290,9 @@ edit a given dataset becomes the owner's decision.
   `members_can_edit` on. Nothing else changes in the access rule:
   `allows_member_edits` remains the one place the decision is made, and the
   None-means-true comment there goes, since the column default is now `false`.
+- **Only the owner moves a dataset.** `PUT /datasets/{id}` with a `tenancy`
+  other than the current one answers `403 forbidden` to anyone but the owner
+  and admins, and saves nothing; edits that send the current tenancy proceed.
 
 The webapp's share dialog does not offer the members-access toggle for a public
 dataset; its *Members of Public* row reads "Everyone on DataMap · can read".
@@ -364,14 +369,17 @@ from this dataset, with invitee and inviter) and `can_invite_to_tenancy`.
 can edit only through *members can edit* are not editors here. Otherwise
 `403 forbidden`. The tenancy must be enabled, production and not public. The
 invitee must be enabled and not already a member (`409 already_member`), with
-no pending invitation to it (`409 invitation_pending`).
+no pending invitation to it (`409 invitation_pending`). Under an active
+embargo nobody may invite (`403 forbidden`, and the lookup's `can_invite` is
+`false`); pending invitations stay listed and can still be withdrawn.
 
 **Who may withdraw:** the inviter, through the dataset route; anyone else gets
 `403`. Admins withdraw through `/admin`.
 
 The lookup resolves only an exact email or ORCID, as RFC 003's grant already
 does, so it reveals nothing the grant did not. It is open to the same callers
-as the grant.
+as the grant. A lookup by ORCID iD returns `email: null`, and every lookup is
+logged.
 
 #### Admin
 
@@ -422,17 +430,21 @@ invitation behind the membership becomes `revoked`. No email is sent.
 `POST /users/{id}/tenancies` and `DELETE /users/{id}/tenancies` are removed.
 Nothing calls them, they let `users_write` change memberships, and they bypass
 the public lock and the events. `POST /users` keeps accepting `tenancies`,
-with public always added.
+with public always added, and ignores `roles`.
 
 ### Casbin
 
-Two new `p` rows, for `datasets_write`: `DELETE` on
-`/api/v1/datasets/[0-9a-f-]{36}/share/(permissions|invitations)/[0-9a-f-]{36}$`
-and on `/api/v1/datasets/[0-9a-f-]{36}/tenancy-invitations/[0-9a-f-]{36}$`,
-`allow`. Casbin's `regexMatch` is `re.match`, anchored only at the start, so
+Three new `p` rows, for `datasets_write`, `DELETE`, `allow`, as the migration
+inserts them:
+
+- `/api/v1/datasets/[0-9a-fA-F-]{36}/share/(permissions|invitations)/[0-9a-fA-F-]{36}$`
+- `/api/v1/datasets/[0-9a-fA-F-]{36}/tenancy-invitations/[0-9a-fA-F-]{36}$`
+- `/api/v1/datasets/[0-9a-fA-F-]{36}/anonymous-links/[0-9a-fA-F-]{36}$`
+
+Casbin's `regexMatch` is `re.match`, anchored only at the start, so
 the `$` keeps a row from matching any longer path under the same prefix. Without them, an owner whose only role is `datasets_write`
 — every account after this RFC — gets `401` from Casbin withdrawing an
-invitation or revoking a share, before the service ever checks who the
+invitation, revoking a share or revoking an anonymous link, before the service ever checks who the
 inviter or owner is. The admin routes need no new rows (`admin` already holds
 `/*`), and the rest of the new dataset routes fall under the existing
 `/api/v1/datasets` patterns. A
