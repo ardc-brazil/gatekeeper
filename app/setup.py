@@ -22,6 +22,7 @@ from app.controller.v1.infrastructure.infrastructure import (
 from app.controller.v1.tenancy.tenancy import router as tenancies_router
 from app.controller.v1.auth.auth import router as auth_router
 from app.controller.v1.user.user import router as user_router
+from app.controller.v1.user.tenancy_access import router as tenancy_access_router
 from app.controller.v1.dataset.dataset_filter import router as dataset_filter_router
 from app.controller.v1.dataset.dataset import router as dataset_router
 from app.controller.v1.dataset.dataset_snapshot import router as dataset_snapshot_router
@@ -211,6 +212,7 @@ def setup_routes(fastAPIApp: FastAPI) -> None:
     fastAPIApp.include_router(members_access_router, prefix="/v1")
     fastAPIApp.include_router(tenancies_router, prefix="/v1")
     fastAPIApp.include_router(user_router, prefix="/v1")
+    fastAPIApp.include_router(tenancy_access_router, prefix="/v1")
     fastAPIApp.include_router(auth_router, prefix="/v1")
     fastAPIApp.include_router(client_router, prefix="/v1")
     fastAPIApp.include_router(infrastructure_router, prefix="/v1")

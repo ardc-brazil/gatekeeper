@@ -22,6 +22,8 @@ from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.tenancy_event import TenancyEventRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
+from app.repository.tenancy_request import TenancyRequestRepository
+from app.service.tenancy_request import TenancyRequestService
 from app.service.tenancy_membership import TenancyMembershipService
 from app.service.tenancy_notifier import TenancyNotifier
 from app.repository.user import UserRepository
@@ -78,6 +80,7 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.invitation.invitation",
             "app.controller.v1.anonymous.anonymous",
             "app.controller.v1.user.user",
+            "app.controller.v1.user.tenancy_access",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
             "app.controller.v1.internal.dataset_collocation",
@@ -201,6 +204,21 @@ class Container(containers.DeclarativeContainer):
         TenancyMembershipService,
         tenancies=tenancy_repository,
         memberships=tenancy_membership_repository,
+        users=user_repository,
+        notifier=tenancy_notifier,
+    )
+
+    tenancy_request_repository = providers.Factory(
+        TenancyRequestRepository,
+        session_factory=db.provided.session,
+    )
+
+    tenancy_request_service = providers.Factory(
+        TenancyRequestService,
+        requests=tenancy_request_repository,
+        tenancies=tenancy_repository,
+        memberships=tenancy_membership_repository,
+        membership_service=tenancy_membership_service,
         users=user_repository,
         notifier=tenancy_notifier,
     )
