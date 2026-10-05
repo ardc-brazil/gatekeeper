@@ -6,6 +6,7 @@ from tests.integration.utils.assertions import (
     assert_json_response,
     assert_response_contains_fields,
 )
+from tests.integration.utils.database import execute
 
 
 class TestUserGetEndpoints:
@@ -154,6 +155,59 @@ class TestUserGetEndpoints:
         # All returned users should be enabled
         for user in data:
             assert user["is_enabled"] is True
+
+    def test_get_user_with_null_email_by_id_200(self, http_client, valid_headers):
+        """A user whose email column is NULL still answers 200 with email: null."""
+        # Arrange - create a user, then null out its email directly in the DB
+        create_data = {
+            "name": "User Without Email",
+            "email": f"noemail_{str(uuid.uuid4())[:8]}@example.com",
+            "providers": [],
+            "roles": [],
+        }
+        create_response = http_client.post(
+            "/users/", json=create_data, headers=valid_headers
+        )
+        assert_status_code(create_response, 200)
+        user_id = create_response.json()["id"]
+        execute(f"UPDATE users SET email = NULL WHERE id = '{user_id}'")
+
+        # Act
+        response = http_client.get(f"/users/{user_id}", headers=valid_headers)
+
+        # Assert
+        assert_status_code(response, 200)
+        data = assert_json_response(response)
+        assert data["email"] is None
+
+    def test_get_user_with_null_email_by_provider_reference_200(
+        self, http_client, valid_headers
+    ):
+        """A null email must not 500 the ORCID sign-in lookup."""
+        # Arrange - create a user with an ORCID provider, then null out its email
+        reference = f"noemail-{str(uuid.uuid4())[:8]}"
+        create_data = {
+            "name": "User Without Email Via ORCID",
+            "email": f"noemail_{str(uuid.uuid4())[:8]}@example.com",
+            "providers": [{"name": "orcid", "reference": reference}],
+            "roles": [],
+        }
+        create_response = http_client.post(
+            "/users/", json=create_data, headers=valid_headers
+        )
+        assert_status_code(create_response, 200)
+        user_id = create_response.json()["id"]
+        execute(f"UPDATE users SET email = NULL WHERE id = '{user_id}'")
+
+        # Act
+        response = http_client.get(
+            f"/users/providers/orcid/{reference}", headers=valid_headers
+        )
+
+        # Assert
+        assert_status_code(response, 200)
+        data = assert_json_response(response)
+        assert data["email"] is None
 
 
 class TestUserCRUDOperations:
