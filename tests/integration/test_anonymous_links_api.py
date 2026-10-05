@@ -220,6 +220,27 @@ class TestAnOwnerWithOnlyDatasetsWrite:
         assert_status_code(by_owner, 204)
         assert link_state(http_client, headers, dataset["id"])["revoked_at"] is not None
 
+    def test_a_member_who_can_see_the_dataset_is_refused_with_403(self, http_client):
+        owner, member = new_account(http_client), new_account(http_client)
+        dataset = create_dataset(http_client, owner["id"], PUBLIC)
+        headers = as_user(owner["id"], PUBLIC)
+        assert_status_code(
+            embargo_for(http_client, dataset["id"], headers, visible=True), 200
+        )
+        link = create_link(http_client, headers, dataset["id"])
+        member_headers = as_user(member["id"], PUBLIC)
+
+        seen = http_client.get(f"/datasets/{dataset['id']}", headers=member_headers)
+        by_member = http_client.delete(
+            f"/datasets/{dataset['id']}/anonymous-links/{link['id']}",
+            headers=member_headers,
+        )
+
+        assert_status_code(seen, 200)
+        assert_status_code(by_member, 403)
+        assert by_member.json() == {"detail": "forbidden"}
+        assert link_state(http_client, headers, dataset["id"])["revoked_at"] is None
+
     def test_revokes_through_a_path_with_upper_case_ids(self, http_client):
         owner = new_account(http_client)
         dataset = create_dataset(http_client, owner["id"], PUBLIC)
