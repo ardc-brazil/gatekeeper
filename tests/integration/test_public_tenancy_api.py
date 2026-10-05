@@ -239,6 +239,38 @@ class TestOutsidePublic:
         assert_status_code(opened, 200)
         assert_status_code(after, 200)
 
+    def test_only_the_owner_moves_a_dataset_out_of_the_tenancy(self, http_client):
+        tenancy, elsewhere = new_tenancy(), new_tenancy()
+        owner, member = new_account(http_client), new_account(http_client)
+        for account in (owner, member):
+            join(account["id"], tenancy)
+            join(account["id"], elsewhere)
+        dataset = create_dataset(http_client, owner["id"], tenancy)
+        assert_status_code(members_access(http_client, owner["id"], dataset, True), 200)
+
+        by_member = http_client.put(
+            f"/datasets/{dataset['id']}",
+            json={"name": "moved", "data": {}, "tenancy": PUBLIC},
+            headers=as_user(member["id"], tenancy),
+        )
+        after_member = execute(
+            f"SELECT tenancy FROM datasets WHERE id = '{dataset['id']}'"
+        )
+        by_owner = http_client.put(
+            f"/datasets/{dataset['id']}",
+            json={"name": "moved", "data": {}, "tenancy": elsewhere},
+            headers=as_user(owner["id"], tenancy),
+        )
+
+        assert_status_code(by_member, 403)
+        assert by_member.json() == {"detail": "forbidden"}
+        assert after_member == tenancy
+        assert_status_code(by_owner, 200)
+        assert (
+            execute(f"SELECT tenancy FROM datasets WHERE id = '{dataset['id']}'")
+            == elsewhere
+        )
+
 
 class TestShareCandidatesAndLookup:
     def test_candidates_are_empty_for_a_dataset_in_public(self, http_client):

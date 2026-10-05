@@ -360,6 +360,10 @@ class DatasetService:
             and dataset_request.tenancy != dataset_db.tenancy
         )
         if moves:
+            if level != AccessLevel.OWNER and not self._is_admin(user_id):
+                raise ForbiddenException(
+                    f"forbidden: move {dataset_id} by {user_id} who is not the owner"
+                )
             self._require_membership(user_id=user_id, tenancy=dataset_request.tenancy)
 
         dataset_db.name = dataset_request.name
@@ -429,8 +433,11 @@ class DatasetService:
 
         return new_version
 
+    def _is_admin(self, user_id: UUID) -> bool:
+        return ADMIN_ROLE in (self._user_service.roles_of(user_id) or [])
+
     def _require_membership(self, user_id: UUID, tenancy: str) -> None:
-        if ADMIN_ROLE in (self._user_service.roles_of(user_id) or []):
+        if self._is_admin(user_id):
             return
         try:
             user = self._user_service.fetch_by_id(id=user_id)

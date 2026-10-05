@@ -97,7 +97,10 @@ class TestDatasetService(unittest.TestCase):
         self.user_service.roles_of.return_value = user.roles
         return user
 
-    def _movable(self, user, target="tenancy2", target_enabled=True):
+    def _movable(
+        self, user, target="tenancy2", target_enabled=True, level=AccessLevel.OWNER
+    ):
+        self.dataset_access.require.return_value = level
         self.user_service.fetch_by_id.return_value = user
         self.tenancy_service.fetch.side_effect = lambda name, is_enabled=True: (
             Tenancy(name=name, is_enabled=True)
@@ -215,6 +218,7 @@ class TestDatasetService(unittest.TestCase):
 
     def test_update_dataset(self):
         # given
+        self.dataset_access.require.return_value = AccessLevel.OWNER
         dataset_id = uuid4()
         user_id = uuid4()
         tenancies = ["tenancy1"]
@@ -366,6 +370,41 @@ class TestDatasetService(unittest.TestCase):
         self.assertEqual(dataset_db.tenancy, "tenancy2")
         self.dataset_repository.upsert.assert_called_once()
 
+    def test_a_tenancy_editor_who_is_not_the_owner_cannot_move_the_dataset(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1", DEFAULT_TENANCY]),
+            target=DEFAULT_TENANCY,
+            level=AccessLevel.TENANCY,
+        )
+
+        with self.assertRaises(ForbiddenException) as raised:
+            self._move(target=DEFAULT_TENANCY)
+
+        self.assertEqual(raised.exception.detail, "forbidden")
+        self.assertEqual(dataset_db.tenancy, "tenancy1")
+        self.assertEqual(dataset_db.name, "before")
+        self.dataset_repository.upsert.assert_not_called()
+
+    def test_a_tenancy_editor_who_is_not_the_owner_still_edits_in_place(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1"]), level=AccessLevel.TENANCY
+        )
+
+        self._move(target="tenancy1")
+
+        self.assertEqual(dataset_db.name, "n")
+        self.dataset_repository.upsert.assert_called_once()
+
+    def test_an_admin_editing_as_a_tenancy_member_still_moves_the_dataset(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1"], roles=["admin"]), level=AccessLevel.TENANCY
+        )
+
+        self._move()
+
+        self.assertEqual(dataset_db.tenancy, "tenancy2")
+        self.dataset_repository.upsert.assert_called_once()
+
     def test_an_edit_that_keeps_the_tenancy_does_not_ask_for_membership(self):
         dataset_db = self._movable(self.mock_user([]))
         self.tenancy_service.fetch.side_effect = None
@@ -386,6 +425,7 @@ class TestDatasetService(unittest.TestCase):
         self.dataset_repository.upsert.assert_not_called()
 
     def test_moving_a_dataset_into_public_closes_it_to_members(self):
+        self.dataset_access.require.return_value = AccessLevel.OWNER
         self.user_service.fetch_by_id.return_value = self.mock_user(
             ["tenancy1", DEFAULT_TENANCY]
         )
