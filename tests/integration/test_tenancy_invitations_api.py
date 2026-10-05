@@ -425,6 +425,8 @@ class TestTheShareDialog:
         self, http_client, world
     ):
         headers = as_user(world.owner["id"], world.tenancy)
+        earlier = _invited(http_client, world)
+        another = new_account(http_client, name=unique("Another"))
         assert_status_code(
             set_embargo(http_client, world.dataset["id"], headers, visible=False), 200
         )
@@ -432,10 +434,28 @@ class TestTheShareDialog:
         state = http_client.get(
             f"/datasets/{world.dataset['id']}/share", headers=headers
         )
+        lookup = http_client.get(
+            f"/datasets/{world.dataset['id']}/share/lookup",
+            params={"value": another["email"]},
+            headers=headers,
+        )
+        invite = _invite(http_client, world.owner["id"], world.dataset, another["id"])
 
         assert_status_code(state, 200)
         body = state.json()
         assert (body["tenancy"], body["can_invite_to_tenancy"]) == (None, False)
+        assert [i["id"] for i in body["tenancy_invitations"]] == [earlier["id"]]
+        assert body["tenancy_invitations"][0]["can_withdraw"] is True
+        assert_status_code(lookup, 200)
+        assert lookup.json()["can_invite"] is False
+        assert_status_code(invite, 403)
+        assert invite.json() == {"detail": "forbidden"}
+        assert _status_of_any(world.tenancy) == "pending"
+        withdrawn = _withdraw(
+            http_client, world.owner["id"], world.dataset, earlier["id"]
+        )
+        assert_status_code(withdrawn, 204)
+        assert _status(earlier["id"]) == "withdrawn"
 
     def test_the_lookup_says_when_someone_was_already_invited(self, http_client, world):
         path = f"/datasets/{world.dataset['id']}/share/lookup"

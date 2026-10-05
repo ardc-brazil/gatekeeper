@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
@@ -72,7 +72,9 @@ class InvitationServiceTestCase(unittest.TestCase):
         self.users.fetch_by_id.side_effect = (
             lambda id, is_enabled=True: self.people.get(id)
         )
-        self.dataset = SimpleNamespace(id=uuid4(), name="Ozone at ATTO", tenancy=ATTO)
+        self.dataset = SimpleNamespace(
+            id=uuid4(), name="Ozone at ATTO", tenancy=ATTO, embargo_until=None
+        )
         self.level = AccessLevel.OWNER
         self.datasets.fetch_authorized.side_effect = lambda **kwargs: (
             self.dataset,
@@ -100,7 +102,11 @@ class InvitationServiceTestCase(unittest.TestCase):
             tenancies=self.tenancies,
             users=self.users,
             notifier=self.notifier,
+            clock=lambda: NOW,
         )
+
+    def embargo(self, days: int = 30) -> None:
+        self.dataset.embargo_until = NOW + timedelta(days=days)
 
 
 class TestWhoMayInvite(InvitationServiceTestCase):
@@ -141,6 +147,22 @@ class TestWhoMayInvite(InvitationServiceTestCase):
         with self.assertRaises(ForbiddenException):
             self.invite()
         self.invitations.create.assert_not_called()
+
+    def test_nobody_invites_while_the_dataset_is_embargoed(self):
+        self.embargo()
+
+        with self.assertRaises(ForbiddenException) as raised:
+            self.invite()
+
+        self.assertEqual(raised.exception.detail, "forbidden")
+        self.invitations.create.assert_not_called()
+
+    def test_an_embargo_that_has_ended_does_not_stop_an_invitation(self):
+        self.embargo(days=-1)
+
+        self.invite()
+
+        self.invitations.create.assert_called_once()
 
     def test_a_reader_may_not(self):
         self.datasets.fetch_authorized.side_effect = ForbiddenException("forbidden")
@@ -228,6 +250,14 @@ class TestLookup(InvitationServiceTestCase):
 
         self.assertTrue(found.invitation_pending)
         self.assertFalse(found.can_invite)
+
+    def test_nobody_can_be_invited_while_the_dataset_is_embargoed(self):
+        self.embargo()
+        self.users.fetch_by_email_insensitive.return_value = self.invitee
+
+        self.assertFalse(
+            self.service.lookup(self.dataset.id, CALLER, "bruna@usp.br").can_invite
+        )
 
     def test_in_public_nobody_can_be_invited(self):
         self.dataset.tenancy = DEFAULT_TENANCY
@@ -399,6 +429,21 @@ class TestShareAdditions(InvitationServiceTestCase):
         self.assertEqual([v.can_withdraw for v in views], [True, False])
         self.assertIsNone(views[1].invited_by)
         self.assertTrue(can_invite)
+
+    def test_an_embargoed_dataset_lists_its_pending_invitations_but_invites_no_one(
+        self,
+    ):
+        self.embargo()
+        pending = invitation_row(user_id=self.invitee.id, dataset_id=self.dataset.id)
+        self.invitations.pending_for_dataset.return_value = [pending]
+
+        views, can_invite = self.service.share_additions(
+            self.dataset, AccessLevel.OWNER, CALLER
+        )
+
+        self.assertEqual([v.id for v in views], [pending.id])
+        self.assertTrue(views[0].can_withdraw)
+        self.assertFalse(can_invite)
 
     def test_a_staging_or_disabled_tenancy_cannot_be_invited_to(self):
         self.dataset.tenancy = "datamap/staging/data-amazon"

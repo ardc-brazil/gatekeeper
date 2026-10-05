@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Callable
 from uuid import UUID
 
 from app.exception.bad_request import BadRequestException
@@ -5,7 +7,8 @@ from app.exception.conflict import ConflictException
 from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
-from app.model.dataset_access import AccessLevel, DatasetAction
+from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
+from app.model.embargo import embargo_active
 from app.model.tenancy import (
     TenancyEventType,
     TenancyInvitationStatus,
@@ -46,6 +49,7 @@ class TenancyInvitationService:
         tenancies: TenancyRepository,
         users: UserRepository,
         notifier: TenancyNotifier,
+        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._datasets = dataset_service
         self._invitations = invitations
@@ -54,6 +58,7 @@ class TenancyInvitationService:
         self._tenancies = tenancies
         self._users = users
         self._notifier = notifier
+        self._clock = clock
 
     def lookup(self, dataset_id: UUID, user_id: UUID, value: str) -> ShareLookupView:
         dataset, level = self._authorized(dataset_id, user_id)
@@ -71,24 +76,27 @@ class TenancyInvitationService:
         )
 
     def may_invite(self, dataset, level: AccessLevel, user_id: UUID) -> bool:
-        tenancy = dataset.tenancy
-        if level not in EDITORS or not tenancy:
+        if not self._is_inviter(dataset, level, user_id):
             return False
-        row = self._tenancies.fetch_any(tenancy)
-        return closed_to_members(
-            tenancy, row.is_enabled if row else None
-        ) is None and self._memberships.is_member(user_id, tenancy)
+        row = self._tenancies.fetch_any(dataset.tenancy)
+        return (
+            closed_to_members(dataset.tenancy, row.is_enabled if row else None) is None
+        )
+
+    def _is_inviter(self, dataset, level: AccessLevel, user_id: UUID) -> bool:
+        return (
+            level in EDITORS
+            and bool(dataset.tenancy)
+            and not embargo_active(dataset.embargo_until, self._clock())
+            and self._memberships.is_member(user_id, dataset.tenancy)
+        )
 
     def invite(
         self, dataset_id: UUID, user_id: UUID, invitee_id: UUID
     ) -> DatasetTenancyInvitationView:
         dataset, level = self._authorized(dataset_id, user_id)
         tenancy = dataset.tenancy
-        if (
-            level not in EDITORS
-            or not tenancy
-            or not self._memberships.is_member(user_id, tenancy)
-        ):
+        if not self._is_inviter(dataset, level, user_id):
             raise ForbiddenException(f"forbidden: invite to {tenancy} by {user_id}")
         self._membership_service.require_open_for_members(tenancy)
         invitee = self._users.fetch_by_id(id=invitee_id, is_enabled=True)

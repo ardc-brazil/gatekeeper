@@ -236,11 +236,9 @@ class ShareService:
                 is_legacy=summary.is_legacy,
                 datasets=self._tenancies.count_datasets(dataset.tenancy),
             )
-        tenancy_invitations, can_invite = [], False
-        if tenancy is not None:
-            tenancy_invitations, can_invite = self._tenancy_invitations.share_additions(
-                dataset, level, user_id
-            )
+        tenancy_invitations, can_invite = self._tenancy_invitations.share_additions(
+            dataset, level, user_id
+        )
         return ShareState(
             owner=self._share_user(dataset.owner_id),
             permissions=permissions,
