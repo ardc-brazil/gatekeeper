@@ -85,6 +85,14 @@ class TestProfileFields(UserRoutesTestCase):
         self.assertIsNone(body["email_verified_at"])
         self.assertIs(body["has_password"], False)
 
+    def test_a_user_without_an_email_returns_null_not_a_500(self):
+        self.users.fetch_by_id.return_value = _user(email=None)
+
+        response = self.client.get(f"/v1/users/{uuid4()}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["email"])
+
     def test_the_lookup_by_provider_carries_them_too(self):
         self.users.fetch_by_provider.return_value = _user(email_verified_at=CREATED)
 

@@ -12,7 +12,7 @@ class UserProvider:
 class User:
     id: str = None
     name: str = None
-    email: str = None
+    email: str | None = None
     providers: list[UserProvider] = None
     tenancies: list[str] = None
     roles: list[str] = None

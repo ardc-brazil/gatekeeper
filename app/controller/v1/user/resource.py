@@ -11,7 +11,7 @@ class UserProvider(BaseModel):
 class UserGetResponse(BaseModel):
     id: UUID = Field(..., description="User id")
     name: str = Field(..., description="User name")
-    email: str = Field(..., description="User email")
+    email: str | None = Field(None, description="User email")
     roles: list[str] = Field(..., description="User roles")
     is_enabled: bool = Field(..., description="User enabled status")
     created_at: datetime = Field(..., description="User created time")
