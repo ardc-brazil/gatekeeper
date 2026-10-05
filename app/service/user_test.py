@@ -40,6 +40,14 @@ class TestUserService(unittest.TestCase):
         )
         self.casbin_enforcer.get_roles_for_user.assert_called_once_with(str(user_id))
 
+    def test_roles_of_reads_the_enforcer_without_loading_the_account(self):
+        user_id = uuid4()
+        self.casbin_enforcer.get_roles_for_user.return_value = ["admin"]
+
+        self.assertEqual(self.user_service.roles_of(user_id), ["admin"])
+        self.casbin_enforcer.get_roles_for_user.assert_called_once_with(str(user_id))
+        self.user_repository.fetch_by_id.assert_not_called()
+
     def test_fetch_by_id_not_found(self):
         user_id = uuid4()
         self.user_repository.fetch_by_id.return_value = None

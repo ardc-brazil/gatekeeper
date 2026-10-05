@@ -235,6 +235,9 @@ class UserService:
 
         return users
 
+    def roles_of(self, user_id: UUID) -> list[str]:
+        return self._casbin_enforcer.get_roles_for_user(str(user_id))
+
     def enforce(self, user_id: UUID, resource: str, action: str) -> bool:
         return self._casbin_enforcer.enforce(str(user_id), resource, action)
 

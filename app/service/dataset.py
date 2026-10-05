@@ -354,12 +354,17 @@ class DatasetService:
             action=DatasetAction.WRITE,
         )
 
+        moves = (
+            dataset_request.tenancy
+            and level in (AccessLevel.OWNER, AccessLevel.TENANCY)
+            and dataset_request.tenancy != dataset_db.tenancy
+        )
+        if moves:
+            self._require_membership(user_id=user_id, tenancy=dataset_request.tenancy)
+
         dataset_db.name = dataset_request.name
         dataset_db.data = dataset_request.data
-        if dataset_request.tenancy and level in (
-            AccessLevel.OWNER,
-            AccessLevel.TENANCY,
-        ):
+        if moves:
             dataset_db.tenancy = dataset_request.tenancy
         if dataset_db.tenancy == DEFAULT_TENANCY:
             dataset_db.members_can_edit = False
@@ -425,12 +430,12 @@ class DatasetService:
         return new_version
 
     def _require_membership(self, user_id: UUID, tenancy: str) -> None:
+        if ADMIN_ROLE in (self._user_service.roles_of(user_id) or []):
+            return
         try:
             user = self._user_service.fetch_by_id(id=user_id)
         except NotFoundException:
             raise UnauthorizedException(f"unauthorized: {user_id}")
-        if ADMIN_ROLE in (user.roles or []):
-            return
         target = self._tenancy_service.fetch(name=tenancy)
         if target is None or tenancy not in (user.tenancies or []):
             raise NotAMemberOfTenancyException(
