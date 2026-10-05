@@ -21,6 +21,9 @@ from app.repository.email import EmailRepository
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
 from app.repository.tenancy_event import TenancyEventRepository
+from app.repository.tenancy_membership import TenancyMembershipRepository
+from app.service.tenancy_membership import TenancyMembershipService
+from app.service.tenancy_notifier import TenancyNotifier
 from app.repository.user import UserRepository
 
 from app.service.account import AccountService
@@ -180,6 +183,26 @@ class Container(containers.DeclarativeContainer):
         tenancy_repository=tenancy_repository,
         casbin_enforcer=casbin_enforcer,
         tenancy_events=tenancy_event_repository,
+    )
+
+    tenancy_membership_repository = providers.Factory(
+        TenancyMembershipRepository,
+        session_factory=db.provided.session,
+    )
+
+    tenancy_notifier = providers.Factory(
+        TenancyNotifier,
+        email_service=email_service,
+        admin_emails=config.ADMIN_NOTIFICATION_EMAILS,
+        public_base_url=config.PUBLIC_BASE_URL,
+    )
+
+    tenancy_membership_service = providers.Factory(
+        TenancyMembershipService,
+        tenancies=tenancy_repository,
+        memberships=tenancy_membership_repository,
+        users=user_repository,
+        notifier=tenancy_notifier,
     )
 
     auth_service = providers.Factory(

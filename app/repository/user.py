@@ -8,7 +8,7 @@ from app.model.db.user import (
     user_provider_association,
     user_tenancy_association,
 )
-from sqlalchemy import case, func, or_, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.orm import Query, aliased
 from sqlalchemy.sql.expression import true
 from typing import Callable
@@ -21,6 +21,20 @@ from sqlalchemy.exc import IntegrityError
 def like_pattern(term: str) -> str:
     escaped = term.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
+
+
+def user_matches(term: str):
+    pattern = like_pattern(term)
+    orcid_holders = (
+        select(user_provider_association.c.user_id)
+        .join(Provider, Provider.id == user_provider_association.c.provider_id)
+        .where(Provider.name == "orcid", Provider.reference.ilike(pattern, escape="\\"))
+    )
+    return or_(
+        User.name.ilike(pattern, escape="\\"),
+        User.email.ilike(pattern, escape="\\"),
+        User.id.in_(orcid_holders),
+    )
 
 
 def _by_provider(session: Session, provider_name: str, reference: str) -> Query:
@@ -204,6 +218,20 @@ class UserRepository:
                     User.is_enabled == true(),
                 )
                 .scalar()
+            )
+
+    def fetch_any_by_id(self, id: UUID) -> User | None:
+        with self._session_factory() as session:
+            return session.query(User).filter_by(id=id).first()
+
+    def search_admin(self, term: str, limit: int = 10) -> List[User]:
+        with self._session_factory() as session:
+            return (
+                session.query(User)
+                .filter(User.is_enabled == true(), user_matches(term))
+                .order_by(func.lower(User.name), User.id)
+                .limit(limit)
+                .all()
             )
 
     def search(self, query_params: UserQuery) -> List[User]:

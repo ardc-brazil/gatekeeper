@@ -3,7 +3,9 @@ from unittest.mock import Mock
 from app.model.db.tenancy import Tenancy as DBModel
 from app.model.tenancy import Tenancy
 from app.repository.tenancy import TenancyRepository
+from app.exception.conflict import ConflictException
 from app.exception.not_found import NotFoundException
+from app.model.tenancy import DEFAULT_TENANCY
 from app.service.tenancy import TenancyService
 
 
@@ -111,6 +113,26 @@ class TestTenancyService(unittest.TestCase):
         self.repository.fetch.return_value = None
         with self.assertRaises(NotFoundException):
             self.tenancy_service.enable("non_existent_tenancy")
+
+
+class TestPublicIsLocked(unittest.TestCase):
+    def setUp(self):
+        self.repository = Mock(spec=TenancyRepository)
+        self.service = TenancyService(self.repository)
+
+    def test_public_cannot_be_renamed_or_changed(self):
+        with self.assertRaises(ConflictException) as raised:
+            self.service.update(DEFAULT_TENANCY, Tenancy(name="x", is_enabled=True))
+
+        self.assertEqual(str(raised.exception), "public_tenancy_locked")
+        self.repository.upsert.assert_not_called()
+
+    def test_public_cannot_be_disabled(self):
+        with self.assertRaises(ConflictException) as raised:
+            self.service.disable(DEFAULT_TENANCY)
+
+        self.assertEqual(str(raised.exception), "public_tenancy_locked")
+        self.repository.upsert.assert_not_called()
 
 
 if __name__ == "__main__":
