@@ -23,6 +23,11 @@ class EmailTemplate(str, Enum):
     EMAIL_VERIFICATION_CODE = "email_verification_code"
     PASSWORD_RESET = "password_reset"
     SIGN_UP_EXISTING_ACCOUNT = "sign_up_existing_account"
+    TENANCY_REQUEST_RECEIVED = "tenancy_request_received"
+    TENANCY_ACCESS_GRANTED = "tenancy_access_granted"
+    TENANCY_REQUEST_DECLINED = "tenancy_request_declined"
+    TENANCY_INVITATION = "tenancy_invitation"
+    TENANCY_INVITATION_NOTICE = "tenancy_invitation_notice"
 
 
 _OPTIONAL_DEFAULTS: dict[EmailTemplate, dict[str, Any]] = {
@@ -52,6 +57,7 @@ _OPTIONAL_DEFAULTS: dict[EmailTemplate, dict[str, Any]] = {
         "anonymous_link_count": 0,
         "shared_by_name": None,
     },
+    EmailTemplate.TENANCY_REQUEST_DECLINED: {"decision_message": None},
 }
 
 

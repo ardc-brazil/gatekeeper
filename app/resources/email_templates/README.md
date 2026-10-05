@@ -24,3 +24,8 @@ serves from `public/img/email/`.
 | `email_verification_code` | `name`, `code`, `orcid`, `expires_in_minutes` | |
 | `password_reset` | `name`, `link` | |
 | `sign_up_existing_account` | `name`, `link` | |
+| `tenancy_request_received` | `requester_name`, `requester_email`, `email_confirmed`, `requested_name`, `reason`, `requested_at`, `review_url` | |
+| `tenancy_access_granted` | `user_name`, `admin_name`, `tenancy_display_name`, `tenancy_path`, `datasets_count`, `open_url` | |
+| `tenancy_request_declined` | `user_name`, `requested_name`, `open_url` | `decision_message` |
+| `tenancy_invitation` | `invitee_name`, `inviter_name`, `tenancy_display_name`, `tenancy_path`, `dataset_name`, `open_url` | |
+| `tenancy_invitation_notice` | `inviter_name`, `invitee_name`, `invitee_email`, `tenancy_display_name`, `tenancy_path`, `dataset_name`, `tenancy_url` | |

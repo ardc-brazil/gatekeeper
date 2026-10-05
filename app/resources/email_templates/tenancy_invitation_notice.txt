@@ -1,0 +1,14 @@
+{% extends "base.txt" %}
+{% block content %}
+{{ inviter_name }} invited {{ invitee_name }} to {{ tenancy_display_name }}.
+
+Inviter: {{ inviter_name }}
+Invitee: {{ invitee_name }} ({{ invitee_email or "No email" }})
+Tenancy: {{ tenancy_display_name }} ({{ tenancy_path }})
+Dataset: {{ dataset_name }}
+
+No approval is needed. You can withdraw it, or remove {{ invitee_name }} later, from Admin › Tenancies.
+
+Open tenancy: {{ tenancy_url }}
+{% endblock %}
+{% block reason %}You received this email because your address is on DataMap's list of administrators.{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Your request for {{ requested_name }}{% endblock %}
+{% block preheader %}An administrator answered your request for {{ requested_name }}.{% endblock %}
+{% block label %}Tenancy request{% endblock %}
+{% block content %}
+{{ m.heading("Your request was not approved") }}
+{% call m.paragraph() %}Hi {{ user_name }}, an administrator could not give you access to {{ m.strong(requested_name) }}.{% endcall %}
+{% if decision_message %}
+{% call m.note(bottom=16) %}“{{ decision_message }}”{% endcall %}
+{% endif %}
+{% call m.paragraph() %}You can still work in Public and can send another request.{% endcall %}
+{{ m.button("Open DataMap", open_url) }}
+{% endblock %}
+{% block reason %}You received this email because you asked for access to a tenancy on DataMap.{% endblock %}

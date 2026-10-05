@@ -1,0 +1,13 @@
+{% extends "base.txt" %}
+{% block content %}
+Hi {{ invitee_name }},
+
+{{ inviter_name }} invited you to join {{ tenancy_display_name }} on DataMap, from the dataset “{{ dataset_name }}”.
+
+Tenancy: {{ tenancy_display_name }} ({{ tenancy_path }})
+
+Sign in to accept or decline. This email cannot accept for you.
+
+Open DataMap: {{ open_url }}
+{% endblock %}
+{% block reason %}You received this email because someone invited your DataMap account to a tenancy.{% endblock %}

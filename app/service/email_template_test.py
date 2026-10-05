@@ -776,3 +776,181 @@ class TestAccountTemplates(unittest.TestCase):
 
         self.assertNotIn("<b>Ana</b>", email.html)
         self.assertIn("&lt;b&gt;Ana&lt;/b&gt;", email.html)
+
+
+CONTEXTS[EmailTemplate.TENANCY_REQUEST_RECEIVED] = {
+    "requester_name": "Bruna Costa",
+    "requester_email": "bruna.costa@usp.br",
+    "email_confirmed": True,
+    "requested_name": "ATTO",
+    "reason": "I process the ATTO tower fluxes.",
+    "requested_at": "October 5, 2026 at 09:30 UTC",
+    "review_url": "https://datamap.example.org/app/admin/requests?request=7d1c",
+}
+CONTEXTS[EmailTemplate.TENANCY_ACCESS_GRANTED] = {
+    "user_name": "Bruna Costa",
+    "admin_name": "Luciana Rizzo",
+    "tenancy_display_name": "ATTO",
+    "tenancy_path": "datamap/production/atto",
+    "datasets_count": 12,
+    "open_url": "https://datamap.example.org/app/tenancy",
+}
+CONTEXTS[EmailTemplate.TENANCY_REQUEST_DECLINED] = {
+    "user_name": "Bruna Costa",
+    "requested_name": "ATTO",
+    "decision_message": "Ask Alan to invite you from a dataset.",
+    "open_url": "https://datamap.example.org/app/tenancy",
+}
+CONTEXTS[EmailTemplate.TENANCY_INVITATION] = {
+    "invitee_name": "Bruna Costa",
+    "inviter_name": "Alan Calheiros",
+    "tenancy_display_name": "ATTO",
+    "tenancy_path": "datamap/production/atto",
+    "dataset_name": "Ozone at ATTO",
+    "open_url": "https://datamap.example.org/app/home",
+}
+CONTEXTS[EmailTemplate.TENANCY_INVITATION_NOTICE] = {
+    "inviter_name": "Alan Calheiros",
+    "invitee_name": "Bruna Costa",
+    "invitee_email": "bruna.costa@usp.br",
+    "tenancy_display_name": "ATTO",
+    "tenancy_path": "datamap/production/atto",
+    "dataset_name": "Ozone at ATTO",
+    "tenancy_url": "https://datamap.example.org/app/admin/tenancies?tenancy=datamap/production/atto",
+}
+
+TENANCY = frozenset(
+    {
+        EmailTemplate.TENANCY_REQUEST_RECEIVED,
+        EmailTemplate.TENANCY_ACCESS_GRANTED,
+        EmailTemplate.TENANCY_REQUEST_DECLINED,
+        EmailTemplate.TENANCY_INVITATION,
+        EmailTemplate.TENANCY_INVITATION_NOTICE,
+    }
+)
+
+
+class TestTenancyTemplates(unittest.TestCase):
+    def setUp(self):
+        self.renderer = EmailTemplateRenderer(site_url=SITE_URL)
+
+    def render(self, template, **overrides):
+        return self.renderer.render(template, {**CONTEXTS[template], **overrides})
+
+    def test_every_tenancy_template_has_a_written_text_part(self):
+        for template in TENANCY:
+            with self.subTest(template=template):
+                self.assertTrue((TEMPLATES_DIR / f"{template.value}.txt").is_file())
+
+    def test_none_claims_to_be_about_a_dataset_you_have_access_to(self):
+        for template in TENANCY:
+            with self.subTest(template=template):
+                email = self.render(template)
+                self.assertNotIn("transactional message about a dataset", email.html)
+                self.assertNotIn("transactional message about a dataset", email.text)
+
+    def test_the_subjects(self):
+        expected = {
+            EmailTemplate.TENANCY_REQUEST_RECEIVED: "Tenancy request from Bruna Costa",
+            EmailTemplate.TENANCY_ACCESS_GRANTED: "You now have access to ATTO",
+            EmailTemplate.TENANCY_REQUEST_DECLINED: "Your request for ATTO",
+            EmailTemplate.TENANCY_INVITATION: "Alan Calheiros invited you to ATTO",
+            EmailTemplate.TENANCY_INVITATION_NOTICE: "Alan Calheiros invited Bruna Costa to ATTO",
+        }
+        for template, subject in expected.items():
+            with self.subTest(template=template):
+                self.assertEqual(self.render(template).subject, subject)
+
+    def test_the_request_lists_who_what_and_why_for_the_admins(self):
+        email = self.render(EmailTemplate.TENANCY_REQUEST_RECEIVED)
+
+        for value in (
+            "Bruna Costa asked for access to a tenancy.",
+            "bruna.costa@usp.br (confirmed)",
+            "ATTO",
+            "I process the ATTO tower fluxes.",
+            "October 5, 2026 at 09:30 UTC",
+            "Review request",
+            "list of administrators",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, email.text)
+        self.assertIn(
+            'href="https://datamap.example.org/app/admin/requests?request=7d1c"',
+            email.html,
+        )
+
+    def test_an_unconfirmed_or_missing_email_says_so(self):
+        unconfirmed = self.render(
+            EmailTemplate.TENANCY_REQUEST_RECEIVED, email_confirmed=False
+        )
+        missing = self.render(
+            EmailTemplate.TENANCY_REQUEST_RECEIVED, requester_email=None
+        )
+
+        self.assertIn("bruna.costa@usp.br (not confirmed)", unconfirmed.text)
+        self.assertIn("No email", missing.text)
+
+    def test_access_granted_names_the_admin_the_path_and_public(self):
+        email = self.render(EmailTemplate.TENANCY_ACCESS_GRANTED)
+
+        for value in (
+            "Luciana Rizzo gave you access to ATTO on DataMap.",
+            "datamap/production/atto",
+            "12",
+            "Your datasets in Public stay where they are.",
+            "Open DataMap",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, email.text)
+
+    def test_a_decline_quotes_the_message_only_when_there_is_one(self):
+        with_message = self.render(EmailTemplate.TENANCY_REQUEST_DECLINED)
+        without = self.renderer.render(
+            EmailTemplate.TENANCY_REQUEST_DECLINED,
+            {
+                key: value
+                for key, value in CONTEXTS[
+                    EmailTemplate.TENANCY_REQUEST_DECLINED
+                ].items()
+                if key != "decision_message"
+            },
+        )
+
+        self.assertIn(
+            "An administrator could not give you access to ATTO.", with_message.text
+        )
+        self.assertIn("Ask Alan to invite you from a dataset.", with_message.text)
+        self.assertIn(
+            "You can still work in Public and can send another request.",
+            with_message.text,
+        )
+        self.assertNotIn("Ask Alan", without.text)
+
+    def test_the_invitation_cannot_accept_for_you(self):
+        email = self.render(EmailTemplate.TENANCY_INVITATION)
+
+        self.assertIn(
+            "Alan Calheiros invited you to join ATTO on DataMap, from the dataset “Ozone at ATTO”.",
+            email.text,
+        )
+        self.assertIn(
+            "Sign in to accept or decline. This email cannot accept for you.",
+            email.text,
+        )
+        self.assertIn('href="https://datamap.example.org/app/home"', email.html)
+
+    def test_the_admin_notice_says_no_approval_is_needed(self):
+        email = self.render(EmailTemplate.TENANCY_INVITATION_NOTICE)
+
+        self.assertIn("No approval is needed.", email.text)
+        self.assertIn("remove Bruna Costa later, from Admin › Tenancies", email.text)
+        self.assertIn("Open tenancy", email.text)
+
+    def test_a_name_is_escaped_in_html(self):
+        email = self.render(
+            EmailTemplate.TENANCY_INVITATION, inviter_name="<b>Alan</b>"
+        )
+
+        self.assertNotIn("<b>Alan</b>", email.html)
+        self.assertIn("&lt;b&gt;Alan&lt;/b&gt;", email.html)
