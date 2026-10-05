@@ -112,3 +112,25 @@ class TestConflictsAreMappedByConstraint(unittest.TestCase):
             with self.subTest(name):
                 with self.assertRaises(IntegrityError):
                     call(FailingFlush("tenancy_events_tenancy_fkey"))
+
+
+class TestLegacyTenancyUpsert(unittest.TestCase):
+    def upsert(self, constraint: str | None) -> ConflictException:
+        failing = FailingFlush(constraint)
+        failing.session.commit.side_effect = integrity_error(constraint)
+        with self.assertRaises(ConflictException) as raised:
+            TenancyRepository(failing).upsert(
+                SimpleNamespace(name="datamap/production/atto")
+            )
+        return raised.exception
+
+    def test_a_taken_display_name_is_display_name_taken(self):
+        self.assertEqual(
+            str(self.upsert("uq_tenancies_display_name")), "display_name_taken"
+        )
+
+    def test_any_other_violation_keeps_the_legacy_code(self):
+        self.assertEqual(
+            str(self.upsert("tenancies_pkey")),
+            "tenancy_already_exists: datamap/production/atto",
+        )

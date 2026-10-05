@@ -286,6 +286,27 @@ class TestTenancyCRUDOperations:
         assert_status_code(response, 200)
         # POST returns empty response body
 
+    def test_enabling_under_a_display_name_now_taken_is_display_name_taken(
+        self, http_client, valid_headers
+    ):
+        suffix = str(uuid.uuid4())[:8]
+        dormant = f"datamap/production/dormant-{suffix}"
+        execute(
+            "INSERT INTO tenancies (name, display_name, is_enabled) VALUES "
+            f"('{dormant}', 'Dup {suffix}', false), "
+            f"('datamap/production/active-{suffix}', 'DUP {suffix}', true)"
+        )
+
+        response = http_client.post(
+            f"/tenancies/{dormant}/enable", headers=valid_headers
+        )
+
+        assert_status_code(response, 409)
+        assert_response_matches_dict(response, {"detail": "display_name_taken"})
+        assert (
+            execute(f"SELECT is_enabled FROM tenancies WHERE name = '{dormant}'") == "f"
+        )
+
     def test_enable_tenancy_not_found_404(self, http_client, valid_headers):
         """Test enabling a non-existent tenancy returns 404."""
         # Act

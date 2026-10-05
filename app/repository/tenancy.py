@@ -12,13 +12,14 @@ from app.model.db.dataset import Dataset
 from app.model.db.tenancy import Tenancy
 from app.model.db.user import User, user_tenancy_association
 from app.model.tenancy import TenancyEventType
-from app.repository.integrity import raise_conflict
+from app.repository.integrity import raise_conflict, violates
 from app.repository.tenancy_event import add_event
 
 
+DISPLAY_NAME_INDEX = "uq_tenancies_display_name"
 NEW_TENANCY_CONFLICTS = {
     "tenancies_pkey": "tenancy_exists",
-    "uq_tenancies_display_name": "display_name_taken",
+    DISPLAY_NAME_INDEX: "display_name_taken",
 }
 
 
@@ -59,7 +60,11 @@ class TenancyRepository:
                 session.commit()
                 session.refresh(tenancy)
                 return tenancy
-        except IntegrityError:
+        except IntegrityError as error:
+            if violates(error, DISPLAY_NAME_INDEX):
+                raise ConflictException(
+                    NEW_TENANCY_CONFLICTS[DISPLAY_NAME_INDEX]
+                ) from error
             raise ConflictException(f"tenancy_already_exists: {tenancy.name}")
 
     def fetch_any(self, tenancy: str) -> Tenancy | None:
