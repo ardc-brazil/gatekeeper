@@ -13,6 +13,7 @@ Decided by the lead after the plan was written. Implementers read this together 
   - `/api/v1/datasets/[0-9a-fA-F-]{36}/share/(permissions|invitations)/[0-9a-fA-F-]{36}$`
   - `/api/v1/datasets/[0-9a-fA-F-]{36}/tenancy-invitations/[0-9a-fA-F-]{36}$`
   - `/api/v1/datasets/[0-9a-fA-F-]{36}/anonymous-links/[0-9a-fA-F-]{36}$`
+- **Removed (2026-10-05):** the `tenancy-invitations` row. Tenancy invitations moved from the dataset to the workspace Members page, whose routes (`/api/v1/users/{id}/tenancies/{path}/invitations/...`) are self routes authorized by `authorize_self` and the service, so Casbin is not consulted. The migration, `app/resources/casbin_seed_policies.sql` and `tests/integration/fixtures/seed_clients.sql` now insert two rows: `share/(permissions|invitations)` and `anonymous-links`.
 
 ## A2. Creating a dataset requires membership of the target tenancy
 `POST /datasets` never checked that the caller belongs to the target tenancy; with `datasets_write` for everyone, any account could create in any tenancy.

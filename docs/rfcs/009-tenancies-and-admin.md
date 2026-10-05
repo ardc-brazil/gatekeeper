@@ -4,14 +4,14 @@
 |--------|-------|
 | Author | DataMap Team |
 | Created | 2026-10-04 |
-| Updated | 2026-10-04 (owner decisions recorded) |
+| Updated | 2026-10-05 (invitations move to the workspace Members page) |
 
 ## Summary
 
 A new DataMap account today lands on "Your access is not set up yet" and waits
 for someone to insert `users_tenancies` and `casbin_rule` rows by hand. This RFC
 gives every account a workspace from its first sign-in, lets people ask for more
-from inside the app, lets dataset owners bring colleagues into their tenancy,
+from inside the app, lets members bring colleagues into their tenancy,
 and gives the DataMap admins a place to decide: the **Admin** area, whose shell
 later RFCs fill with more pages.
 
@@ -42,10 +42,14 @@ The decisions that shape everything else:
    existing tenancy or creating `datamap/production/{namespace}`, or declines it
    with an optional message. A new tenancy is never created for an account with
    an unconfirmed email.
-6. **Owners and editors invite existing users into their tenancy without an
-   admin.** From the share dialog, the owner or a `write` collaborator who is a
-   member of the dataset's tenancy invites an existing account into it. The
-   invitee accepts in the app; the email carries no token. Admins are told.
+6. **Members invite existing users into their tenancy without an admin.** A
+   dataset is an item inside a tenancy, so inviting someone into the tenancy
+   does not start from a dataset. The workspace has a **Members** page for the
+   selected tenancy: any member of a tenancy open to members (enabled,
+   production, not public) invites an existing account into it from there. The
+   invitee accepts in the app; the email carries no token. Admins are told. The
+   share dialog stays RFC 003 dataset sharing, with no tenancy invitation in
+   it.
 7. **Roles stay global.** There are no per-tenancy roles and no tenancy admins:
    members are members. The design's Reader / Contributor / Admin labels per
    membership are not built.
@@ -102,7 +106,7 @@ The decisions that shape everything else:
 - Every account can use DataMap the moment it is created.
 - Asking for a tenancy, and answering, happen in the app, with email on both
   sides.
-- An owner can bring a known colleague into their tenancy without waiting.
+- A member can bring a known colleague into their tenancy without waiting.
 - Admins see every open request, and every membership change is recorded.
 
 ### Non-goals
@@ -169,7 +173,6 @@ tenancy_invitations
   tenancy      String(256), FK tenancies
   user_id      UUID, FK users ON DELETE CASCADE        -- the invitee
   invited_by   UUID, FK users ON DELETE SET NULL, nullable
-  dataset_id   UUID, FK datasets ON DELETE SET NULL, nullable   -- the share dialog it came from
   status       enum tenancy_invitation_status: pending | accepted | declined | withdrawn | revoked
   closed_by    UUID, FK users ON DELETE SET NULL, nullable
   closed_at    DateTime(tz), nullable
@@ -332,8 +335,8 @@ kinds of user authorization:
 
 - **self** — a new `authorize_self` interceptor: `{id}` must equal `X-User-Id`,
   else `401`. Casbin is not consulted, so an account without any role can
-  reach its own requests and invitations; an admin acts on other people's
-  through `/admin`, never through these.
+  reach its own requests and invitations, and its workspace's members; an
+  admin acts on other people's through `/admin`, never through these.
 - **admin** — plain `authorize`. Only the `admin` role's `/*` policy matches
   `/api/v1/admin/...`; no other seeded pattern does.
 - **dataset** — `authorize` (Casbin allows the dataset routes to
@@ -348,40 +351,52 @@ kinds of user authorization:
 | `GET /users/{id}/tenancy-requests` | self | — | `200` the latest 5, newest first |
 | `POST /users/{id}/tenancy-requests` | self | `{tenancy_name, reason}` | `201 {request}`; `409 request_pending`; `429 too_many_requests` |
 | `DELETE /users/{id}/tenancy-requests/{request_id}` | self | — | `204` (withdrawn); `404` unless pending and theirs |
-| `GET /users/{id}/tenancy-invitations` | self | — | `200` pending ones: tenancy display name, inviter name, dataset name, date, dataset count |
+| `GET /users/{id}/tenancy-invitations` | self | — | `200` pending ones: tenancy display name, inviter name, date, dataset count |
 | `POST /users/{id}/tenancy-invitations/{invitation_id}/accept` | self | — | `200 {tenancy}`; `404 invitation_not_found` unless pending and theirs |
 | `POST /users/{id}/tenancy-invitations/{invitation_id}/decline` | self | — | `204`; same `404` |
 
 `tenancy_name` is 1–128 characters and `reason` 1–1000, both trimmed. At most
 three requests per user in 24 hours, withdrawn ones included.
 
-#### Dataset side (share dialog)
+#### Workspace (Members page)
+
+The tenancy path travels in the URL with the `{path:path}` converter, as the
+admin routes do.
 
 | Verb and path | Auth | Body / query | Response |
 |---|---|---|---|
-| `GET /datasets/{id}/share/lookup?value=` | dataset | exact email or ORCID | `200 {user: {id, name, email}, tenancy_member, invitation_pending, can_invite}`; `404 no_account` |
-| `POST /datasets/{id}/tenancy-invitations` | dataset | `{user_id}` | `201 {invitation}` |
-| `DELETE /datasets/{id}/tenancy-invitations/{invitation_id}` | dataset (new `datasets_write` DELETE row, see *Casbin*) | — | `204` (withdrawn) |
+| `GET /users/{id}/tenancies/{path}/members` | self + member | `limit`, `offset` | `200` a page of members: id, name, ORCID iD, never the email |
+| `GET /users/{id}/tenancies/{path}/invitations` | self + member | — | `200` pending invitations: invitee and inviter (id, name), date, `can_withdraw` |
+| `POST /users/{id}/tenancies/{path}/invitations` | self + member | `{user_id}` | `201 {invitation}` |
+| `DELETE /users/{id}/tenancies/{path}/invitations/{invitation_id}` | self + member, inviter only | — | `204` (withdrawn) |
+| `GET /users/{id}/tenancies/{path}/lookup?value=` | self + member | exact email or ORCID | `200 {user: {id, name, email}, tenancy_member, invitation_pending, can_invite}`; `404 no_account` |
 
-`GET /datasets/{id}/share` gains `tenancy_invitations` (pending ones created
-from this dataset, with invitee and inviter) and `can_invite_to_tenancy`.
+**Who reaches it:** a member of `{path}`, or an admin, whose behaviour does not
+change. Anyone else gets `404 tenancy_not_found`, so a non-member cannot probe
+which tenancies exist. The tenancy must then be open to members: public answers
+`409 public_tenancy_locked` on every route (everyone is in it, and it has no
+Members page), staging `409 legacy_tenancy_read_only` and a disabled tenancy
+`409 tenancy_disabled`.
 
-**Who may invite:** the dataset's owner or a user with `write` permission on it
-(RFC 003), who is also a member of the dataset's tenancy. Tenancy members who
-can edit only through *members can edit* are not editors here. Otherwise
-`403 forbidden`. The tenancy must be enabled, production and not public. The
-invitee must be enabled and not already a member (`409 already_member`), with
-no pending invitation to it (`409 invitation_pending`). Under an active
-embargo nobody may invite (`403 forbidden`, and the lookup's `can_invite` is
-`false`); pending invitations stay listed and can still be withdrawn.
+**Who may invite:** any member. The invitee must be enabled and not already a
+member (`409 already_member`), with no pending invitation to it
+(`409 invitation_pending`). Embargoes play no part: they concern a dataset, and
+inviting no longer starts from one.
 
-**Who may withdraw:** the inviter, through the dataset route; anyone else gets
-`403`. Admins withdraw through `/admin`.
+**Who may withdraw:** the inviter, through the workspace route; another member
+gets `403 forbidden`. Admins withdraw any through `/admin`.
+
+**What members see:** names and ORCID iDs. Emails stay with the admins, in
+`GET /admin/tenancies/{path}/members`.
 
 The lookup resolves only an exact email or ORCID, as RFC 003's grant already
-does, so it reveals nothing the grant did not. It is open to the same callers
-as the grant. A lookup by ORCID iD returns `email: null`, and every lookup is
-logged.
+does, so it reveals nothing the grant did not. A lookup by ORCID iD returns
+`email: null`, and every lookup is logged with the caller, the tenancy, how it
+looked up and whether it matched, never with the value.
+
+**The share dialog is RFC 003 only.** `GET /datasets/{id}/share` keeps RFC
+003's shape, plus the `tenancy` row's `is_default`, `is_legacy` and
+`datasets`; it lists no tenancy invitation and offers none.
 
 #### Admin
 
@@ -436,20 +451,19 @@ with public always added, and ignores `roles`.
 
 ### Casbin
 
-Three new `p` rows, for `datasets_write`, `DELETE`, `allow`, as the migration
+Two new `p` rows, for `datasets_write`, `DELETE`, `allow`, as the migration
 inserts them:
 
 - `/api/v1/datasets/[0-9a-fA-F-]{36}/share/(permissions|invitations)/[0-9a-fA-F-]{36}$`
-- `/api/v1/datasets/[0-9a-fA-F-]{36}/tenancy-invitations/[0-9a-fA-F-]{36}$`
 - `/api/v1/datasets/[0-9a-fA-F-]{36}/anonymous-links/[0-9a-fA-F-]{36}$`
 
 Casbin's `regexMatch` is `re.match`, anchored only at the start, so
 the `$` keeps a row from matching any longer path under the same prefix. Without them, an owner whose only role is `datasets_write`
-— every account after this RFC — gets `401` from Casbin withdrawing an
-invitation, revoking a share or revoking an anonymous link, before the service ever checks who the
-inviter or owner is. The admin routes need no new rows (`admin` already holds
-`/*`), and the rest of the new dataset routes fall under the existing
-`/api/v1/datasets` patterns. A
+— every account after this RFC — gets `401` from Casbin revoking a share or
+revoking an anonymous link, before the service ever checks who the owner is.
+The admin routes need no new rows (`admin` already holds `/*`), and the
+workspace routes need none either: they are self routes, authorized by
+`authorize_self` and the service. A
 `deny` row was considered for the retired membership routes and rejected: the
 policy effect is `allow && !deny` across every role a subject holds, so a deny
 on `users_write` would also block an admin who happens to hold it.
@@ -467,7 +481,7 @@ Bodies are `{"detail": "<code>"}` like the rest of the API.
 | Status | Codes |
 |---|---|
 | 400 | `invalid_request`, `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid`, `public_members_cannot_edit` (on `PUT /datasets/{id}/members-access`) |
-| 403 | `forbidden` (not owner/editor, not a member of the tenancy, not the inviter), `not_a_member_of_tenancy` (`POST /datasets` for a non-member; admins unchanged) |
+| 403 | `forbidden` (not owner or editor of the dataset, not the inviter), `not_a_member_of_tenancy` (`POST /datasets` for a non-member; admins unchanged) |
 | 404 | `request_not_found`, `invitation_not_found`, `tenancy_not_found`, `no_account` |
 | 409 | `request_pending`, `request_not_pending`, `already_member`, `invitation_pending`, `tenancy_exists`, `display_name_taken`, `requester_email_unverified`, `public_tenancy_locked`, `legacy_tenancy_read_only`, `tenancy_disabled` |
 | 429 | `too_many_requests` |
@@ -486,8 +500,8 @@ list sends nothing. Accounts with a placeholder address are skipped as today.
 | `tenancy_request_received` | admins | a request is created | Subject "Tenancy request from {name}". "{name} asked for access to a tenancy." Details: Name, Email (with "confirmed" / "not confirmed"), Tenancy asked for, Why, Requested. CTA "Review request" → `/app/admin/requests?request={id}`. Reason line: on the list of administrators. |
 | `tenancy_access_granted` | the user | a request is approved, or an admin adds the user | Subject "You now have access to {tenancy}". "{admin} gave you access to {tenancy} on DataMap." Details: Tenancy (display name and path), Datasets (count). "Your datasets in Public stay where they are." CTA "Open DataMap" → `/app/tenancy`. |
 | `tenancy_request_declined` | the user | a request is declined | Subject "Your request for {requested name}". "An administrator could not give you access to {requested name}." The admin's message, if any, quoted. "You can still work in Public and can send another request." CTA "Open DataMap". |
-| `tenancy_invitation` | the invitee | an invitation is created | Subject "{inviter} invited you to {tenancy}". "{inviter} invited you to join {tenancy} on DataMap, from the dataset “{dataset}”." "Sign in to accept or decline. This email cannot accept for you." CTA "Open DataMap" → `/app/home`. |
-| `tenancy_invitation_notice` | admins | an invitation is created | Subject "{inviter} invited {invitee} to {tenancy}". Details: Inviter, Invitee (name, email), Tenancy, Dataset. "No approval is needed. You can withdraw it, or remove {invitee} later, from Admin › Tenancies." CTA "Open tenancy" → `/app/admin/tenancies?tenancy={path}`. |
+| `tenancy_invitation` | the invitee | an invitation is created | Subject "{inviter} invited you to {tenancy}". "{inviter} invited you to join {tenancy} on DataMap." "Sign in to accept or decline. This email cannot accept for you." CTA "Open DataMap" → `/app/home`. |
+| `tenancy_invitation_notice` | admins | an invitation is created | Subject "{inviter} invited {invitee} to {tenancy}". Details: Inviter, Invitee (name, email), Tenancy. "No approval is needed. You can withdraw it, or remove {invitee} later, from Admin › Tenancies." CTA "Open tenancy" → `/app/admin/tenancies?tenancy={path}`. |
 
 The CTA URLs are built from `PUBLIC_BASE_URL`. The template's `reason` block
 explains why the recipient got it, as every existing template does.
@@ -547,29 +561,29 @@ reads "You already have a request waiting. Withdraw it to send another."
 
 A panel at the top of `/app/home` (the design's 1j), one card per pending
 invitation: `tenancy` icon, "{inviter} invited you to {tenancy}", and
-"{n} datasets · from “{dataset}” · {date}"; **Decline** / **Accept**. The
+"{n} datasets · {date}"; **Decline** / **Accept**. The
 design's "As Reader" is dropped (decision 7). Below the invitations, while a
 request is pending: "Your request for {name} is waiting for an administrator ·
 Withdraw".
 
+#### Members page
+
+A **Members** page for the selected tenancy, reached from the sidebar, with no
+entry for public (everyone is in it) or a staging tenancy. It lists the members by name, with their
+ORCID iD when they have one, 50 at a time; emails are not shown. Below them,
+the pending invitations: "{invitee} · invited by {inviter} {date} · not
+accepted yet", dashed, with **Withdraw** for the inviter. **+ Invite** takes an
+exact email or ORCID iD, looks it up (debounced) and shows the account found:
+name, the email when it was typed, and "Member of the tenancy · sees its {n}
+datasets once they accept · administrators are notified". A member, or someone
+already invited, cannot be invited again, and the card says so. Public and
+the staging tenancies have no Members page: the routes answer
+`409 public_tenancy_locked` and `409 legacy_tenancy_read_only`.
+
 #### Share dialog
 
-When the dataset has a production tenancy other than public and
-`can_invite_to_tenancy` is true, a typed value with the shape of an email or
-ORCID is looked up (`/share/lookup`, debounced). If it is an account outside the
-tenancy, the suggestion card of the design's 1j appears: avatar, name, "{email}
-· not a member of {tenancy}", and two options:
-
-- **Share this dataset only** (default) — "Can read · as today", the level
-  chip's value; this is RFC 003's grant, unchanged.
-- **Invite to {tenancy}** — "Member of the tenancy · sees its {n} datasets once
-  they accept · administrators are notified".
-
-Pending tenancy invitations appear in *Who has access* with the dashed icon,
-"Invited to {tenancy} {date} · not accepted yet", and **Withdraw** for the
-inviter. The footer reads "Owners and editors can invite to the tenancy" when
-inviting is possible. The design's "Contributor is offered only to owners" is
-not built: there is no role to offer.
+Unchanged from RFC 003, apart from the public rules above: it shares one
+dataset. Bringing someone into the tenancy happens on the Members page.
 
 #### Admin area
 
@@ -630,8 +644,8 @@ the suggestion's side.
 
 **Decline dialog (1e, 440 px).** "Decline request?" / "{requester} · join
 {tenancy}" or "· new tenancy {name}". **Message to {first name}** (optional),
-placeholder "Ask a member of the tenancy to invite you from a dataset's Share
-dialog". Bullet "— Stays in public · can request again". **Cancel** /
+placeholder "Ask a member of the tenancy to invite you from its Members
+page". Bullet "— Stays in public · can request again". **Cancel** /
 **Decline** (red).
 
 **Tenancies (1d).** "Tenancies" / "{n} tenancies · root `datamap` · everyone is
@@ -660,8 +674,7 @@ pending invitations below, dashed, with **Withdraw**; "Show {n} more" pages by
 | `pages/api/tenancies/index.ts` | `GET /users/{uid}/tenancies` |
 | `pages/api/tenancy-requests/index.ts`, `[requestId].ts` | the user's requests: list, create, withdraw |
 | `pages/api/tenancy-invitations/index.ts`, `[invitationId]/accept.ts`, `[invitationId]/decline.ts` | the user's invitations |
-| `pages/api/datasets/[datasetId]/share/lookup.ts` | `/share/lookup` |
-| `pages/api/datasets/[datasetId]/tenancy-invitations/index.ts`, `[invitationId].ts` | invite, withdraw |
+| `pages/api/workspace/members.ts`, `lookup.ts`, `invitations/index.ts`, `invitations/[invitationId].ts` | the selected tenancy's members, lookup, invitations: list, invite, withdraw |
 | `pages/api/admin/tenancy-requests/...` | `counts`, list, detail, `approve`, `decline` |
 | `pages/api/admin/tenancies/...` | list, create, members, add, remove, removal impact |
 | `pages/api/admin/tenancy-invitations/[invitationId].ts` | withdraw |
@@ -677,11 +690,12 @@ The user routes take the user from the session, never from the request, and use
 | Threat | Defence |
 |---|---|
 | A non-admin approving, adding or removing | admin routes pass Casbin only with `admin`; the BFF claim is a convenience, not the check; the old `/users/{id}/tenancies` routes are gone |
-| Joining a tenancy by inviting oneself | invitations need owner or `write` on a dataset of that tenancy *and* membership of it; the invitee must be someone else's account, accepted only by them |
-| An outside collaborator opening a tenancy | a `write` collaborator who is not a member cannot invite |
+| Joining a tenancy by inviting oneself | only a member invites; the invitee must be an account that is not a member, and only they accept |
+| A non-member probing tenancies or their members | the workspace routes answer `404 tenancy_not_found` to anyone not in the tenancy, and members see names and ORCID iDs, never emails |
+| An outside collaborator opening a tenancy | a `write` share on a dataset gives no say over its tenancy: only members invite |
 | Accepting for someone else | accept and decline are self-only routes; the email has no token |
 | Enumerating tenancy names | a user sees only their own tenancies, their own requests' names and the tenancy of a dataset they can already open; the request form never lists tenancies, and the suggestion is computed for admins only |
-| Enumerating accounts | share suggestions are off in public; the lookup takes only an exact email or ORCID, as RFC 003's grant does; global user search is admin-only |
+| Enumerating accounts | share suggestions are off in public; the lookup takes only an exact email or ORCID, as RFC 003's grant does, is closed in public and is logged; global user search is admin-only |
 | Request spam to admins | one pending request per user, three per day |
 | Removing someone's last workspace | public cannot be removed |
 | Stale membership in a session | the gatekeeper checks membership in the database on every dataset call |
@@ -738,18 +752,20 @@ member-editable, and editing someone else's dataset takes the owner's explicit
   right after;
 - the queue's counts, filters, search by name, email and ORCID, and Join/New
   from the suggestion;
-- invitations: owner and `write` collaborator can invite; a reader, a
-  *members can edit* member and a non-member collaborator get `403`; public and
-  staging refused; invitee email and admin notice; accept adds membership and
-  is self-only; decline; withdraw by inviter, `403` for another editor, admin
-  withdraw;
+- invitations: a member invites; a non-member gets `404` on every workspace
+  route; public `409` on every one, staging and a disabled tenancy refused;
+  `already_member`, `invitation_pending`, `no_account`; invitee email without
+  token or dataset, and admin notice; accept adds the membership once and is
+  self-only; decline; withdraw by the inviter, `403` for another member, admin
+  withdraw; the members list has no emails; another user's id gets `401`; the
+  share state carries no tenancy invitation;
 - admin tenancies: list counts, legacy group, create, add with email, remove
   with removal impact, `public_tenancy_locked` everywhere, revoked invitation
   on removal; a removed member's next dataset call answers `401`;
 - a `users_write` account gets `401` on every `/admin` route; the retired
   `/users/{id}/tenancies` routes answer `404`/`405`;
-- share candidates return `[]` for a dataset in public; `/share/lookup` for an
-  exact email, an ORCID, and `no_account`;
+- share candidates return `[]` for a dataset in public; the workspace lookup
+  for an exact email, an ORCID iD (`email: null`), and `no_account`;
 - every `tenancy_events` row the flows above should write.
 
 **Unit (gatekeeper):** `allows_member_edits` false for public whatever the column, namespace validation, request-to-tenancy matching,
@@ -766,7 +782,7 @@ unconfirmed email; the admin sidebar entry and badge.
 | PR | Repository | Content |
 |---|---|---|
 | A | gatekeeper | Migration, default tenancy and `datasets_write` at creation, `members_can_edit` default `false` and always `false` in public, `new_account_pending` retired, user / dataset / admin routes, emails, events, public lock, share-candidate change, tests |
-| B | webapp | `admin` claim, members-access toggle hidden for public datasets, new-dataset notice, selector rules, `AccessPending` rewrite, request form, profile and avatar-menu entries, home invitation panel, share-dialog invitation, `update()` refresh |
+| B | webapp | `admin` claim, members-access toggle hidden for public datasets, new-dataset notice, selector rules, `AccessPending` rewrite, request form, profile and avatar-menu entries, home invitation panel, workspace Members page with invitations, `update()` refresh |
 | C | webapp | Admin shell, Requests and Tenancies tabs, empty Users and Activity |
 
 A ships first and is useful alone: every account lands in public and admins get
@@ -804,6 +820,15 @@ Simpler to decide, but it shows every tenancy name to every account, and the
 people asking often do not know what the group's tenancy is called. Free text
 read by an admin costs the admin one click.
 
+### Inviting from a dataset's share dialog
+
+The first draft of this RFC put **Invite to {tenancy}** next to RFC 003's grant
+in the share dialog, for the dataset's owner and editors. A dataset is an item
+inside a tenancy, not a way into it: the dialog mixed two kinds of access,
+tied who may invite to a role on one dataset, and needed special cases for
+embargoed datasets, whose tenancy is hidden. The Members page puts the
+decision with the members, where the tenancy is the subject.
+
 ### Invitation links with a token
 
 RFC 003 uses tokens because its invitees may not have an account. Here the
@@ -819,7 +844,7 @@ Admins hear about what needs a decision — requests and invitations — instead
 
 Spreads the decision to the people who know the requester, but needs tenancy
 administrators, which decision 7 rules out. Members bring people in through
-invitations instead.
+invitations from the Members page instead.
 
 ## Out of scope
 
