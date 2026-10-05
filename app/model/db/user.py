@@ -4,6 +4,7 @@ from sqlalchemy import Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.model.db.tenancy import Tenancy
 from sqlalchemy import Column, String, Boolean, DateTime, Table, ForeignKey, Integer
 
 user_provider_association = Table(
@@ -52,7 +53,7 @@ class User(Base):
         backref="users",
     )
     tenancies = relationship(
-        "Tenancy", lazy="subquery", secondary=user_tenancy_association, backref="users"
+        Tenancy, lazy="subquery", secondary=user_tenancy_association, backref="users"
     )
 
     __table_args__ = (Index("idx_users_email", email, unique=True),)
