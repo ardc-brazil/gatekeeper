@@ -12,7 +12,9 @@ from app.repository.user import UserRepository
 from app.service.email import EmailService
 from app.service.email_template import EmailTemplate, EmailTemplateRenderer
 from app.service.dataset_access_audit import DatasetAccessAudit
+from app.model.tenancy import summary_of
 from app.service.notification import EmbargoNotificationService, due_offset
+from app.service.tenancy_membership import TenancyMembershipService
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
 OFFSETS = (15, 10, 5, 1)
@@ -53,6 +55,10 @@ class TestQueueDue(unittest.TestCase):
         self.links.count_active.return_value = 2
         self.audit = Mock(spec=DatasetAccessAudit)
         self.email = Mock(spec=EmailService)
+        self.membership_service = Mock(spec=TenancyMembershipService)
+        self.membership_service.summary.side_effect = lambda path: summary_of(
+            path, "Data Amazon Lab"
+        )
         self.email.enqueue.return_value = uuid4()
         self.owner = SimpleNamespace(
             id=uuid4(), name="Ana Lima", email="ana@usp.br", is_enabled=True
@@ -89,6 +95,7 @@ class TestQueueDue(unittest.TestCase):
             anonymous_link_repository=self.links,
             audit=self.audit,
             email_service=self.email,
+            membership_service=self.membership_service,
             public_base_url="https://datamap.pcs.usp.br",
         )
 
@@ -130,7 +137,10 @@ class TestQueueDue(unittest.TestCase):
         self.assertTrue(owner["others_notified"])
         self.assertEqual(owner["people_with_access"], ["You", "Bruno"])
         self.assertEqual(owner["anonymous_link_count"], 2)
-        self.assertEqual(owner["tenancy_name"], "Data Amazon")
+        self.assertEqual(owner["tenancy_name"], "Data Amazon Lab")
+        self.membership_service.summary.assert_called_with(
+            "datamap/production/data-amazon"
+        )
         self.assertEqual(owner["embargo_until_date"], "October 5, 2026")
         self.assertEqual(owner["embargo_until_short"], "October 5")
         self.assertEqual(reader["owner_name"], "Ana Lima")

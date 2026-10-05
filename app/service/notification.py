@@ -14,6 +14,7 @@ from app.service.dataset_access import allows_member_edits
 from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.email import EmailService
 from app.service.email_format import long_date, short_date, tenancy_display_name
+from app.service.tenancy_membership import TenancyMembershipService
 
 MANUAL_DOI_NOTE = "manual DOI"
 
@@ -52,12 +53,14 @@ class EmbargoNotificationService:
         anonymous_link_repository: DatasetAnonymousLinkRepository,
         audit: DatasetAccessAudit,
         email_service: EmailService,
+        membership_service: TenancyMembershipService,
         public_base_url: str,
     ) -> None:
         self._repository = notification_repository
         self._permissions = permission_repository
         self._users = user_repository
         self._links = anonymous_link_repository
+        self._membership_service = membership_service
         self._audit = audit
         self._email = email_service
         self._base_url = public_base_url.rstrip("/")
@@ -135,7 +138,11 @@ class EmbargoNotificationService:
         until = dataset.embargo_until.isoformat()
         base = {
             "dataset_name": dataset.name,
-            "tenancy_name": tenancy_display_name(dataset.tenancy),
+            "tenancy_name": self._membership_service.summary(
+                dataset.tenancy
+            ).display_name
+            if dataset.tenancy
+            else tenancy_display_name(None),
             "members_can_edit": allows_member_edits(dataset),
             "owner_name": owner_name,
             "owner_email": owner.email if owner is not None and owner_active else None,

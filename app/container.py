@@ -479,6 +479,7 @@ class Container(containers.DeclarativeContainer):
         anonymous_link_repository=dataset_anonymous_link_repository,
         audit=dataset_access_audit,
         email_service=email_service,
+        membership_service=tenancy_membership_service,
         public_base_url=config.PUBLIC_BASE_URL,
     )
 
