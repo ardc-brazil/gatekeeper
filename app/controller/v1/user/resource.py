@@ -35,7 +35,11 @@ class UserCreateRequest(BaseModel):
     name: str = Field(..., description="User name")
     email: str = Field(..., description="User email")
     providers: list[UserProvider] = Field([], description="User providers")
-    roles: list[str] = Field([], description="User roles")
+    roles: list[str] = Field(
+        [],
+        description="Ignored: a new account gets datasets_write; "
+        "change roles with PUT /users/{id}/roles",
+    )
 
 
 class UserCreateResponse(BaseModel):

@@ -98,9 +98,7 @@ class UserService:
         created = self._repository.upsert(user=dbUser)
         user_id = created.id
 
-        self._grant_roles(
-            user_id, list(dict.fromkeys([*(user.roles or []), DEFAULT_ROLE]))
-        )
+        self._grant_roles(user_id, [DEFAULT_ROLE])
         self._record_memberships(user_id, tenancies)
         return user_id
 

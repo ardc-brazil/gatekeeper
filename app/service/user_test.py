@@ -129,9 +129,6 @@ class TestUserService(unittest.TestCase):
         )
 
     def test_create_success(self):
-        # Callers never send an id: UserCreateRequest carries only name, email,
-        # roles and providers. The id exists only after the user is persisted,
-        # so the roles must be bound to the persisted id, not to the input one.
         persisted_id = uuid4()
         user = User(
             name="Test User",
@@ -154,11 +151,8 @@ class TestUserService(unittest.TestCase):
 
         self.assertEqual(created_id, persisted_id)
         self.user_repository.upsert.assert_called_once()
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(
-            str(persisted_id), "role1"
-        )
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(
-            str(persisted_id), "role2"
+        self.casbin_enforcer.add_grouping_policy.assert_called_once_with(
+            str(persisted_id), "datasets_write"
         )
 
     def test_create_persists_the_tenancies_it_was_given(self):
@@ -354,16 +348,17 @@ class TestDefaultAccess(unittest.TestCase):
             str(self.user_id), "datasets_write"
         )
 
-    def test_datasets_write_is_added_to_the_roles_given_once(self):
-        self.service.create(self.account(roles=["admin", "datasets_write"]))
+    def test_the_roles_given_are_ignored(self):
+        for roles in (["admin"], ["admin", "datasets_write"], ["datasets_read"]):
+            with self.subTest(roles=roles):
+                self.casbin_enforcer.add_grouping_policy.reset_mock()
 
-        self.assertEqual(
-            self.casbin_enforcer.add_grouping_policy.call_args_list,
-            [
-                call(str(self.user_id), "admin"),
-                call(str(self.user_id), "datasets_write"),
-            ],
-        )
+                self.service.create(self.account(roles=roles))
+
+                self.assertEqual(
+                    self.casbin_enforcer.add_grouping_policy.call_args_list,
+                    [call(str(self.user_id), "datasets_write")],
+                )
 
     def test_every_membership_is_recorded_with_no_actor(self):
         self.service.create(self.account(tenancies=["datamap/production/data-amazon"]))
@@ -384,38 +379,17 @@ class TestDefaultAccess(unittest.TestCase):
             ],
         )
 
-    def test_datasets_write_is_granted_on_top_of_datasets_read(self):
-        self.service.create(self.account(roles=["datasets_read"]))
-
-        self.assertEqual(
-            self.casbin_enforcer.add_grouping_policy.call_args_list,
-            [
-                call(str(self.user_id), "datasets_read"),
-                call(str(self.user_id), "datasets_write"),
-            ],
-        )
-
     def test_a_failed_role_grant_does_not_undo_the_account(self):
-        self.casbin_enforcer.add_grouping_policy.side_effect = [
-            RuntimeError("policy store gone"),
-            True,
-        ]
+        self.casbin_enforcer.add_grouping_policy.side_effect = RuntimeError(
+            "policy store gone"
+        )
 
         with self.assertLogs("service:UserService", level="ERROR") as logs:
-            user_id = self.service.create(
-                self.account(roles=["admin"], tenancies=[DEFAULT_TENANCY])
-            )
+            user_id = self.service.create(self.account(tenancies=[DEFAULT_TENANCY]))
 
         self.assertEqual(user_id, self.user_id)
-        self.assertEqual(logs.records[0].role, "admin")
+        self.assertEqual(logs.records[0].role, "datasets_write")
         self.assertEqual(logs.records[0].user_id, str(self.user_id))
-        self.assertEqual(
-            self.casbin_enforcer.add_grouping_policy.call_args_list,
-            [
-                call(str(self.user_id), "admin"),
-                call(str(self.user_id), "datasets_write"),
-            ],
-        )
         self.events.append.assert_called_once_with(
             tenancy=DEFAULT_TENANCY,
             event_type=TenancyEventType.MEMBER_ADDED,

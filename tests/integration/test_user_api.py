@@ -233,6 +233,32 @@ class TestUserCRUDOperations:
         assert "id" in data
         assert isinstance(data["id"], str)
 
+    def test_create_user_ignores_the_roles_sent(self, http_client, valid_headers):
+        response = http_client.post(
+            "/users/",
+            json={
+                "name": "Would Be Admin",
+                "email": f"wouldbeadmin_{str(uuid.uuid4())[:8]}@example.com",
+                "providers": [],
+                "roles": ["admin"],
+            },
+            headers=valid_headers,
+        )
+        assert_status_code(response, 200)
+        user_id = response.json()["id"]
+
+        fetched = http_client.get(f"/users/{user_id}", headers=valid_headers)
+
+        assert_status_code(fetched, 200)
+        assert fetched.json()["roles"] == ["datasets_write"]
+        assert (
+            execute(
+                "SELECT string_agg(v1, ',') FROM casbin_rule "
+                f"WHERE ptype = 'g' AND v0 = '{user_id}'"
+            )
+            == "datasets_write"
+        )
+
     def test_create_user_invalid_data_422(self, http_client, valid_headers):
         """Test creating user with invalid data returns 422."""
         # Arrange
@@ -505,13 +531,17 @@ class TestUserRoleOperations:
             "name": "User For Role Removal",
             "email": f"removeroles_{str(uuid.uuid4())[:8]}@example.com",
             "providers": [],
-            "roles": ["admin", "user"],
+            "roles": [],
         }
         create_response = http_client.post(
             "/users/", json=create_data, headers=valid_headers
         )
         assert_status_code(create_response, 200)
         user_id = create_response.json()["id"]
+        granted = http_client.put(
+            f"/users/{user_id}/roles", json=["admin", "user"], headers=valid_headers
+        )
+        assert_status_code(granted, 200)
 
         # Act
         roles_to_remove = ["user"]

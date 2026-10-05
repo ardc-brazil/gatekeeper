@@ -91,7 +91,6 @@ def create(
             name=payload.name,
             email=payload.email,
             providers=payload.providers,
-            roles=payload.roles,
         )
     )
 
