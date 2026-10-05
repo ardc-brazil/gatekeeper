@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Callable
 from uuid import UUID
@@ -7,6 +8,7 @@ from app.exception.conflict import ConflictException
 from app.exception.forbidden import ForbiddenException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
+from app.logging_config import fields
 from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
 from app.model.embargo import embargo_active
 from app.model.tenancy import (
@@ -59,15 +61,34 @@ class TenancyInvitationService:
         self._users = users
         self._notifier = notifier
         self._clock = clock
+        self._logger = logging.getLogger("service:TenancyInvitationService")
 
     def lookup(self, dataset_id: UUID, user_id: UUID, value: str) -> ShareLookupView:
         dataset, level = self._authorized(dataset_id, user_id)
-        target = self._resolve(value)
+        text = (value or "").strip()
+        by_email = "@" in text
+        target = None
+        try:
+            target = self._resolve(text, by_email)
+        finally:
+            self._logger.info(
+                "share lookup",
+                extra=fields(
+                    user_id=str(user_id),
+                    dataset_id=str(dataset_id),
+                    lookup_by="email" if by_email else "orcid",
+                    matched=target is not None,
+                ),
+            )
         tenancy = dataset.tenancy
         member = bool(tenancy) and self._memberships.is_member(target.id, tenancy)
         pending = bool(tenancy) and self._invitations.has_pending(tenancy, target.id)
         return ShareLookupView(
-            user=UserBrief(id=target.id, name=target.name, email=target.email),
+            user=UserBrief(
+                id=target.id,
+                name=target.name,
+                email=target.email if by_email else None,
+            ),
             tenancy_member=member,
             invitation_pending=pending,
             can_invite=not member
@@ -209,11 +230,10 @@ class TenancyInvitationService:
         )
         return dataset, level
 
-    def _resolve(self, value: str):
-        text = (value or "").strip()
+    def _resolve(self, text: str, by_email: bool):
         try:
-            email = normalise_email(text) if "@" in text else None
-            orcid = None if email else normalise_orcid(text)
+            email = normalise_email(text) if by_email else None
+            orcid = None if by_email else normalise_orcid(text)
         except BadRequestException:
             raise IllegalStateException("invalid_request")
         user = find_account(self._users, email, orcid)

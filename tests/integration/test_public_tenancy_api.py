@@ -339,7 +339,12 @@ class TestShareCandidatesAndLookup:
             "invitation_pending": False,
             "can_invite": True,
         }
-        assert by_orcid.json()["user"]["id"] == holder["id"]
+        assert_status_code(by_orcid, 200)
+        assert by_orcid.json()["user"] == {
+            "id": holder["id"],
+            "name": "Bruna Costa",
+            "email": None,
+        }
         assert_status_code(unknown, 404)
         assert unknown.json() == {"detail": "no_account"}
         assert_status_code(malformed, 400)

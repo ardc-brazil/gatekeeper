@@ -251,6 +251,42 @@ class TestLookup(InvitationServiceTestCase):
             provider_name="orcid", reference="0000-0002-1825-0097"
         )
 
+    def test_a_lookup_by_orcid_does_not_reveal_the_email(self):
+        self.users.fetch_by_provider.return_value = self.invitee
+        self.members.add((self.invitee.id, ATTO))
+
+        found = self.service.lookup(self.dataset.id, CALLER, "0000-0002-1825-0097")
+
+        self.assertEqual(
+            (found.user.id, found.user.name, found.user.email),
+            (self.invitee.id, "Bruna Costa", None),
+        )
+        self.assertTrue(found.tenancy_member)
+        self.assertFalse(found.can_invite)
+
+    def test_every_lookup_is_logged_without_the_value(self):
+        self.users.fetch_by_provider.return_value = self.invitee
+        self.users.fetch_by_email_insensitive.return_value = None
+        orcid, email = "0000-0002-1825-0097", "ghost@usp.br"
+
+        with self.assertLogs("service:TenancyInvitationService", "INFO") as logs:
+            self.service.lookup(self.dataset.id, CALLER, orcid)
+            with self.assertRaises(NotFoundException):
+                self.service.lookup(self.dataset.id, CALLER, email)
+
+        found, missing = logs.records
+        for record, lookup_by, matched in (
+            (found, "orcid", True),
+            (missing, "email", False),
+        ):
+            self.assertEqual(
+                (record.user_id, record.dataset_id, record.lookup_by, record.matched),
+                (str(CALLER), str(self.dataset.id), lookup_by, matched),
+            )
+            logged = repr(vars(record)) + record.getMessage()
+            self.assertNotIn(orcid, logged)
+            self.assertNotIn(email, logged)
+
     def test_a_member_or_a_pending_invitee_cannot_be_invited_again(self):
         self.users.fetch_by_email_insensitive.return_value = self.invitee
         self.invitations.has_pending.return_value = True
