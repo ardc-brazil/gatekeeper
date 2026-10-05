@@ -5,12 +5,24 @@ import pytest
 
 from tests.integration.utils.database import execute
 
+pytestmark = pytest.mark.destructive_migration
+
 GATEKEEPER_CONTAINER = "datamap_gatekeeper_test_integration"
 PUBLIC = "datamap/production/public"
 DATA_AMAZON = "datamap/production/data-amazon"
+THIS_REVISION = "c3d4e5f6a7b8"
+PREVIOUS_REVISION = "b1c2d3e4f5a6"
+DATASETS_WRITE_DELETE_PATHS = (
+    "/api/v1/datasets/.*/share/.*",
+    "/api/v1/datasets/.*/tenancy-invitations/.*",
+)
+DATASETS_WRITE_DELETE_RULES = (
+    "ptype = 'p' AND v0 = 'datasets_write' AND v2 = 'DELETE' AND v1 IN ("
+    + ", ".join(f"'{path}'" for path in DATASETS_WRITE_DELETE_PATHS)
+    + ")"
+)
 COUNTS = (
-    "SELECT (SELECT count(*) FROM users_tenancies), (SELECT count(*) FROM casbin_rule), "
-    "(SELECT count(*) FROM tenancy_events)"
+    "SELECT (SELECT count(*) FROM users_tenancies), (SELECT count(*) FROM casbin_rule)"
 )
 
 
@@ -22,6 +34,7 @@ def keep_display_names():
         "SELECT name, display_name FROM tenancies WHERE display_name IS NOT NULL"
     )
     yield
+    _alembic("upgrade", "head")
     execute(
         "UPDATE tenancies t SET display_name = b.display_name "
         "FROM migration_test_display_names b WHERE t.name = b.name"
@@ -70,26 +83,35 @@ class TestTheMigration:
         plain = _user("Plain Account")
         reader = _user("Read Only")
         boss = _user("Admin Only")
+        clerk = _user("Users Write Only")
         execute(
             "INSERT INTO casbin_rule (ptype, v0, v1) VALUES "
-            f"('g', '{reader}', 'datasets_read'), ('g', '{boss}', 'admin')"
+            f"('g', '{reader}', 'datasets_read'), ('g', '{boss}', 'admin'), "
+            f"('g', '{clerk}', 'users_write')"
         )
         outside = _dataset(DATA_AMAZON)
         inside = _dataset(PUBLIC)
+        execute(f"DELETE FROM casbin_rule WHERE {DATASETS_WRITE_DELETE_RULES}")
 
-        down = _alembic("downgrade", "-1")
+        down = _alembic("downgrade", PREVIOUS_REVISION)
         up = _alembic("upgrade", "head")
 
-        assert "c3d4e5f6a7b8 -> b1c2d3e4f5a6" in down
-        assert "b1c2d3e4f5a6 -> c3d4e5f6a7b8" in up
-        assert execute("SELECT version_num FROM alembic_version") == "c3d4e5f6a7b8"
+        assert f"{THIS_REVISION} -> {PREVIOUS_REVISION}" in down
+        assert f"{PREVIOUS_REVISION} -> {THIS_REVISION}" in up
+        assert execute("SELECT version_num FROM alembic_version") == THIS_REVISION
+        assert execute(
+            "SELECT v1, v3 FROM casbin_rule "
+            f"WHERE {DATASETS_WRITE_DELETE_RULES} ORDER BY v1"
+        ).splitlines() == [
+            f"{path}|allow" for path in sorted(DATASETS_WRITE_DELETE_PATHS)
+        ]
         assert (
             execute(
                 f"SELECT display_name, is_enabled FROM tenancies WHERE name = '{PUBLIC}'"
             )
             == "Public|t"
         )
-        for user_id in (plain, reader, boss):
+        for user_id in (plain, reader, boss, clerk):
             assert (
                 execute(
                     "SELECT count(*) FROM users_tenancies "
@@ -108,6 +130,7 @@ class TestTheMigration:
         assert _roles(plain) == ["datasets_write"]
         assert _roles(reader) == ["datasets_read"]
         assert _roles(boss) == ["admin"]
+        assert _roles(clerk) == ["datasets_write", "users_write"]
         assert (
             execute(f"SELECT members_can_edit FROM datasets WHERE id = '{outside}'")
             == "t"
@@ -124,12 +147,12 @@ class TestTheMigration:
             == "false"
         )
 
-    def test_running_the_upgrade_twice_changes_nothing(self):
+    def test_a_second_round_trip_adds_no_memberships_or_rules(self):
         before = execute(COUNTS)
 
-        _alembic("downgrade", "-1")
+        _alembic("downgrade", PREVIOUS_REVISION)
+        assert execute("SELECT version_num FROM alembic_version") == PREVIOUS_REVISION
         _alembic("upgrade", "head")
-        after = execute(COUNTS)
 
-        users, rules, _ = before.split("|")
-        assert after.split("|")[:2] == [users, rules]
+        assert execute("SELECT version_num FROM alembic_version") == THIS_REVISION
+        assert execute(COUNTS) == before

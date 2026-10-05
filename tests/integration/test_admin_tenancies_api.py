@@ -104,6 +104,9 @@ class TestOnlyAdmins:
         set_roles(http_client, account["id"], add=("users_write",))
         headers = as_user(account["id"])
 
+        assert_status_code(
+            http_client.get(f"/users/{account['id']}", headers=headers), 200
+        )
         for method, path, body in self.ROUTES:
             response = getattr(http_client, method)(path, json=body, headers=headers)
             assert (
