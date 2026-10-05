@@ -15,7 +15,7 @@ from app.model.db.tenancy import Tenancy, TenancyEvent, TenancyInvitation
 from app.model.db.user import User, user_tenancy_association
 from app.model.tenancy import TenancyEventType, TenancyInvitationStatus, is_default
 from app.repository.tenancy import datasets_in
-from app.repository.tenancy_event import add_event
+from app.repository.tenancy_event import add_event, close_invitation
 from app.repository.user import enabled_members
 
 _member = user_tenancy_association.c
@@ -58,16 +58,12 @@ def join_tenancy(
         .all()
     )
     for invitation in pending:
-        invitation.status = TenancyInvitationStatus.WITHDRAWN
-        invitation.closed_by = actor_id
-        invitation.closed_at = func.now()
-        add_event(
+        close_invitation(
             session,
-            tenancy=tenancy,
-            event_type=TenancyEventType.INVITATION_WITHDRAWN,
-            user_id=user_id,
-            actor_id=actor_id,
-            invitation_id=invitation.id,
+            invitation,
+            TenancyInvitationStatus.WITHDRAWN,
+            actor_id,
+            TenancyEventType.INVITATION_WITHDRAWN,
         )
     return added.id
 

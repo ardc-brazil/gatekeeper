@@ -2,10 +2,11 @@ from contextlib import AbstractContextManager
 from typing import Callable
 from uuid import UUID, uuid4
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.model.db.tenancy import TenancyEvent
-from app.model.tenancy import TenancyEventType
+from app.model.db.tenancy import TenancyEvent, TenancyInvitation
+from app.model.tenancy import TenancyEventType, TenancyInvitationStatus
 
 
 def add_event(
@@ -28,6 +29,26 @@ def add_event(
     )
     session.add(event)
     return event
+
+
+def close_invitation(
+    session: Session,
+    invitation: TenancyInvitation,
+    status: TenancyInvitationStatus,
+    actor_id: UUID,
+    event_type: TenancyEventType,
+) -> None:
+    invitation.status = status
+    invitation.closed_by = actor_id
+    invitation.closed_at = func.now()
+    add_event(
+        session,
+        tenancy=invitation.tenancy,
+        event_type=event_type,
+        user_id=invitation.user_id,
+        actor_id=actor_id,
+        invitation_id=invitation.id,
+    )
 
 
 class TenancyEventRepository:

@@ -13,7 +13,7 @@ from app.model.tenancy import (
     TenancyEventType,
     TenancyInvitationStatus,
 )
-from app.repository import tenancy_membership
+from app.repository import tenancy_event, tenancy_membership
 from app.repository.tenancy_membership import TenancyMembershipRepository, join_tenancy
 
 ATTO = "datamap/production/atto"
@@ -51,20 +51,24 @@ class TestInviters(unittest.TestCase):
 class TestJoinTenancy(unittest.TestCase):
     def setUp(self):
         self.session = MagicMock()
+        self.user_id, self.actor_id, self.request_id = uuid4(), uuid4(), uuid4()
         self.pending = SimpleNamespace(
             id=uuid4(),
+            tenancy=ATTO,
+            user_id=self.user_id,
             status=TenancyInvitationStatus.PENDING,
             closed_by=None,
             closed_at=None,
         )
         query = self.session.query.return_value.filter.return_value
         query.with_for_update.return_value.all.return_value = [self.pending]
-        self.user_id, self.actor_id, self.request_id = uuid4(), uuid4(), uuid4()
 
     def join(self, inserted: bool = True):
         with patch.object(
             tenancy_membership, "insert_membership", return_value=inserted
-        ), patch.object(tenancy_membership, "add_event") as add_event:
+        ), patch.object(tenancy_membership, "add_event") as add_event, patch.object(
+            tenancy_event, "add_event", add_event
+        ):
             add_event.side_effect = lambda session, **kwargs: SimpleNamespace(
                 id=uuid4(), **kwargs
             )

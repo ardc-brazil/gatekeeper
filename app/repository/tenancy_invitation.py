@@ -2,7 +2,6 @@ from contextlib import AbstractContextManager
 from typing import Callable
 from uuid import UUID, uuid4
 
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,7 +10,7 @@ from app.model.db.dataset import Dataset
 from app.model.db.tenancy import TenancyInvitation
 from app.model.tenancy import TenancyEventType, TenancyInvitationStatus
 from app.repository.integrity import violates
-from app.repository.tenancy_event import add_event
+from app.repository.tenancy_event import add_event, close_invitation
 from app.repository.tenancy_membership import insert_membership
 
 PENDING = TenancyInvitationStatus.PENDING
@@ -113,17 +112,7 @@ class TenancyInvitationRepository:
             )
             if invitation is None:
                 return False
-            invitation.status = status
-            invitation.closed_by = closed_by
-            invitation.closed_at = func.now()
-            add_event(
-                session,
-                tenancy=invitation.tenancy,
-                event_type=event_type,
-                user_id=invitation.user_id,
-                actor_id=closed_by,
-                invitation_id=invitation.id,
-            )
+            close_invitation(session, invitation, status, closed_by, event_type)
             session.commit()
             return True
 
@@ -137,16 +126,12 @@ class TenancyInvitationRepository:
             )
             if invitation is None:
                 return False
-            invitation.status = TenancyInvitationStatus.ACCEPTED
-            invitation.closed_by = user_id
-            invitation.closed_at = func.now()
-            add_event(
+            close_invitation(
                 session,
-                tenancy=invitation.tenancy,
-                event_type=TenancyEventType.INVITATION_ACCEPTED,
-                user_id=user_id,
-                actor_id=user_id,
-                invitation_id=invitation.id,
+                invitation,
+                TenancyInvitationStatus.ACCEPTED,
+                user_id,
+                TenancyEventType.INVITATION_ACCEPTED,
             )
             if insert_membership(session, user_id, invitation.tenancy):
                 add_event(
