@@ -81,7 +81,10 @@ Some routes do not even need the user to be an admin:
 - `POST /invitations/accept` (`invitation.py:30-38`) accepts a token as whoever
   `X-User-Id` names.
 - `POST /users` (`user.py:84-98`) is client-only and, on `main` at 1ec58f7,
-  still forwards `roles=payload.roles` (`user.py:95`). RFC 009 PR A drops it.
+  still forwards `roles=payload.roles` (`user.py:95`). RFC 009 PR A
+  (`feat/rfc-009-gatekeeper`, commit 1773ad2) ignores it: every new account
+  gets exactly `datasets_write`, and roles change only through
+  `PUT /users/{id}/roles`.
 
 ### What exists today
 
