@@ -67,8 +67,6 @@ TENANCY_VALIDATION_PREFIXES = (
     "/v1/admin/tenanc",
     "/v1/admin/users",
     "/v1/users/{id}/tenanc",
-    "/v1/datasets/{dataset_id}/tenancy-invitations",
-    "/v1/datasets/{dataset_id}/share/lookup",
 )
 
 

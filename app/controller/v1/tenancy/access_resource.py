@@ -37,11 +37,6 @@ class UserBriefResponse(_FromViews):
     email: str | None = None
 
 
-class DatasetRefResponse(_FromViews):
-    id: UUID
-    name: str
-
-
 class TenancyRequestResponse(_FromViews):
     id: UUID
     requested_name: str
@@ -58,7 +53,6 @@ class TenancyInvitationResponse(_FromViews):
     id: UUID
     tenancy: TenancySummaryResponse
     invited_by: UserRefResponse | None
-    dataset: DatasetRefResponse | None
     datasets: int
     created_at: datetime
 
@@ -67,15 +61,25 @@ class AcceptedInvitationResponse(_FromViews):
     tenancy: TenancySummaryResponse
 
 
-class DatasetTenancyInvitationResponse(_FromViews):
+class WorkspaceMemberResponse(_FromViews):
     id: UUID
-    user: UserBriefResponse
-    invited_by: UserBriefResponse | None
+    name: str
+    orcid: str | None
+
+
+class WorkspaceMemberPage(PageResponse[WorkspaceMemberResponse]):
+    pass
+
+
+class WorkspaceInvitationResponse(_FromViews):
+    id: UUID
+    user: UserRefResponse
+    invited_by: UserRefResponse | None
     created_at: datetime
     can_withdraw: bool
 
 
-class ShareLookupResponse(_FromViews):
+class InviteeLookupResponse(_FromViews):
     user: UserBriefResponse
     tenancy_member: bool
     invitation_pending: bool
@@ -148,7 +152,6 @@ class AdminTenancyInvitationResponse(_FromViews):
     id: UUID
     user: UserBriefResponse
     invited_by: UserRefResponse | None
-    dataset: DatasetRefResponse | None
     created_at: datetime
 
 

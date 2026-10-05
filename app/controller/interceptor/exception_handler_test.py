@@ -138,8 +138,13 @@ class TestQuietValidation(unittest.TestCase):
             ("POST", "/v1/users/{id}/tenancy-requests"),
             ("GET", "/v1/users/{id}/tenancies"),
             ("POST", "/v1/users/{id}/tenancy-invitations/{invitation_id}/accept"),
-            ("GET", "/v1/datasets/{dataset_id}/share/lookup"),
-            ("POST", "/v1/datasets/{dataset_id}/tenancy-invitations"),
+            ("GET", "/v1/users/{id}/tenancies/{path:path}/members"),
+            ("GET", "/v1/users/{id}/tenancies/{path:path}/lookup"),
+            ("POST", "/v1/users/{id}/tenancies/{path:path}/invitations"),
+            (
+                "DELETE",
+                "/v1/users/{id}/tenancies/{path:path}/invitations/{invitation_id}",
+            ),
             ("GET", "/v1/admin/tenancy-requests"),
             ("POST", "/v1/admin/tenancies/{path:path}/members"),
             ("GET", "/v1/admin/users"),
@@ -153,6 +158,7 @@ class TestQuietValidation(unittest.TestCase):
             ("PUT", "/v1/users/{id}/roles"),
             ("GET", "/v1/admin/emails/"),
             ("POST", "/v1/datasets/{dataset_id}/share"),
+            ("GET", "/v1/datasets/{dataset_id}/share/lookup"),
         ):
             with self.subTest(path=path):
                 self.assertFalse(_answers_quietly(self.request(method, path)))

@@ -79,7 +79,6 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.dataset.embargo_status",
             "app.controller.v1.dataset.members_access",
             "app.controller.v1.dataset.share",
-            "app.controller.v1.dataset.tenancy_invitation",
             "app.controller.v1.dataset.anonymous_link",
             "app.controller.v1.invitation.invitation",
             "app.controller.v1.anonymous.anonymous",
@@ -421,12 +420,12 @@ class Container(containers.DeclarativeContainer):
 
     tenancy_invitation_service = providers.Factory(
         TenancyInvitationService,
-        dataset_service=dataset_service,
         invitations=tenancy_invitation_repository,
         memberships=tenancy_membership_repository,
         membership_service=tenancy_membership_service,
         tenancies=tenancy_repository,
         users=user_repository,
+        user_service=user_service,
         notifier=tenancy_notifier,
     )
 
@@ -454,7 +453,6 @@ class Container(containers.DeclarativeContainer):
         public_base_url=config.PUBLIC_BASE_URL,
         tenancy_repository=tenancy_repository,
         membership_service=tenancy_membership_service,
-        tenancy_invitations=tenancy_invitation_service,
     )
 
     anonymous_link_service = providers.Factory(
