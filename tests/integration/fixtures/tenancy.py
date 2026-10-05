@@ -90,6 +90,14 @@ def new_tenancy(display_name: str | None = None, enabled: bool = True) -> str:
     return path
 
 
+def permit(dataset_id: str, user_id: str, level: str) -> None:
+    execute(
+        "INSERT INTO dataset_permissions (dataset_id, user_id, level) "
+        f"VALUES ('{dataset_id}', '{user_id}', '{level}') "
+        "ON CONFLICT (dataset_id, user_id) DO UPDATE SET level = EXCLUDED.level"
+    )
+
+
 def display_name(path: str) -> str:
     return execute(f"SELECT display_name FROM tenancies WHERE name = '{path}'")
 
