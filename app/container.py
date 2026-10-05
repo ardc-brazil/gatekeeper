@@ -20,6 +20,7 @@ from app.repository.doi import DOIRepository
 from app.repository.email import EmailRepository
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
+from app.repository.tenancy_event import TenancyEventRepository
 from app.repository.user import UserRepository
 
 from app.service.account import AccountService
@@ -168,13 +169,17 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
+    tenancy_event_repository = providers.Factory(
+        TenancyEventRepository,
+        session_factory=db.provided.session,
+    )
+
     user_service = providers.Factory(
         UserService,
         repository=user_repository,
         tenancy_repository=tenancy_repository,
         casbin_enforcer=casbin_enforcer,
-        email_service=email_service,
-        admin_emails=config.ADMIN_NOTIFICATION_EMAILS,
+        tenancy_events=tenancy_event_repository,
     )
 
     auth_service = providers.Factory(

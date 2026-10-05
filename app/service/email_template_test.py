@@ -677,20 +677,12 @@ CONTEXTS[EmailTemplate.SIGN_UP_EXISTING_ACCOUNT] = {
     "name": "Ana Souza",
     "link": "https://datamap.example.org/account/reset-password/tok-123",
 }
-CONTEXTS[EmailTemplate.NEW_ACCOUNT_PENDING] = {
-    "name": "Ana Souza",
-    "email": "ana.souza@usp.br",
-    "sign_in_method": "Email and password",
-    "created_at": "October 3, 2026 at 14:05 UTC",
-}
-
 ACCOUNT = frozenset(
     {
         EmailTemplate.SIGN_UP_CODE,
         EmailTemplate.EMAIL_VERIFICATION_CODE,
         EmailTemplate.PASSWORD_RESET,
         EmailTemplate.SIGN_UP_EXISTING_ACCOUNT,
-        EmailTemplate.NEW_ACCOUNT_PENDING,
     }
 )
 
@@ -760,20 +752,6 @@ class TestAccountTemplates(unittest.TestCase):
                 self.assertIn(sentence, email.text)
                 self.assertIn(sentence, email.html)
 
-    def test_the_admin_notification_lists_the_account(self):
-        email = self.render(EmailTemplate.NEW_ACCOUNT_PENDING)
-
-        self.assertEqual(email.subject, "New DataMap account: Ana Souza")
-        for value in (
-            "Ana Souza",
-            "ana.souza@usp.br",
-            "Email and password",
-            "October 3, 2026 at 14:05 UTC",
-        ):
-            with self.subTest(value=value):
-                self.assertIn(value, email.text)
-                self.assertIn(value, email.html)
-
     def test_account_messages_do_not_claim_to_be_about_a_dataset(self):
         for template in ACCOUNT:
             with self.subTest(template=template):
@@ -789,18 +767,6 @@ class TestAccountTemplates(unittest.TestCase):
 
         self.assertNotIn("<b>Ana</b>", email.html)
         self.assertIn("&lt;b&gt;Ana&lt;/b&gt;", email.html)
-
-    def test_the_admin_notification_escapes_a_script_in_the_name(self):
-        email = self.renderer.render(
-            EmailTemplate.NEW_ACCOUNT_PENDING,
-            {
-                **CONTEXTS[EmailTemplate.NEW_ACCOUNT_PENDING],
-                "name": "<script>alert(1)</script>",
-            },
-        )
-
-        self.assertNotIn("<script>", email.html)
-        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", email.html)
 
     def test_a_name_is_escaped_in_the_existing_account_html(self):
         email = self.renderer.render(

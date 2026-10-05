@@ -47,10 +47,6 @@ class UserProviderAddRequest(BaseModel):
     reference: str = Field(..., description="Provider reference")
 
 
-class UserTenanciesRequest(BaseModel):
-    tenancies: list[str] = Field([], description="Tenancies name")
-
-
 class UserEnforceRequest(BaseModel):
     resource: str = Field(..., description="Resource name")
     action: str = Field(..., description="Action name")
