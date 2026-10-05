@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID
 
 from app.logging_config import fields
@@ -22,6 +22,17 @@ def moment(value: datetime) -> str:
 
 def address_hash(address: str) -> str:
     return hash_token(address.lower())[:16]
+
+
+def after_commit(notify: Callable[[], None], notification: str, **log_fields) -> None:
+    try:
+        notify()
+    except Exception:
+        logging.getLogger("service:TenancyNotifier").error(
+            "tenancy notification failed after commit",
+            exc_info=True,
+            extra=fields(notification=notification, **log_fields),
+        )
 
 
 class TenancyNotifier:

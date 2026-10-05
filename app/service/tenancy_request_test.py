@@ -108,6 +108,15 @@ class TestCreate(RequestServiceTestCase):
         self.assertEqual(request.requested_name, "ATTO")
         self.assertIs(requester, self.user)
 
+    def test_a_failed_notice_still_returns_the_committed_request(self):
+        self.notifier.request_received.side_effect = RuntimeError("smtp")
+
+        with self.assertLogs("service:TenancyNotifier", "ERROR"):
+            view = self.service.create(self.user.id, "ATTO", "Fluxes")
+
+        self.assertEqual(view.status, "pending")
+        self.requests.create.assert_called_once()
+
     def test_the_lengths(self):
         self.assertEqual(self.code("   ", "why"), "tenancy_name_invalid")
         self.assertEqual(self.code("x" * 129, "why"), "tenancy_name_invalid")
@@ -431,7 +440,7 @@ class TestApprove(AdminQueueTestCase):
     def test_a_failed_announcement_still_returns_the_committed_approval(self):
         self.membership_service.announce_access.side_effect = RuntimeError("smtp")
 
-        with self.assertLogs("service:TenancyRequestService", "ERROR"):
+        with self.assertLogs("service:TenancyNotifier", "ERROR"):
             view = self.service.approve(self.request.id, self.admin.id, ATTO, None)
 
         self.assertEqual(view.status, "approved")
@@ -489,7 +498,7 @@ class TestDecline(AdminQueueTestCase):
     def test_a_failed_notice_still_returns_the_committed_decline(self):
         self.notifier.request_declined.side_effect = RuntimeError("smtp")
 
-        with self.assertLogs("service:TenancyRequestService", "ERROR"):
+        with self.assertLogs("service:TenancyNotifier", "ERROR"):
             view = self.service.decline(self.request.id, self.admin.id, "No")
 
         self.assertEqual(view.status, "declined")

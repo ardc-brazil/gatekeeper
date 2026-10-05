@@ -32,7 +32,7 @@ from app.service.share_identity import (
     normalise_orcid,
 )
 from app.service.tenancy_membership import TenancyMembershipService
-from app.service.tenancy_notifier import TenancyNotifier
+from app.service.tenancy_notifier import TenancyNotifier, after_commit
 from app.service.user_refs import dataset_ref, user_brief, user_ref
 
 EDITORS = (AccessLevel.OWNER, AccessLevel.WRITE)
@@ -107,16 +107,23 @@ class TenancyInvitationService:
         if self._invitations.has_pending(tenancy, invitee.id):
             raise ConflictException("invitation_pending")
         invitation = self._invitations.create(tenancy, invitee.id, user_id, dataset.id)
-        inviter = self._users.fetch_any_by_id(user_id)
+        after_commit(
+            lambda: self._tell_invited(invitee, user_id, dataset, invitation),
+            "invitation",
+            invitation_id=str(invitation.id),
+        )
+        return self._dataset_view(invitation, user_id)
+
+    def _tell_invited(self, invitee, inviter_id: UUID, dataset, invitation) -> None:
+        inviter = self._users.fetch_any_by_id(inviter_id)
         inviter_name = inviter.name if inviter else "A DataMap user"
-        summary = self._membership_service.summary(tenancy)
+        summary = self._membership_service.summary(invitation.tenancy)
         self._notifier.invitation(
             invitee, inviter_name, summary, dataset.name, invitation.id
         )
         self._notifier.invitation_notice(
             invitee, inviter_name, summary, dataset.name, invitation.id
         )
-        return self._dataset_view(invitation, user_id)
 
     def withdraw(self, dataset_id: UUID, user_id: UUID, invitation_id: UUID) -> None:
         dataset, _ = self._authorized(dataset_id, user_id)

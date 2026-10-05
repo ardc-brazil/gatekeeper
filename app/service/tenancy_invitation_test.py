@@ -218,6 +218,15 @@ class TestInviteRules(InvitationServiceTestCase):
             view.id,
         )
 
+    def test_a_failed_notice_still_returns_the_committed_invitation(self):
+        self.notifier.invitation.side_effect = RuntimeError("smtp")
+
+        with self.assertLogs("service:TenancyNotifier", "ERROR"):
+            view = self.service.invite(self.dataset.id, CALLER, self.invitee.id)
+
+        self.assertEqual(view.user.name, "Bruna Costa")
+        self.invitations.create.assert_called_once()
+
 
 class TestLookup(InvitationServiceTestCase):
     def test_an_exact_email_outside_the_tenancy_can_be_invited(self):

@@ -25,6 +25,7 @@ from app.repository.tenancy_invitation import TenancyInvitationRepository
 from app.repository.tenancy_membership import TenancyMembershipRepository
 from app.repository.user import UserRepository
 from app.service.tenancy_membership import TenancyMembershipService
+from app.service.tenancy_notifier import after_commit
 from app.service.user_refs import dataset_ref, user_brief, user_ref
 
 MAX_PAGE = 100
@@ -127,7 +128,14 @@ class TenancyAdminService:
         event_id = self._memberships.add(path, user_id, admin_id)
         if event_id is None:
             raise ConflictException("already_member")
-        self._membership_service.announce_access(user_id, admin_id, path, event_id)
+        after_commit(
+            lambda: self._membership_service.announce_access(
+                user_id, admin_id, path, event_id
+            ),
+            "access_granted",
+            tenancy=path,
+            user_id=str(user_id),
+        )
         return TenancyMemberView(
             id=user.id,
             name=user.name,

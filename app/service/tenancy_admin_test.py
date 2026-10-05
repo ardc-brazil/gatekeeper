@@ -230,6 +230,17 @@ class TestAddAndRemove(AdminServiceTestCase):
             (view.id, view.since, view.invited_by), (self.member.id, added, None)
         )
 
+    def test_a_failed_announcement_still_returns_the_committed_member(self):
+        self.memberships.is_member.return_value = False
+        self.memberships.add.return_value = uuid4()
+        self.memberships.added_at.return_value = {}
+        self.membership_service.announce_access.side_effect = RuntimeError("db")
+
+        with self.assertLogs("service:TenancyNotifier", "ERROR"):
+            view = self.service.add(ATTO, self.member.id, self.admin.id)
+
+        self.assertEqual(view.id, self.member.id)
+
     def test_adding_refusals(self):
         self.membership_service.require_open_for_members.side_effect = (
             ConflictException("public_tenancy_locked")
