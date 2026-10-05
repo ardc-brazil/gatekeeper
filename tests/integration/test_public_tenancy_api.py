@@ -202,7 +202,7 @@ class TestPublicIsReadOnlyForMembers:
         assert_status_code(update, 403)
         assert detail.json()["members_can_edit"] is False
 
-    def test_an_admin_moving_a_dataset_into_public_closes_it(self, http_client):
+    def test_an_admin_cannot_move_a_dataset_into_public(self, http_client):
         tenancy = new_tenancy()
         join(ADMIN_ID, tenancy)
         dataset = create_dataset(http_client, ADMIN_ID, tenancy)
@@ -214,12 +214,14 @@ class TestPublicIsReadOnlyForMembers:
             headers=as_user(ADMIN_ID, tenancy),
         )
 
-        assert_status_code(moved, 200)
+        assert_status_code(moved, 400)
+        assert moved.json() == {"detail": "tenancy_cannot_change"}
         assert (
             execute(
-                f"SELECT members_can_edit, tenancy FROM datasets WHERE id = '{dataset['id']}'"
+                "SELECT name, members_can_edit, tenancy FROM datasets "
+                f"WHERE id = '{dataset['id']}'"
             )
-            == f"f|{PUBLIC}"
+            == f"{dataset['name']}|t|{tenancy}"
         )
 
 
@@ -239,7 +241,7 @@ class TestOutsidePublic:
         assert_status_code(opened, 200)
         assert_status_code(after, 200)
 
-    def test_no_one_but_an_admin_moves_a_dataset_out_of_the_tenancy(self, http_client):
+    def test_no_one_moves_a_dataset_out_of_the_tenancy(self, http_client):
         tenancy, elsewhere = new_tenancy(), new_tenancy()
         owner, editor, holder = (new_account(http_client) for _ in range(3))
         for account in (owner, editor, holder):
@@ -273,7 +275,9 @@ class TestOutsidePublic:
             == f"edited|{tenancy}"
         )
 
-    def test_an_admin_editing_as_a_member_moves_a_colleagues_dataset(self, http_client):
+    def test_an_admin_editing_as_a_member_cannot_move_a_colleagues_dataset(
+        self, http_client
+    ):
         tenancy, elsewhere = new_tenancy(), new_tenancy()
         owner = new_account(http_client)
         join(owner["id"], tenancy)
@@ -286,11 +290,37 @@ class TestOutsidePublic:
             json={"name": "moved", "data": {}, "tenancy": elsewhere},
             headers=as_user(ADMIN_ID, tenancy),
         )
+        edited = update_dataset(http_client, ADMIN_ID, dataset)
 
-        assert_status_code(moved, 200)
+        assert_status_code(moved, 400)
+        assert moved.json() == {"detail": "tenancy_cannot_change"}
+        assert_status_code(edited, 200)
         assert (
             execute(f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'")
-            == f"moved|{elsewhere}"
+            == f"edited|{tenancy}"
+        )
+
+    def test_an_admin_whose_only_access_is_a_write_share_cannot_move_the_dataset(
+        self, http_client
+    ):
+        tenancy, elsewhere = new_tenancy(), new_tenancy()
+        owner = new_account(http_client)
+        join(owner["id"], tenancy)
+        join(ADMIN_ID, elsewhere)
+        dataset = create_dataset(http_client, owner["id"], tenancy)
+        grant(http_client, dataset["id"], ADMIN_ID, "write")
+
+        moved = http_client.put(
+            f"/datasets/{dataset['id']}",
+            json={"name": "moved", "data": {}, "tenancy": elsewhere},
+            headers=as_user(ADMIN_ID, elsewhere),
+        )
+
+        assert_status_code(moved, 400)
+        assert moved.json() == {"detail": "tenancy_cannot_change"}
+        assert (
+            execute(f"SELECT name, tenancy FROM datasets WHERE id = '{dataset['id']}'")
+            == f"{dataset['name']}|{tenancy}"
         )
 
 

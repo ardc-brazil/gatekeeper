@@ -42,7 +42,6 @@ from app.metrics import metrics
 from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
 from app.service.dataset_access import DatasetAccessService, allows_member_edits
 from app.service.embargo_termination import EmbargoTermination
-from app.model.tenancy import DEFAULT_TENANCY
 from app.model.user import is_admin
 
 
@@ -347,26 +346,18 @@ class DatasetService:
         user_id: UUID,
         tenancies: list[str] = None,
     ) -> None:
-        dataset_db, _, level = self.fetch_authorized(
+        dataset_db, _, _ = self.fetch_authorized(
             dataset_id=dataset_id,
             user_id=user_id,
             tenancies=tenancies,
             action=DatasetAction.WRITE,
         )
 
-        changes_tenancy = bool(
-            dataset_request.tenancy and dataset_request.tenancy != dataset_db.tenancy
-        )
-        if changes_tenancy and not self._is_admin(user_id):
+        if dataset_request.tenancy and dataset_request.tenancy != dataset_db.tenancy:
             raise IllegalStateException("tenancy_cannot_change")
-        moves = changes_tenancy and level in (AccessLevel.OWNER, AccessLevel.TENANCY)
 
         dataset_db.name = dataset_request.name
         dataset_db.data = dataset_request.data
-        if moves:
-            dataset_db.tenancy = dataset_request.tenancy
-        if dataset_db.tenancy == DEFAULT_TENANCY:
-            dataset_db.members_can_edit = False
 
         if self._should_create_new_version(dataset_db, dataset_request):
             new_version = self._create_new_version(dataset_db, user_id)

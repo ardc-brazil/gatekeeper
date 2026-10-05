@@ -283,8 +283,7 @@ edit a given dataset becomes the owner's decision.
   access), except in public.
 - **Public is never member-editable.** `allows_member_edits(dataset)` returns
   `false` when `dataset.tenancy == DEFAULT_TENANCY`, whatever the column says.
-  Creating a dataset in public, or an admin moving one into public through
-  `PUT /datasets/{id}`, stores `members_can_edit = false`.
+  Creating a dataset in public stores `members_can_edit = false`.
   `PUT /datasets/{id}/members-access` with `members_can_edit: true` on a public
   dataset answers `400 public_members_cannot_edit`; `false` is accepted as a
   no-op. Every other member of public reads the dataset and cannot edit it.
@@ -293,11 +292,12 @@ edit a given dataset becomes the owner's decision.
   `members_can_edit` on. Nothing else changes in the access rule:
   `allows_member_edits` remains the one place the decision is made, and the
   None-means-true comment there goes, since the column default is now `false`.
-- **A dataset stays in its tenancy.** Once created, no user moves it: not the
-  owner, a `write` share holder or a tenancy editor. `PUT /datasets/{id}` with
-  a `tenancy` other than the current one answers `400 tenancy_cannot_change`
-  to every non-admin and saves nothing; edits that send the current tenancy
-  proceed. Admins behave as before.
+- **A dataset stays in its tenancy.** Once created, no one moves it through
+  the API: not the owner, a `write` share holder, a tenancy editor or an
+  admin. `PUT /datasets/{id}` with a `tenancy` other than the current one
+  answers `400 tenancy_cannot_change` to everyone, admins included, and saves
+  nothing; edits that send the current tenancy, or an empty one, proceed.
+  Moving a dataset, if it is ever needed, is an operator task in the database.
 
 The webapp's share dialog does not offer the members-access toggle for a public
 dataset; its *Members of Public* row reads "Everyone on DataMap · can read".
@@ -483,7 +483,7 @@ Bodies are `{"detail": "<code>"}` like the rest of the API.
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_request`, `tenancy_cannot_change` (`PUT /datasets/{id}` with another `tenancy`, non-admins), `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid`, `public_members_cannot_edit` (on `PUT /datasets/{id}/members-access`) |
+| 400 | `invalid_request`, `tenancy_cannot_change` (`PUT /datasets/{id}` with another `tenancy`, admins included), `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid`, `public_members_cannot_edit` (on `PUT /datasets/{id}/members-access`) |
 | 403 | `forbidden` (not owner or editor of the dataset, not the inviter), `not_a_member_of_tenancy` (`POST /datasets` for a non-member; admins unchanged) |
 | 404 | `request_not_found`, `invitation_not_found`, `tenancy_not_found`, `no_account` |
 | 409 | `request_pending`, `request_not_pending`, `already_member`, `invitation_pending`, `tenancy_exists`, `display_name_taken`, `requester_email_unverified`, `public_tenancy_locked`, `legacy_tenancy_read_only`, `tenancy_disabled` |
@@ -705,7 +705,7 @@ The user routes take the user from the session, never from the request, and use
 | Any account editing or deleting others' datasets through the default `datasets_write` | `members_can_edit` defaults to `false`; always `false` in public, enforced in `allows_member_edits`, refused with `public_members_cannot_edit` |
 | Silent privilege raise by the migration | `datasets_write` only for accounts with no dataset or admin role; `datasets_read`-only accounts keep it |
 | Creating a dataset in a tenancy the caller does not belong to | `POST /datasets` answers `403 not_a_member_of_tenancy` unless the caller is an enabled member of the target tenancy; a global `admin` is exempt, unchanged from today |
-| Moving a dataset into another tenancy, public included, where other accounts read it | a dataset stays in the tenancy it was created in: `PUT /datasets/{id}` with another `tenancy` answers `400 tenancy_cannot_change` to every non-admin; admins unchanged |
+| Moving a dataset into another tenancy, public included, where other accounts read it | a dataset stays in the tenancy it was created in: `PUT /datasets/{id}` with another `tenancy` answers `400 tenancy_cannot_change` to everyone, admins included; a move is an operator database task |
 
 Global roles mean that every account, holding `datasets_write`, can create
 datasets in every tenancy it belongs to, public included, and a dataset in
@@ -738,11 +738,11 @@ member-editable, and editing someone else's dataset takes the owner's explicit
   edits it;
 - `PUT /datasets/{id}/members-access` with `true` on a public dataset answers
   `400 public_members_cannot_edit`; a public dataset whose column is `true`
-  (set in the database) is still not editable by members; an admin moving a
-  dataset into public stores `false`;
+  (set in the database) is still not editable by members;
 - `PUT /datasets/{id}` with another `tenancy` answers `400
-  tenancy_cannot_change` to the owner, a tenancy editor and a `write` share
-  holder, and saves nothing; the same tenancy edits in place;
+  tenancy_cannot_change` to the owner, a tenancy editor, a `write` share
+  holder and an admin (as owner, as a member, or through a `write` share
+  only), and saves nothing; the same tenancy edits in place;
 - in a non-public tenancy, a member edits only after the owner turns
   `members_can_edit` on;
 - requests: create, `409 request_pending`, the daily limit, withdraw, the

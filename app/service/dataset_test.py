@@ -337,6 +337,7 @@ class TestDatasetService(unittest.TestCase):
         self.assertEqual(str(raised.exception), "tenancy_cannot_change")
         self.assertEqual(dataset_db.tenancy, "tenancy1")
         self.assertEqual(dataset_db.name, "before")
+        self.assertIs(dataset_db.members_can_edit, True)
         self.dataset_repository.upsert.assert_not_called()
 
     def test_the_owner_cannot_move_the_dataset_even_into_a_tenancy_they_belong_to(
@@ -371,12 +372,28 @@ class TestDatasetService(unittest.TestCase):
         self.assertEqual(dataset_db.name, "n")
         self.dataset_repository.upsert.assert_called_once()
 
-    def test_an_admin_who_is_not_a_member_moves_a_dataset(self):
+    def test_an_admin_who_owns_the_dataset_cannot_move_it(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1", "tenancy2"], roles=["admin"])
+        )
+
+        self._assert_tenancy_cannot_change(dataset_db)
+
+    def test_an_admin_cannot_move_the_dataset_into_public(self):
+        dataset_db = self._movable(
+            self.mock_user(["tenancy1", DEFAULT_TENANCY], roles=["admin"]),
+            target=DEFAULT_TENANCY,
+        )
+
+        self._assert_tenancy_cannot_change(dataset_db, target=DEFAULT_TENANCY)
+
+    def test_an_admin_still_edits_in_place(self):
         dataset_db = self._movable(self.mock_user(["tenancy1"], roles=["admin"]))
 
-        self._move()
+        self._move(target="tenancy1")
 
-        self.assertEqual(dataset_db.tenancy, "tenancy2")
+        self.assertEqual(dataset_db.tenancy, "tenancy1")
+        self.assertEqual(dataset_db.name, "n")
         self.dataset_repository.upsert.assert_called_once()
 
     def test_a_tenancy_editor_cannot_move_the_dataset(self):
@@ -415,26 +432,19 @@ class TestDatasetService(unittest.TestCase):
         self.assertEqual(dataset_db.name, "n")
         self.dataset_repository.upsert.assert_called_once()
 
-    def test_an_admin_editing_through_a_write_share_keeps_the_tenancy(self):
+    def test_an_admin_editing_through_a_write_share_cannot_move_the_dataset(self):
         dataset_db = self._movable(
             self.mock_user(["tenancy1"], roles=["admin"]), level=AccessLevel.WRITE
         )
 
-        self._move()
+        self._assert_tenancy_cannot_change(dataset_db)
 
-        self.assertEqual(dataset_db.tenancy, "tenancy1")
-        self.assertEqual(dataset_db.name, "n")
-        self.dataset_repository.upsert.assert_called_once()
-
-    def test_an_admin_editing_as_a_tenancy_member_still_moves_the_dataset(self):
+    def test_an_admin_editing_as_a_tenancy_member_cannot_move_the_dataset(self):
         dataset_db = self._movable(
             self.mock_user(["tenancy1"], roles=["admin"]), level=AccessLevel.TENANCY
         )
 
-        self._move()
-
-        self.assertEqual(dataset_db.tenancy, "tenancy2")
-        self.dataset_repository.upsert.assert_called_once()
+        self._assert_tenancy_cannot_change(dataset_db)
 
     def test_an_edit_that_keeps_the_tenancy_does_not_ask_for_membership(self):
         dataset_db = self._movable(self.mock_user([]))
@@ -454,33 +464,6 @@ class TestDatasetService(unittest.TestCase):
             self._create()
 
         self.dataset_repository.upsert.assert_not_called()
-
-    def test_an_admin_moving_a_dataset_into_public_closes_it_to_members(self):
-        self.dataset_access.require.return_value = AccessLevel.OWNER
-        self.user_service.fetch_by_id.return_value = self.mock_user(
-            ["tenancy1", DEFAULT_TENANCY], roles=["admin"]
-        )
-        dataset_db = Mock(spec=DatasetDBModel)
-        dataset_db.tenancy = "tenancy1"
-        dataset_db.members_can_edit = True
-        version = Mock(spec=DatasetVersionDBModel)
-        version.name = "1"
-        version.is_enabled = True
-        version.design_state = DesignState.DRAFT
-        version.doi = None
-        dataset_db.versions = [version]
-        self.dataset_repository.fetch.return_value = dataset_db
-        request = Dataset(name="n", data={}, tenancy=DEFAULT_TENANCY)
-
-        self.dataset_service.update_dataset(
-            dataset_id=uuid4(),
-            dataset_request=request,
-            user_id=uuid4(),
-            tenancies=["tenancy1"],
-        )
-
-        self.assertEqual(dataset_db.tenancy, DEFAULT_TENANCY)
-        self.assertIs(dataset_db.members_can_edit, False)
 
     def test_an_edit_outside_public_keeps_what_the_owner_chose(self):
         self.user_service.fetch_by_id.return_value = self.mock_user(["tenancy1"])
