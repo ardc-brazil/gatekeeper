@@ -4,7 +4,7 @@
 |--------|-------|
 | Author | DataMap Team |
 | Created | 2026-10-04 |
-| Updated | 2026-10-04 |
+| Updated | 2026-10-04 (owner decisions recorded) |
 
 ## Summary
 
@@ -20,30 +20,38 @@ The decisions that shape everything else:
 1. **Everyone is in `datamap/production/public`.** The migration creates it and
    adds every existing account; every account created afterwards, by any path,
    is added at creation. Public is locked: it cannot be removed from anyone, and
-   it has no member management. The access rule from RFC 003 does not change.
-2. **New accounts can read at once.** Membership only means something with a
-   dataset role, so every account gets the global `datasets_read` role at
-   creation, and the migration gives it to every account that has no dataset
-   role yet.
-3. **The tenancy selector appears only with more than one tenancy.** With exactly
+   it has no member management. Who can *see* a dataset does not change.
+2. **New accounts can work at once.** Membership only means something with a
+   dataset role, so every account gets the global `datasets_write` role at
+   creation, by any path: it can create, upload and manage its own datasets
+   with no admin work. The migration gives it to every existing account with no
+   dataset role and no `admin` role. Accounts that hold only `datasets_read`
+   today keep exactly that: an admin limited them on purpose, and the migration
+   does not silently raise anyone's privileges.
+3. **Owners decide collaboration.** Roles are global, so a write role that
+   everyone holds must not mean write on other people's data. New datasets are
+   created with `members_can_edit = false` in every tenancy; existing datasets
+   keep their value. In `public` it is always false, whatever the column says.
+   Owners, and the people they share with as editors (RFC 003), still edit.
+4. **The tenancy selector appears only with more than one tenancy.** With exactly
    one, it is selected and the user goes on. "Access pending" survives only for
    an account with zero tenancies, and points to requesting access.
-4. **People ask in their own words; admins decide.** A request is a tenancy name
+5. **People ask in their own words; admins decide.** A request is a tenancy name
    and a reason in free text, never a path. One pending request per user. A
    DataMap admin (the global Casbin `admin` role) approves it by picking an
    existing tenancy or creating `datamap/production/{namespace}`, or declines it
    with an optional message. A new tenancy is never created for an account with
    an unconfirmed email.
-5. **Owners and editors invite existing users into their tenancy without an
+6. **Owners and editors invite existing users into their tenancy without an
    admin.** From the share dialog, the owner or a `write` collaborator who is a
    member of the dataset's tenancy invites an existing account into it. The
    invitee accepts in the app; the email carries no token. Admins are told.
-6. **Roles stay global.** There are no per-tenancy roles and no tenancy admins:
+7. **Roles stay global.** There are no per-tenancy roles and no tenancy admins:
    members are members. The design's Reader / Contributor / Admin labels per
    membership are not built.
-7. **Production only.** New tenancies are always `datamap/production/*`. Legacy
+8. **Production only.** New tenancies are always `datamap/production/*`. Legacy
    `datamap/staging/*` tenancies are listed read-only.
-8. **The Admin area ships as a shell with two working tabs.** Requests and
+9. **The Admin area ships as a shell with two working tabs.** Requests and
    Tenancies work; Users and Activity are present with an empty state and are
    filled by RFC 010.
 
@@ -76,7 +84,9 @@ The decisions that shape everything else:
 - **Access rule.** `DatasetAccessService.level_of` gives tenancy access only when
   the user is a member *and* a role allows `GET` on datasets
   (`reads_tenancy`). Membership without `datasets_read` or `datasets_write`
-  grants nothing.
+  grants nothing. A member edits or deletes another person's dataset when
+  their role allows the verb and `allows_member_edits(dataset)` is true;
+  `datasets.members_can_edit` defaults to `true` (column and server default).
 - **Casbin.** Global roles (`admin`, `users_*`, `datasets_*`, `tenancies_*`,
   `datasets_shared`) over path and verb; `admin` holds `/*` with `.*`.
 - **Webapp.** `/app/tenancy` lists the session's tenancies or shows
@@ -215,15 +225,21 @@ already has part of it:
    `INSERT INTO tenancies (name, display_name, is_enabled) VALUES ('datamap/production/public', 'Public', true) ON CONFLICT (name) DO UPDATE SET is_enabled = true, display_name = COALESCE(tenancies.display_name, 'Public')`.
 3. Add every user, enabled or not, to it:
    `INSERT INTO users_tenancies (user_id, tenancy) SELECT id, 'datamap/production/public' FROM users ON CONFLICT DO NOTHING`.
-4. Give `datasets_read` to every user with no dataset role:
-   insert `('g', user_id, 'datasets_read')` into `casbin_rule` for each user
+4. Give `datasets_write` to every user with no dataset role and no admin role:
+   insert `('g', user_id, 'datasets_write')` into `casbin_rule` for each user
    with no `g` row naming `admin`, `datasets_read`, `datasets_write` or
-   `datasets_admin`. Casbin's five-second reload picks the rows up.
-5. Create the three enums, the three tables and their indexes.
+   `datasets_admin`. A user who holds only `datasets_read` is left alone: an
+   admin chose that, and a migration must not raise privileges behind their
+   back. Casbin's five-second reload picks the rows up.
+5. Change the server default of `datasets.members_can_edit` to `false`.
+   Existing rows keep their value, except datasets already in public, which are
+   set to `false` so the column agrees with the rule in *Dataset defaults*.
+6. Create the three enums, the three tables and their indexes.
 
-Downgrade drops the tables, enums and column. It leaves the public tenancy, its
-memberships and the granted roles in place: they are data, and removing them
-would take access away from people.
+Downgrade drops the tables, enums and column and restores the `true` server
+default. It leaves the public tenancy, its memberships, the granted roles and
+the `members_can_edit` values in place: they are data, and changing them back
+would alter access people already have.
 
 `DEFAULT_TENANCY = "datamap/production/public"` is a constant in
 `app/model/tenancy.py`, not a setting: the migration and the code must agree.
@@ -234,13 +250,47 @@ would take access away from people.
 (`POST /users`, password sign-up, ORCID email verification) — now:
 
 - appends `DEFAULT_TENANCY` to the tenancies in the payload;
-- adds `datasets_read` to the roles in the payload;
+- adds `datasets_write` to the roles in the payload, so a new account can
+  create, upload to and manage its own datasets with no admin work;
 - writes a `member_added` event with no actor;
 - **no longer enqueues `new_account_pending`.** No account waits for a
   workspace any more, so the email would be wrong; admins hear about requests
   instead (see *Emails*). The template and its integration test are removed.
   `ADMIN_NOTIFICATION_EMAILS` keeps its meaning: the addresses told about
   things admins must act on.
+
+### Dataset defaults: owners decide collaboration
+
+Roles are global. Once every account holds `datasets_write`, the role says
+nothing about *whose* data someone may change, and with today's
+`members_can_edit = true` default every member of a tenancy — and, in public,
+every account on the platform — could edit and delete every other member's
+datasets. The role keeps meaning "may create and work on datasets"; who may
+edit a given dataset becomes the owner's decision.
+
+- **New datasets start closed.** `datasets.members_can_edit` gets
+  `default=False, server_default=false()`, and `Dataset.members_can_edit` in
+  `app/model/dataset.py` and the create request default to `false`, in every
+  tenancy. Existing datasets keep their value. The owner can still open a
+  dataset to its tenancy's members from the share dialog (RFC 003's members
+  access), except in public.
+- **Public is never member-editable.** `allows_member_edits(dataset)` returns
+  `false` when `dataset.tenancy == DEFAULT_TENANCY`, whatever the column says.
+  Creating a dataset in public, or moving one into public through
+  `PUT /datasets/{id}`, stores `members_can_edit = false`.
+  `PUT /datasets/{id}/members-access` with `members_can_edit: true` on a public
+  dataset answers `400 public_members_cannot_edit`; `false` is accepted as a
+  no-op. Every other member of public reads the dataset and cannot edit it.
+- **Who edits.** The owner; people the owner shared with at `write` level
+  (RFC 003 permissions); members of a non-public tenancy when the owner turned
+  `members_can_edit` on. Nothing else changes in the access rule:
+  `allows_member_edits` remains the one place the decision is made, and the
+  None-means-true comment there goes, since the column default is now `false`.
+
+The webapp's share dialog does not offer the members-access toggle for a public
+dataset; its *Members of Public* row reads "Everyone on DataMap · can read".
+The new-dataset form says "Visible to every DataMap account; only you and
+people you share with can edit" when public is selected.
 
 ### Public is locked
 
@@ -327,7 +377,7 @@ as the grant.
 |---|---|---|
 | `GET /admin/tenancy-requests/counts` | — | `{open, join, new, closed}` — the sidebar and tab badges |
 | `GET /admin/tenancy-requests` | `status=open\|closed`, `kind=join\|new`, `q`, `limit`, `offset` | rows with requester (name, email, email confirmed, ORCID), request, suggested tenancy, created_at; closed rows add decision, tenancy, decided_by, decided_at |
-| `GET /admin/tenancy-requests/{id}` | — | the row plus the requester's tenancies and global dataset role, and the suggested tenancy's member count |
+| `GET /admin/tenancy-requests/{id}` | — | the row plus the requester's tenancies and the suggested tenancy's member count |
 | `POST /admin/tenancy-requests/{id}/approve` | `{tenancy}` or `{new_tenancy: {display_name, namespace}}` | `200 {request}` |
 | `POST /admin/tenancy-requests/{id}/decline` | `{message?}` | `200 {request}` |
 | `GET /admin/tenancies` | — | `[{path, display_name, members, datasets, is_default, is_legacy, is_enabled}]` |
@@ -355,11 +405,10 @@ email is enqueued.
   (`409 requester_email_unverified`). The tenancy is created with
   `is_enabled = true` and a `tenancy_created` event.
 
-Approval does not change roles. The review dialog shows the requester's global
-dataset role so the admin can see that, for example, a requester with only
-`datasets_read` will not be able to upload to the tenancy just created; granting
-`datasets_write` stays on `PUT /users/{id}/roles` until RFC 010 puts the toggle
-on the user page.
+Approval does not change roles, and the dialog has no role control: every
+account already holds `datasets_write`, so the requester can create and upload
+in the tenancy at once. The rare account an admin limited to `datasets_read`
+stays limited; changing that is RFC 010's role toggle.
 
 **Removing a member** answers `409 public_tenancy_locked` for public and
 `409 legacy_tenancy_read_only` for staging. The user's datasets in the tenancy
@@ -381,8 +430,9 @@ the new dataset routes fall under the existing `/api/v1/datasets` patterns. A
 policy effect is `allow && !deny` across every role a subject holds, so a deny
 on `users_write` would also block an admin who happens to hold it.
 
-New `g` rows: `datasets_read` for every account, from the migration and from
-`UserService.create`. An integration test asserts that a `users_write` account
+New `g` rows: `datasets_write` for every new account, from
+`UserService.create`, and for every existing account without a dataset or admin
+role, from the migration. An integration test asserts that a `users_write` account
 gets `401` on `/api/v1/admin/tenancy-requests`, so a future seed row matching
 `/admin` by accident is caught.
 
@@ -392,7 +442,7 @@ Bodies are `{"detail": "<code>"}` like the rest of the API.
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_request`, `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid` |
+| 400 | `invalid_request`, `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid`, `public_members_cannot_edit` (on `PUT /datasets/{id}/members-access`) |
 | 403 | `forbidden` (not owner/editor, not a member of the tenancy, not the inviter) |
 | 404 | `request_not_found`, `invitation_not_found`, `tenancy_not_found`, `no_account` |
 | 409 | `request_pending`, `request_not_pending`, `already_member`, `invitation_pending`, `tenancy_exists`, `display_name_taken`, `requester_email_unverified`, `public_tenancy_locked`, `legacy_tenancy_read_only`, `tenancy_disabled` |
@@ -474,7 +524,7 @@ reads "You already have a request waiting. Withdraw it to send another."
 A panel at the top of `/app/home` (the design's 1j), one card per pending
 invitation: `tenancy` icon, "{inviter} invited you to {tenancy}", and
 "{n} datasets · from “{dataset}” · {date}"; **Decline** / **Accept**. The
-design's "As Reader" is dropped (decision 6). Below the invitations, while a
+design's "As Reader" is dropped (decision 7). Below the invitations, while a
 request is pending: "Your request for {name} is waiting for an administrator ·
 Withdraw".
 
@@ -542,9 +592,9 @@ the suggestion's side.
 - *Join existing* — title "Join {tenancy}". A tenancy picker (production,
   enabled, not public, not already the requester's), prefilled with the
   suggestion. Info rows: **Tenancy** "{display name}" / `{path} · {n} members`;
-  **Reason**; **Currently in** the requester's tenancy paths and their global
-  dataset role in words ("can read datasets" / "can create and edit datasets").
-  The design's Reader / Contributor cards are not built.
+  **Reason**; **Currently in** the requester's tenancy paths. The design's
+  Reader / Contributor cards are not built, and nothing replaces them: every
+  account already holds `datasets_write`.
 - *New tenancy* — title "New tenancy: {display name}". **Display name**
   prefilled with the requested name, **Namespace** prefilled with its slug,
   both editable; preview `datamap/production/{namespace} · requester becomes a
@@ -611,12 +661,16 @@ The user routes take the user from the session, never from the request, and use
 | Request spam to admins | one pending request per user, three per day |
 | Removing someone's last workspace | public cannot be removed |
 | Stale membership in a session | the gatekeeper checks membership in the database on every dataset call |
+| Any account editing or deleting others' datasets through the default `datasets_write` | `members_can_edit` defaults to `false`; always `false` in public, enforced in `allows_member_edits`, refused with `public_members_cannot_edit` |
+| Silent privilege raise by the migration | `datasets_write` only for accounts with no dataset or admin role; `datasets_read`-only accounts keep it |
 
-Global roles mean that a member with `datasets_write` can create datasets in
-every tenancy they belong to, public included, and a dataset in public is
-visible to every account. That is today's rule applied to a tenancy that
-contains everyone; the new-dataset form says so ("Visible to every DataMap
-account") when public is selected.
+Global roles mean that every account, holding `datasets_write`, can create
+datasets in every tenancy it belongs to, public included, and a dataset in
+public is visible to every account. What the global role must not give is
+write on other people's data; *Dataset defaults* closes that: new datasets
+start with `members_can_edit = false`, public datasets are never
+member-editable, and editing someone else's dataset takes the owner's explicit
+`write` share.
 
 ## Testing
 
@@ -625,11 +679,26 @@ account") when public is selected.
 `test_admin_tenancies_api.py`:
 
 - the migration: public exists, every seeded user is in it, users without a
-  dataset role have `datasets_read`; a second `upgrade` after a `downgrade`
-  succeeds;
+  dataset or admin role have `datasets_write`, a `datasets_read`-only user
+  still has only `datasets_read`, existing non-public datasets keep their
+  `members_can_edit`; a second `upgrade` after a `downgrade` succeeds;
 - every creation path (`POST /users`, password sign-up, ORCID email
-  verification) lands in public with `datasets_read` and sends no
-  `new_account_pending`; the new account lists public datasets;
+  verification) lands in public with `datasets_write` and sends no
+  `new_account_pending`;
+- a new account, with no admin action, creates a dataset in public, uploads a
+  file to it through TUS and edits it;
+- a new dataset, in public and in another tenancy, has
+  `members_can_edit = false` when the request omits it;
+- another member of public reads that dataset (metadata and files) and gets
+  `403` on `PUT` and `DELETE`;
+- the owner edits it; a user it was shared with at `write` level (RFC 003)
+  edits it;
+- `PUT /datasets/{id}/members-access` with `true` on a public dataset answers
+  `400 public_members_cannot_edit`; a public dataset whose column is `true`
+  (set in the database) is still not editable by members; moving a dataset into
+  public stores `false`;
+- in a non-public tenancy, a member edits only after the owner turns
+  `members_can_edit` on;
 - requests: create, `409 request_pending`, the daily limit, withdraw, the
   admin email per address and none for an empty list; self-only (`401` for
   another user's id, even an admin's);
@@ -654,7 +723,7 @@ account") when public is selected.
   exact email, an ORCID, and `no_account`;
 - every `tenancy_events` row the flows above should write.
 
-**Unit (gatekeeper):** namespace validation, request-to-tenancy matching,
+**Unit (gatekeeper):** `allows_member_edits` false for public whatever the column, namespace validation, request-to-tenancy matching,
 display-name fallback.
 
 **Webapp (Jest):** the selector's three cases; `hydrateWithUserInfo` setting
@@ -667,8 +736,8 @@ unconfirmed email; the admin sidebar entry and badge.
 
 | PR | Repository | Content |
 |---|---|---|
-| A | gatekeeper | Migration, default tenancy and `datasets_read` at creation, `new_account_pending` retired, user / dataset / admin routes, emails, events, public lock, share-candidate change, tests |
-| B | webapp | Selector rules, `AccessPending` rewrite, request form, profile and avatar-menu entries, home invitation panel, share-dialog invitation, `update()` refresh |
+| A | gatekeeper | Migration, default tenancy and `datasets_write` at creation, `members_can_edit` default `false` and always `false` in public, `new_account_pending` retired, user / dataset / admin routes, emails, events, public lock, share-candidate change, tests |
+| B | webapp | Members-access toggle hidden for public datasets, new-dataset notice, selector rules, `AccessPending` rewrite, request form, profile and avatar-menu entries, home invitation panel, share-dialog invitation, `update()` refresh |
 | C | webapp | `admin` claim, Admin shell, Requests and Tenancies tabs, empty Users and Activity |
 
 A ships first and is useful alone: every account lands in public and admins get
@@ -678,8 +747,12 @@ each other. Until C ships, requests are decided with the admin API.
 ### Before shipping A
 
 - `ADMIN_NOTIFICATION_EMAILS` lists people who will act on requests.
-- Decide whether any existing account must *not* gain `datasets_read`; the
-  migration grants it to every account without a dataset role.
+- Check the accounts the migration will give `datasets_write` (those with no
+  dataset or admin role) and give `datasets_read` beforehand to any that must
+  stay read-only.
+- A ships the `members_can_edit` default before B hides the toggle for public:
+  until B ships, a public owner who tries to turn it on gets the
+  `public_members_cannot_edit` error message.
 
 ## Alternatives considered
 
@@ -694,7 +767,7 @@ One row per account is cheap and makes public an ordinary tenancy with a lock.
 
 What the design draws: Reader, Contributor and Admin per membership. It changes
 the Casbin model, every policy, the access rule and the role checks in the
-webapp. Out of proportion to "let people in"; decision 6 keeps roles global.
+webapp. Out of proportion to "let people in"; decision 7 keeps roles global.
 
 ### The user picks the tenancy from a list
 
@@ -716,7 +789,7 @@ Admins hear about what needs a decision — requests and invitations — instead
 ### Requests answered by tenancy members
 
 Spreads the decision to the people who know the requester, but needs tenancy
-administrators, which decision 6 rules out. Members bring people in through
+administrators, which decision 7 rules out. Members bring people in through
 invitations instead.
 
 ## Out of scope
@@ -732,12 +805,9 @@ invitations instead.
 - An email when an admin removes someone from a tenancy.
 - Inviting people without an account into a tenancy.
 - Feature flags (present in the design's data, drawn on no screen).
+- Admin access to datasets is unchanged.
 
 ## Open questions
 
-- Should approving a request that **creates** a tenancy also grant the
-  requester `datasets_write` when they lack it? Without it they cannot upload
-  to their own tenancy until an admin grants the role through the API (or, after
-  RFC 010, the toggle). The design assumed "requester becomes Contributor".
 - Should the staging tenancies' members be moved to their production
   counterparts and the staging tenancies disabled, rather than kept read-only?
