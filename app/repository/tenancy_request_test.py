@@ -5,7 +5,6 @@ from unittest.mock import patch
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Query, Session
 
-import app.model.db.doi  # noqa: F401  # registers DOI before Dataset's mapper resolves its "DOI" relationship
 from app.repository.tenancy_request import TenancyRequestRepository
 
 

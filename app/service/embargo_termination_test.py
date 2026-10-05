@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 from uuid import uuid4
 
-import app.model.db.doi  # noqa: F401  # registers DOI before Dataset's mapper resolves its "DOI" relationship
 from app.model.db.dataset import Dataset as DatasetDBModel
 from app.model.dataset_access import AccessEventType
 from app.repository.dataset import DatasetRepository

@@ -6,7 +6,6 @@ from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 
-import app.model.db.doi  # noqa: F401  # registers DOI before Dataset's mapper resolves its "DOI" relationship
 from app.exception.conflict import ConflictException
 from app.model.tenancy import TenancyRequestStatus
 from app.repository.integrity import violates
