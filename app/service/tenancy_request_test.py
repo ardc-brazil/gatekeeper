@@ -417,6 +417,15 @@ class TestApprove(AdminQueueTestCase):
         )
         self.assertTrue(view.created_tenancy)
 
+    def test_a_failed_announcement_still_returns_the_committed_approval(self):
+        self.membership_service.announce_access.side_effect = RuntimeError("smtp")
+
+        with self.assertLogs("service:TenancyRequestService", "ERROR"):
+            view = self.service.approve(self.request.id, self.admin.id, ATTO, None)
+
+        self.assertEqual(view.status, "approved")
+        self.assertEqual(view.tenancy.path, ATTO)
+
 
 class TestDecline(AdminQueueTestCase):
     def setUp(self):
@@ -465,3 +474,12 @@ class TestDecline(AdminQueueTestCase):
             self.service.decline(self.request.id, self.admin.id, None)
 
         self.assertEqual(str(raised.exception), "request_not_pending")
+
+    def test_a_failed_notice_still_returns_the_committed_decline(self):
+        self.notifier.request_declined.side_effect = RuntimeError("smtp")
+
+        with self.assertLogs("service:TenancyRequestService", "ERROR"):
+            view = self.service.decline(self.request.id, self.admin.id, "No")
+
+        self.assertEqual(view.status, "declined")
+        self.assertEqual(view.decision_message, "No")

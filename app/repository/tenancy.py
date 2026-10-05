@@ -12,6 +12,7 @@ from app.model.db.dataset import Dataset
 from app.model.db.tenancy import Tenancy
 from app.model.db.user import User, user_tenancy_association
 from app.model.tenancy import TenancyEventType
+from app.repository.integrity import violates
 from app.repository.tenancy_event import add_event
 
 
@@ -70,8 +71,10 @@ class TenancyRepository:
                 session.commit()
                 session.refresh(tenancy)
                 return tenancy
-        except IntegrityError:
-            raise ConflictException("tenancy_exists")
+        except IntegrityError as error:
+            if violates(error, "tenancies_pkey"):
+                raise ConflictException("tenancy_exists")
+            raise
 
     def member_counts(self) -> dict[str, int]:
         with self._session_factory() as session:

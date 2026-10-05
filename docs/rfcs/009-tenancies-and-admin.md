@@ -237,9 +237,11 @@ already has part of it:
 6. Create the three enums, the three tables and their indexes.
 
 Downgrade drops the tables, enums and column and restores the `true` server
-default. It leaves the public tenancy, its memberships, the granted roles and
-the `members_can_edit` values in place: they are data, and changing them back
-would alter access people already have.
+default. It leaves the public tenancy, its memberships, the granted roles, the
+two `datasets_write` `DELETE` rows from *Casbin* and the `members_can_edit`
+values in place: they are data, and changing them back would alter access
+people already have. A second `upgrade` does not duplicate the Casbin rows: it
+inserts each only when it is missing.
 
 `DEFAULT_TENANCY = "datamap/production/public"` is a constant in
 `app/model/tenancy.py`, not a setting: the migration and the code must agree.
@@ -425,9 +427,10 @@ with public always added.
 ### Casbin
 
 Two new `p` rows, for `datasets_write`: `DELETE` on
-`/api/v1/datasets/.*/share/.*` and on
-`/api/v1/datasets/.*/tenancy-invitations/.*`, `allow`, in the regex style of
-the existing seed. Without them, an owner whose only role is `datasets_write`
+`/api/v1/datasets/[0-9a-f-]{36}/share/(permissions|invitations)/[0-9a-f-]{36}$`
+and on `/api/v1/datasets/[0-9a-f-]{36}/tenancy-invitations/[0-9a-f-]{36}$`,
+`allow`. Casbin's `regexMatch` is `re.match`, anchored only at the start, so
+the `$` keeps a row from matching any longer path under the same prefix. Without them, an owner whose only role is `datasets_write`
 — every account after this RFC — gets `401` from Casbin withdrawing an
 invitation or revoking a share, before the service ever checks who the
 inviter or owner is. The admin routes need no new rows (`admin` already holds

@@ -10,6 +10,7 @@ from app.exception.conflict import ConflictException
 from app.model.db.dataset import Dataset
 from app.model.db.tenancy import TenancyInvitation
 from app.model.tenancy import TenancyEventType, TenancyInvitationStatus
+from app.repository.integrity import violates
 from app.repository.tenancy_event import add_event
 from app.repository.tenancy_membership import insert_membership
 
@@ -48,8 +49,10 @@ class TenancyInvitationRepository:
                 session.commit()
                 session.refresh(invitation)
                 return invitation
-        except IntegrityError:
-            raise ConflictException("invitation_pending")
+        except IntegrityError as error:
+            if violates(error, "uq_tenancy_invitations_pending"):
+                raise ConflictException("invitation_pending")
+            raise
 
     def fetch(self, invitation_id: UUID) -> TenancyInvitation | None:
         with self._session_factory() as session:

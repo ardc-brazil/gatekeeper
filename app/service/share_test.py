@@ -429,3 +429,21 @@ class TestTenancyInShareState(ShareServiceTestCase):
         self.tenancy_invitations.share_additions.assert_called_once_with(
             self.dataset, AccessLevel.OWNER, OWNER
         )
+
+    def test_an_embargoed_dataset_offers_no_tenancy_invitation(self):
+        self.dataset.embargo_until = NOW + timedelta(days=30)
+        view = DatasetTenancyInvitationView(
+            id=uuid4(),
+            user=UserBrief(id=uuid4(), name="Bruna"),
+            invited_by=None,
+            created_at=NOW,
+            can_withdraw=True,
+        )
+        self.tenancy_invitations.share_additions.return_value = ([view], True)
+
+        state = self.service.state(self.dataset.id, OWNER)
+
+        self.assertIsNone(state.tenancy)
+        self.assertEqual(state.tenancy_invitations, [])
+        self.assertFalse(state.can_invite_to_tenancy)
+        self.tenancy_invitations.share_additions.assert_not_called()

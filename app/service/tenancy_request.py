@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from datetime import datetime, timedelta
 from typing import Callable
 from uuid import UUID
@@ -7,6 +8,7 @@ from app.exception.conflict import ConflictException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.too_many_requests import TooManyRequestsException
+from app.logging_config import fields
 from app.model.dataset_access import utcnow
 from app.model.tenancy import (
     MESSAGE_MAX_LENGTH,
@@ -62,6 +64,7 @@ class TenancyRequestService:
         self._users = users
         self._notifier = notifier
         self._clock = clock
+        self._logger = logging.getLogger("service:TenancyRequestService")
 
     def list_for_user(self, user_id: UUID) -> list[TenancyRequestView]:
         return [self._user_view(r) for r in self._requests.latest_for(user_id, LATEST)]
@@ -170,8 +173,11 @@ class TenancyRequestService:
         approved, event_id = self._requests.approve(
             request_id, admin_id, path, display_name, self._clock()
         )
-        self._membership_service.announce_access(
-            approved.user_id, admin_id, path, event_id
+        self._notify_decision(
+            approved,
+            lambda: self._membership_service.announce_access(
+                approved.user_id, admin_id, path, event_id
+            ),
         )
         return self._admin_view(approved, self._suggestion_index())
 
@@ -185,10 +191,26 @@ class TenancyRequestService:
         declined = self._requests.decline(
             request_id, admin_id, text or None, self._clock()
         )
+        self._notify_decision(declined, lambda: self._tell_declined(declined))
+        return self._admin_view(declined, self._suggestion_index())
+
+    def _tell_declined(self, declined) -> None:
         user = self._users.fetch_any_by_id(declined.user_id)
         if user is not None:
             self._notifier.request_declined(user, declined)
-        return self._admin_view(declined, self._suggestion_index())
+
+    def _notify_decision(self, request, notify: Callable[[], None]) -> None:
+        try:
+            notify()
+        except Exception:
+            self._logger.error(
+                "tenancy request decision notification failed",
+                exc_info=True,
+                extra=fields(
+                    request_id=str(request.id),
+                    status=TenancyRequestStatus(request.status).value,
+                ),
+            )
 
     def _visible(self, request_id: UUID):
         request = self._requests.fetch(request_id)

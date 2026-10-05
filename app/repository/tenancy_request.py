@@ -12,6 +12,7 @@ from app.exception.not_found import NotFoundException
 from app.model.db.tenancy import Tenancy, TenancyRequest
 from app.model.db.user import User
 from app.model.tenancy import TenancyEventType, TenancyRequestStatus
+from app.repository.integrity import violates
 from app.repository.tenancy_event import add_event
 from app.repository.tenancy_membership import insert_membership
 from app.repository.user import user_matches
@@ -49,8 +50,10 @@ class TenancyRequestRepository:
                 session.commit()
                 session.refresh(request)
                 return request
-        except IntegrityError:
-            raise ConflictException("request_pending")
+        except IntegrityError as error:
+            if violates(error, "uq_tenancy_requests_pending"):
+                raise ConflictException("request_pending")
+            raise
 
     def fetch(self, request_id: UUID) -> TenancyRequest | None:
         with self._session_factory() as session:
@@ -222,8 +225,10 @@ class TenancyRequestRepository:
                 session.commit()
                 session.refresh(request)
                 return request, event_id
-        except IntegrityError:
-            raise ConflictException("tenancy_exists")
+        except IntegrityError as error:
+            if violates(error, "tenancies_pkey"):
+                raise ConflictException("tenancy_exists")
+            raise
 
     def decline(
         self,

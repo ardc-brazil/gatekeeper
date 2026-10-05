@@ -44,8 +44,8 @@ ENUMS = {
 }
 
 DATASETS_WRITE_DELETE_PATHS = (
-    "/api/v1/datasets/.*/share/.*",
-    "/api/v1/datasets/.*/tenancy-invitations/.*",
+    "/api/v1/datasets/[0-9a-f-]{36}/share/(permissions|invitations)/[0-9a-f-]{36}$",
+    "/api/v1/datasets/[0-9a-f-]{36}/tenancy-invitations/[0-9a-f-]{36}$",
 )
 
 

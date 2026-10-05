@@ -421,10 +421,6 @@ class TestTheShareDialog:
         )
         assert body["tenancy"]["datasets"] == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="share state hides the tenancy under embargo but still offers the invite",
-    )
     def test_an_embargoed_dataset_offers_no_tenancy_invitation(
         self, http_client, world
     ):
