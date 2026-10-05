@@ -352,7 +352,7 @@ three requests per user in 24 hours, withdrawn ones included.
 |---|---|---|---|
 | `GET /datasets/{id}/share/lookup?value=` | dataset | exact email or ORCID | `200 {user: {id, name, email}, tenancy_member, invitation_pending, can_invite}`; `404 no_account` |
 | `POST /datasets/{id}/tenancy-invitations` | dataset | `{user_id}` | `201 {invitation}` |
-| `DELETE /datasets/{id}/tenancy-invitations/{invitation_id}` | dataset | — | `204` (withdrawn) |
+| `DELETE /datasets/{id}/tenancy-invitations/{invitation_id}` | dataset (new `datasets_write` DELETE row, see *Casbin*) | — | `204` (withdrawn) |
 
 `GET /datasets/{id}/share` gains `tenancy_invitations` (pending ones created
 from this dataset, with invitee and inviter) and `can_invite_to_tenancy`.
@@ -424,8 +424,15 @@ with public always added.
 
 ### Casbin
 
-No new `p` rows. The admin routes need none (`admin` already holds `/*`), and
-the new dataset routes fall under the existing `/api/v1/datasets` patterns. A
+Two new `p` rows, for `datasets_write`: `DELETE` on
+`/api/v1/datasets/.*/share/.*` and on
+`/api/v1/datasets/.*/tenancy-invitations/.*`, `allow`, in the regex style of
+the existing seed. Without them, an owner whose only role is `datasets_write`
+— every account after this RFC — gets `401` from Casbin withdrawing an
+invitation or revoking a share, before the service ever checks who the
+inviter or owner is. The admin routes need no new rows (`admin` already holds
+`/*`), and the rest of the new dataset routes fall under the existing
+`/api/v1/datasets` patterns. A
 `deny` row was considered for the retired membership routes and rejected: the
 policy effect is `allow && !deny` across every role a subject holds, so a deny
 on `users_write` would also block an admin who happens to hold it.
@@ -443,7 +450,7 @@ Bodies are `{"detail": "<code>"}` like the rest of the API.
 | Status | Codes |
 |---|---|
 | 400 | `invalid_request`, `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid`, `public_members_cannot_edit` (on `PUT /datasets/{id}/members-access`) |
-| 403 | `forbidden` (not owner/editor, not a member of the tenancy, not the inviter) |
+| 403 | `forbidden` (not owner/editor, not a member of the tenancy, not the inviter), `not_a_member_of_tenancy` (`POST /datasets` for a non-member; admins unchanged) |
 | 404 | `request_not_found`, `invitation_not_found`, `tenancy_not_found`, `no_account` |
 | 409 | `request_pending`, `request_not_pending`, `already_member`, `invitation_pending`, `tenancy_exists`, `display_name_taken`, `requester_email_unverified`, `public_tenancy_locked`, `legacy_tenancy_read_only`, `tenancy_disabled` |
 | 429 | `too_many_requests` |
@@ -663,6 +670,7 @@ The user routes take the user from the session, never from the request, and use
 | Stale membership in a session | the gatekeeper checks membership in the database on every dataset call |
 | Any account editing or deleting others' datasets through the default `datasets_write` | `members_can_edit` defaults to `false`; always `false` in public, enforced in `allows_member_edits`, refused with `public_members_cannot_edit` |
 | Silent privilege raise by the migration | `datasets_write` only for accounts with no dataset or admin role; `datasets_read`-only accounts keep it |
+| Creating a dataset in a tenancy the caller does not belong to | `POST /datasets` answers `403 not_a_member_of_tenancy` unless the caller is an enabled member of the target tenancy; a global `admin` is exempt, unchanged from today |
 
 Global roles mean that every account, holding `datasets_write`, can create
 datasets in every tenancy it belongs to, public included, and a dataset in
@@ -737,8 +745,8 @@ unconfirmed email; the admin sidebar entry and badge.
 | PR | Repository | Content |
 |---|---|---|
 | A | gatekeeper | Migration, default tenancy and `datasets_write` at creation, `members_can_edit` default `false` and always `false` in public, `new_account_pending` retired, user / dataset / admin routes, emails, events, public lock, share-candidate change, tests |
-| B | webapp | Members-access toggle hidden for public datasets, new-dataset notice, selector rules, `AccessPending` rewrite, request form, profile and avatar-menu entries, home invitation panel, share-dialog invitation, `update()` refresh |
-| C | webapp | `admin` claim, Admin shell, Requests and Tenancies tabs, empty Users and Activity |
+| B | webapp | `admin` claim, members-access toggle hidden for public datasets, new-dataset notice, selector rules, `AccessPending` rewrite, request form, profile and avatar-menu entries, home invitation panel, share-dialog invitation, `update()` refresh |
+| C | webapp | Admin shell, Requests and Tenancies tabs, empty Users and Activity |
 
 A ships first and is useful alone: every account lands in public and admins get
 request emails as soon as B lets users send them. B and C are independent of
