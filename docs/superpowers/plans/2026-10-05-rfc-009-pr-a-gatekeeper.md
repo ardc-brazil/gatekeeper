@@ -1,5 +1,7 @@
 # RFC 009 PR A — Gatekeeper tenancies, requests, invitations and admin routes Implementation Plan
 
+> **Superseded — historical.** This plan records how PR A was first built. Tenancy invitations have since moved from a dataset's share dialog to the workspace Members page (`/users/{id}/tenancies/{path}/…`), so the dataset-side invitation routes, the share lookup and `tenancy_invitations.dataset_id` described below no longer exist. The contract (`2026-10-05-rfc-009-contract.md`) and RFC 009 (`docs/rfcs/009-tenancies-and-admin.md`) are authoritative.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every account lands in `datamap/production/public` with the global `datasets_write` role, from its first sign-in and by every creation path; datasets start closed to tenancy members and are never member-editable in public; users ask for tenancies and owners invite colleagues from inside the app; DataMap admins decide through `/v1/admin/*`; every membership change is written to `tenancy_events`; five emails go through the outbox. Nothing in the webapp changes in this PR.

@@ -241,7 +241,7 @@ already has part of it:
 
 Downgrade drops the tables, enums and column and restores the `true` server
 default. It leaves the public tenancy, its memberships, the granted roles, the
-three `datasets_write` `DELETE` rows from *Casbin* and the `members_can_edit`
+two `datasets_write` `DELETE` rows from *Casbin* and the `members_can_edit`
 values in place: they are data, and changing them back would alter access
 people already have. A second `upgrade` does not duplicate the Casbin rows: it
 inserts each only when it is missing.
@@ -369,11 +369,14 @@ admin routes do.
 | `GET /users/{id}/tenancies/{path}/invitations` | self + member | — | `200` pending invitations: invitee and inviter (id, name), date, `can_withdraw` |
 | `POST /users/{id}/tenancies/{path}/invitations` | self + member | `{user_id}` | `201 {invitation}` |
 | `DELETE /users/{id}/tenancies/{path}/invitations/{invitation_id}` | self + member, inviter only | — | `204` (withdrawn) |
-| `GET /users/{id}/tenancies/{path}/lookup?value=` | self + member | exact email or ORCID | `200 {user: {id, name, email}, tenancy_member, invitation_pending, can_invite}`; `404 no_account` |
+| `GET /users/{id}/tenancies/{path}/lookup?value=` | self + member | exact email or ORCID | `200 {user: {id, name, email}, tenancy_member, invitation_pending, can_invite, datasets}` (`datasets`: the tenancy's dataset count); `404 no_account` |
 
-**Who reaches it:** a member of `{path}`, or an admin, whose behaviour does not
-change. Anyone else gets `404 tenancy_not_found`, so a non-member cannot probe
-which tenancies exist. The tenancy must then be open to members: public answers
+**Who reaches it:** a member of `{path}`, and nobody else. Anyone else, an
+admin included, gets `404 tenancy_not_found`, so a non-member cannot probe
+which tenancies exist. Admins work from the admin area instead
+(`/admin/tenancies/{path}/members` to add a member and see emails,
+`DELETE /admin/tenancy-invitations/{id}` to withdraw any invitation); an admin
+who is a member uses these routes as a member. The tenancy must then be open to members: public answers
 `409 public_tenancy_locked` on every route (everyone is in it, and it has no
 Members page), staging `409 legacy_tenancy_read_only` and a disabled tenancy
 `409 tenancy_disabled`.
@@ -480,7 +483,7 @@ Bodies are `{"detail": "<code>"}` like the rest of the API.
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_request`, `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid`, `public_members_cannot_edit` (on `PUT /datasets/{id}/members-access`) |
+| 400 | `invalid_request`, `tenancy_cannot_change` (`PUT /datasets/{id}` with another `tenancy`, non-admins), `tenancy_name_invalid`, `reason_invalid`, `namespace_invalid`, `display_name_invalid`, `message_invalid`, `public_members_cannot_edit` (on `PUT /datasets/{id}/members-access`) |
 | 403 | `forbidden` (not owner or editor of the dataset, not the inviter), `not_a_member_of_tenancy` (`POST /datasets` for a non-member; admins unchanged) |
 | 404 | `request_not_found`, `invitation_not_found`, `tenancy_not_found`, `no_account` |
 | 409 | `request_pending`, `request_not_pending`, `already_member`, `invitation_pending`, `tenancy_exists`, `display_name_taken`, `requester_email_unverified`, `public_tenancy_locked`, `legacy_tenancy_read_only`, `tenancy_disabled` |
@@ -575,7 +578,7 @@ the pending invitations: "{invitee} · invited by {inviter} {date} · not
 accepted yet", dashed, with **Withdraw** for the inviter. **+ Invite** takes an
 exact email or ORCID iD, looks it up (debounced) and shows the account found:
 name, the email when it was typed, and "Member of the tenancy · sees its {n}
-datasets once they accept · administrators are notified". A member, or someone
+datasets once they accept" (`{n}` is the lookup's `datasets`) · administrators are notified". A member, or someone
 already invited, cannot be invited again, and the card says so. Public and
 the staging tenancies have no Members page: the routes answer
 `409 public_tenancy_locked` and `409 legacy_tenancy_read_only`.
