@@ -114,6 +114,27 @@ class TestCreate(AdminServiceTestCase):
             self.service.create(self.admin.id, "ATTO", "atto-2")
         self.tenancies.create_with_event.assert_not_called()
 
+    def test_a_reserved_namespace_is_refused_by_the_shared_rule(self):
+        service = TenancyAdminService(
+            tenancies=self.tenancies,
+            memberships=self.memberships,
+            membership_service=TenancyMembershipService(
+                tenancies=self.tenancies,
+                memberships=self.memberships,
+                users=self.users,
+                notifier=Mock(),
+            ),
+            invitations=self.invitations,
+            users=self.users,
+        )
+
+        for reserved in ("public", "members"):
+            with self.subTest(reserved=reserved):
+                with self.assertRaises(IllegalStateException) as raised:
+                    service.create(self.admin.id, "Fine", reserved)
+                self.assertEqual(str(raised.exception), "namespace_invalid")
+        self.tenancies.create_with_event.assert_not_called()
+
 
 class TestMembers(AdminServiceTestCase):
     def test_members_with_since_and_who_invited_them(self):

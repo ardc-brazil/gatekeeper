@@ -107,6 +107,7 @@ class TestNewTenancy(MembershipServiceTestCase):
     def test_the_namespace_is_checked_first(self):
         self.assertEqual(self.code("", "Bad NS"), "namespace_invalid")
         self.assertEqual(self.code("Public", "public"), "namespace_invalid")
+        self.assertEqual(self.code("Members", "members"), "namespace_invalid")
 
     def test_then_the_display_name(self):
         self.assertEqual(self.code("   ", "fine"), "display_name_invalid")

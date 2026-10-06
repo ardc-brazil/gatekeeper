@@ -409,6 +409,33 @@ class TestApprove(AdminQueueTestCase):
         self.users.fetch_by_id.assert_called_with(id=self.requester.id, is_enabled=True)
         self.requests.approve.assert_not_called()
 
+    def test_a_new_tenancy_with_a_reserved_namespace_is_refused(self):
+        self.service = TenancyRequestService(
+            requests=self.requests,
+            tenancies=self.tenancies,
+            memberships=self.memberships,
+            membership_service=TenancyMembershipService(
+                tenancies=self.tenancies,
+                memberships=self.memberships,
+                users=self.users,
+                notifier=self.notifier,
+            ),
+            users=self.users,
+            notifier=self.notifier,
+            clock=lambda: NOW,
+        )
+        self.tenancies.fetch_any.return_value = None
+
+        for reserved in ("public", "members"):
+            with self.subTest(reserved=reserved):
+                self.assertEqual(
+                    self.code(
+                        new_tenancy=NewTenancy(display_name="Fine", namespace=reserved)
+                    ),
+                    "namespace_invalid",
+                )
+        self.requests.approve.assert_not_called()
+
     def test_a_new_tenancy_needs_a_confirmed_email(self):
         self.membership_service.check_new_tenancy.return_value = (
             "datamap/production/atto-2",
