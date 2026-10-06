@@ -140,6 +140,7 @@ class TestValidation(unittest.TestCase):
             "lba legacy",
             "lba_legacy",
             "public",
+            "members",
             "",
             "atto\n",
             "atto\r",

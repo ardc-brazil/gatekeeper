@@ -6,7 +6,8 @@ from datetime import datetime
 DEFAULT_TENANCY = "datamap/production/public"
 PRODUCTION_PREFIX = "datamap/production/"
 LEGACY_PREFIX = "datamap/staging/"
-RESERVED_NAMESPACE = "public"
+# "members" would collide with the admin /tenancies/{path}/members route suffix.
+RESERVED_NAMESPACES = frozenset({"public", "members"})
 NAMESPACE_PATTERN = re.compile(r"^[a-z0-9-]+\Z")
 NAMESPACE_MIN_LENGTH = 2
 NAMESPACE_MAX_LENGTH = 63
@@ -130,7 +131,7 @@ def namespace_is_valid(namespace: str) -> bool:
     return (
         NAMESPACE_MIN_LENGTH <= len(namespace) <= NAMESPACE_MAX_LENGTH
         and NAMESPACE_PATTERN.match(namespace) is not None
-        and namespace != RESERVED_NAMESPACE
+        and namespace not in RESERVED_NAMESPACES
     )
 
 

@@ -429,7 +429,9 @@ email is enqueued.
 - `{tenancy}`: an enabled production tenancy other than public, of which the
   requester is not a member (`409 already_member`).
 - `{new_tenancy}`: `namespace` matches `^[a-z0-9-]+$`, 2–63 characters, not
-  `public`; the path `datamap/production/{namespace}` must not exist, enabled or
+  `public` or `members` (`members` is reserved because
+  `/admin/tenancies/{path}/members` would be read as a member id under the
+  parent path); the path `datamap/production/{namespace}` must not exist, enabled or
   not (`409 tenancy_exists`); `display_name` is 1–64 characters and unique
   (`409 display_name_taken`); the requester's email must be confirmed
   (`409 requester_email_unverified`). The tenancy is created with

@@ -21,6 +21,7 @@ from tests.integration.fixtures.tenancy import (
     new_account,
     new_tenancy,
     pending_invitation,
+    request_access,
     set_roles,
     tenancies_of,
     unique,
@@ -196,6 +197,35 @@ class TestCreating:
         _refused(_create(http_client, "Fine", "public"), 400, "namespace_invalid")
         _refused(
             _create(http_client, "   ", unique("fine")), 400, "display_name_invalid"
+        )
+
+    def test_members_is_reserved_for_create_and_approve(self, http_client):
+        reserved = "members"
+        _refused(
+            _create(http_client, unique("Reserved"), reserved), 400, "namespace_invalid"
+        )
+        account = new_account(http_client, confirmed=True)
+        request = request_access(http_client, account["id"]).json()["id"]
+        _refused(
+            http_client.post(
+                f"/admin/tenancy-requests/{request}/approve",
+                json={
+                    "new_tenancy": {
+                        "display_name": unique("Reserved"),
+                        "namespace": reserved,
+                    }
+                },
+                headers=admin(),
+            ),
+            400,
+            "namespace_invalid",
+        )
+        assert (
+            execute(
+                "SELECT count(*) FROM tenancies "
+                f"WHERE name = 'datamap/production/{reserved}'"
+            )
+            == "0"
         )
 
 
