@@ -1,0 +1,14 @@
+{% extends "base.txt" %}
+{% block content %}
+Hi {{ user_name }},
+
+{{ admin_name }} gave you access to {{ tenancy_display_name }} on DataMap.
+
+Tenancy: {{ tenancy_display_name }} ({{ tenancy_path }})
+Datasets: {{ datasets_count }}
+
+Your datasets in Public stay where they are.
+
+Open DataMap: {{ open_url }}
+{% endblock %}
+{% block reason %}You received this email because an administrator gave your DataMap account access to a tenancy.{% endblock %}

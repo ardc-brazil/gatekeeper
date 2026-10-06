@@ -1,0 +1,13 @@
+{% extends "base.txt" %}
+{% block content %}
+{{ requester_name }} asked for access to a tenancy.
+
+Name: {{ requester_name }}
+Email: {{ requester_email or "No email" }} ({{ "confirmed" if email_confirmed else "not confirmed" }})
+Tenancy asked for: {{ requested_name }}
+Why: {{ reason }}
+Requested: {{ requested_at }}
+
+Review request: {{ review_url }}
+{% endblock %}
+{% block reason %}You received this email because your address is on DataMap's list of administrators.{% endblock %}

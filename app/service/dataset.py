@@ -3,7 +3,7 @@ from datetime import timedelta
 from uuid import UUID
 import json
 from app.exception.bad_request import BadRequestException, ErrorDetails
-from app.exception.forbidden import ForbiddenException
+from app.exception.forbidden import ForbiddenException, NotAMemberOfTenancyException
 from app.exception.illegal_state import IllegalStateException
 from app.exception.not_found import NotFoundException
 from app.exception.unauthorized import UnauthorizedException
@@ -42,6 +42,7 @@ from app.metrics import metrics
 from app.model.dataset_access import AccessLevel, DatasetAction, utcnow
 from app.service.dataset_access import DatasetAccessService, allows_member_edits
 from app.service.embargo_termination import EmbargoTermination
+from app.model.user import is_admin
 
 
 def _mode_of(doi: DOI) -> str:
@@ -345,20 +346,18 @@ class DatasetService:
         user_id: UUID,
         tenancies: list[str] = None,
     ) -> None:
-        dataset_db, _, level = self.fetch_authorized(
+        dataset_db, _, _ = self.fetch_authorized(
             dataset_id=dataset_id,
             user_id=user_id,
             tenancies=tenancies,
             action=DatasetAction.WRITE,
         )
 
+        if dataset_request.tenancy and dataset_request.tenancy != dataset_db.tenancy:
+            raise IllegalStateException("tenancy_cannot_change")
+
         dataset_db.name = dataset_request.name
         dataset_db.data = dataset_request.data
-        if dataset_request.tenancy and level in (
-            AccessLevel.OWNER,
-            AccessLevel.TENANCY,
-        ):
-            dataset_db.tenancy = dataset_request.tenancy
 
         if self._should_create_new_version(dataset_db, dataset_request):
             new_version = self._create_new_version(dataset_db, user_id)
@@ -420,13 +419,31 @@ class DatasetService:
 
         return new_version
 
+    def _is_admin(self, user_id: UUID) -> bool:
+        return is_admin(self._user_service.roles_of(user_id))
+
+    def _require_membership(self, user_id: UUID, tenancy: str) -> None:
+        if self._is_admin(user_id):
+            return
+        try:
+            user = self._user_service.fetch_by_id(id=user_id)
+        except NotFoundException:
+            raise UnauthorizedException(f"unauthorized: {user_id}")
+        target = self._tenancy_service.fetch(name=tenancy)
+        if target is None or tenancy not in (user.tenancies or []):
+            raise NotAMemberOfTenancyException(
+                f"not_a_member_of_tenancy: {tenancy} for {user_id}"
+            )
+
     def create_dataset(self, dataset: Dataset, user_id: UUID) -> Dataset:
+        self._require_membership(user_id=user_id, tenancy=dataset.tenancy)
         dataset = DatasetDBModel(
             name=dataset.name,
             data=dataset.data,
             tenancy=dataset.tenancy,
             design_state=DesignState.DRAFT,
             owner_id=user_id,
+            members_can_edit=False,
         )
 
         # create new version

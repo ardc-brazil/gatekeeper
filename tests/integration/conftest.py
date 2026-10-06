@@ -12,6 +12,11 @@ from tests.integration.fixtures.dataset import DatasetFixture
 from tests.integration.fixtures.sharing import embargoed_dataset  # noqa: F401
 
 
+def pytest_collection_modifyitems(config, items):
+    last = [item for item in items if item.get_closest_marker("destructive_migration")]
+    items[:] = [item for item in items if item not in last] + last
+
+
 @pytest.fixture(scope="session")
 def http_client():
     """HTTP client fixture for making API requests."""

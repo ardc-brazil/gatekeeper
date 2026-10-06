@@ -7,6 +7,7 @@ import requests
 
 from tests.integration.config import config
 from tests.integration.fixtures.auth import AuthFixture
+from tests.integration.utils.database import execute
 from tests.integration.utils.http_client import HttpClient
 
 POSTGRES_CONTAINER = "datamap_postgres_test_integration"
@@ -52,14 +53,19 @@ def create_user(http_client: HttpClient, roles: list[str], tenancies: list[str])
     )
     assert response.status_code == 200, response.text
     user_id = response.json()["id"]
+    if "datasets_write" not in roles:
+        response = http_client.delete(
+            f"/users/{user_id}/roles", json=["datasets_write"], headers=admin
+        )
+        assert response.status_code == 200, response.text
     if roles:
         response = http_client.put(f"/users/{user_id}/roles", json=roles, headers=admin)
         assert response.status_code == 200, response.text
-    if tenancies:
-        response = http_client.post(
-            f"/users/{user_id}/tenancies", json={"tenancies": tenancies}, headers=admin
+    for tenancy in tenancies:
+        execute(
+            "INSERT INTO users_tenancies (user_id, tenancy) "
+            f"VALUES ('{user_id}', '{tenancy}') ON CONFLICT DO NOTHING"
         )
-        assert response.status_code == 200, response.text
     return user_id
 
 

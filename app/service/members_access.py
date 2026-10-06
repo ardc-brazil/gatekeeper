@@ -1,11 +1,13 @@
 from uuid import UUID
 
+from app.exception.illegal_state import IllegalStateException
 from app.model.dataset_access import (
     AccessEventType,
     DatasetAction,
     MembersAccess,
     utcnow,
 )
+from app.model.tenancy import DEFAULT_TENANCY
 from app.repository.dataset import DatasetRepository
 from app.service.dataset import DatasetService
 from app.service.dataset_access import DatasetAccessService, allows_member_edits
@@ -38,6 +40,8 @@ class MembersAccessService:
             tenancies=tenancies,
             action=DatasetAction.MANAGE_MEMBERS_ACCESS,
         )
+        if members_can_edit and dataset.tenancy == DEFAULT_TENANCY:
+            raise IllegalStateException("public_members_cannot_edit")
         before = allows_member_edits(dataset)
         if before != members_can_edit:
             dataset.members_can_edit = members_can_edit

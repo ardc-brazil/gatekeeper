@@ -35,7 +35,7 @@ async def unauthorized_exception_handler(request: Request, exc: UnauthorizedExce
 
 async def forbidden_exception_handler(request: Request, exc: ForbiddenException):
     logger.info(f"Forbidden exception: {exc}")
-    return JSONResponse(status_code=403, content={"detail": "forbidden"})
+    return JSONResponse(status_code=403, content={"detail": exc.detail})
 
 
 async def too_many_requests_exception_handler(
@@ -63,12 +63,18 @@ async def bad_request_exception_handler(request: Request, exc: BadRequestExcepti
 
 QUIET_VALIDATION_PREFIX = "/v1/auth/"
 QUIET_VALIDATION_ROUTES = {("PUT", "/v1/users/{id}/password")}
+TENANCY_VALIDATION_PREFIXES = (
+    "/v1/admin/tenanc",
+    "/v1/admin/users",
+    "/v1/users/{id}/tenanc",
+)
 
 
 def _answers_quietly(request: Request) -> bool:
     path = _route_template(request)
     return (
         path.startswith(QUIET_VALIDATION_PREFIX)
+        or path.startswith(TENANCY_VALIDATION_PREFIXES)
         or (request.method, path) in QUIET_VALIDATION_ROUTES
     )
 

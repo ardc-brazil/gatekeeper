@@ -61,7 +61,10 @@ class TenancyAccessResponse(BaseModel):
     name: str
     path: str
     members: int
-    members_can_edit: bool = True
+    members_can_edit: bool = False
+    is_default: bool = False
+    is_legacy: bool = False
+    datasets: int = 0
 
 
 class ShareStateResponse(BaseModel):
@@ -183,6 +186,9 @@ def adapt_share_state(state: ShareState) -> ShareStateResponse:
             path=state.tenancy.path,
             members=state.tenancy.members,
             members_can_edit=state.tenancy.members_can_edit,
+            is_default=state.tenancy.is_default,
+            is_legacy=state.tenancy.is_legacy,
+            datasets=state.tenancy.datasets,
         )
         if state.tenancy
         else None,

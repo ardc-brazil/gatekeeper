@@ -30,13 +30,21 @@ from app.repository.user import UserRepository
 from app.service.dataset import DatasetService
 from app.service.dataset_access import allows_member_edits
 from app.service.email import EmailService
-from app.service.email_format import long_date, tenancy_display_name
+from app.service.email_format import long_date
 from app.service.email_template import EmailTemplate
 from app.service.dataset_access_audit import DatasetAccessAudit
 from app.service.permission import PermissionService
-from app.service.share_identity import normalise_email, normalise_orcid
+from app.service.share_identity import (
+    find_account,
+    normalise_email,
+    normalise_orcid,
+)
 from app.service.share_token import hash_token, new_token
 from app.service.user import UserService
+from app.service.user_refs import orcid_of
+from app.model.tenancy import is_default
+from app.repository.tenancy import TenancyRepository
+from app.service.tenancy_membership import TenancyMembershipService
 
 PLACEHOLDER_EMAIL_DOMAIN = "@fake.mail.com"
 
@@ -67,6 +75,8 @@ class ShareService:
         audit: DatasetAccessAudit,
         email_service: EmailService,
         public_base_url: str,
+        tenancy_repository: TenancyRepository,
+        membership_service: TenancyMembershipService,
         clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         self._datasets = dataset_service
@@ -81,6 +91,8 @@ class ShareService:
         self._email = email_service
         self._base_url = public_base_url.rstrip("/")
         self._clock = clock
+        self._tenancies = tenancy_repository
+        self._membership_service = membership_service
         self._logger = logging.getLogger("service:ShareService")
 
     def invitation_link(self, token: str) -> str:
@@ -143,7 +155,11 @@ class ShareService:
 
     def candidates(self, dataset_id: UUID, user_id: UUID, term: str) -> list[ShareUser]:
         dataset = self._authorized(dataset_id, user_id)
-        if len((term or "").strip()) < 2 or not dataset.tenancy:
+        if (
+            len((term or "").strip()) < 2
+            or not dataset.tenancy
+            or is_default(dataset.tenancy)
+        ):
             return []
         excluded = [dataset.owner_id] + [
             permission.user_id
@@ -203,11 +219,15 @@ class ShareService:
         )
         tenancy = None
         if dataset.tenancy and not embargoed:
+            summary = self._membership_service.summary(dataset.tenancy)
             tenancy = TenancyAccess(
-                name=tenancy_display_name(dataset.tenancy),
+                name=summary.display_name,
                 path=dataset.tenancy,
                 members=self._users.count_in_tenancy(dataset.tenancy),
                 members_can_edit=allows_member_edits(dataset),
+                is_default=summary.is_default,
+                is_legacy=summary.is_legacy,
+                datasets=self._tenancies.count_datasets(dataset.tenancy),
             )
         return ShareState(
             owner=self._share_user(dataset.owner_id),
@@ -256,12 +276,8 @@ class ShareService:
             target = self._users.fetch_by_id(id=request.user_id, is_enabled=True)
             if target is None:
                 raise _bad("unknown_user")
-        elif email is not None:
-            target = self._users.fetch_by_email_insensitive(email)
         else:
-            target = self._users.fetch_by_provider(
-                provider_name="orcid", reference=orcid
-            )
+            target = find_account(self._users, email, orcid)
 
         if target is not None:
             return self._grant_to_account(dataset, user_id, target, level)
@@ -451,14 +467,7 @@ class ShareService:
     def claim(self, user_id: UUID) -> list[AcceptResult]:
         user = self._user_service.fetch_by_id(user_id)
         email = user.email.lower() if deliverable(user.email) else None
-        orcid = next(
-            (
-                provider.reference
-                for provider in (user.providers or [])
-                if provider.name == "orcid"
-            ),
-            None,
-        )
+        orcid = orcid_of(user)
         accepted = []
         for invitation in self._invitations.list_pending_for(email, orcid):
             result = self._accept(invitation, user.id)

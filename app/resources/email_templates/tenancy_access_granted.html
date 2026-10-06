@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}You now have access to {{ tenancy_display_name }}{% endblock %}
+{% block preheader %}{{ admin_name }} gave you access to {{ tenancy_display_name }}.{% endblock %}
+{% block label %}Tenancy{% endblock %}
+{% block content %}
+{{ m.heading("You have a new tenancy") }}
+{% call m.paragraph() %}Hi {{ user_name }}, {{ admin_name }} gave you access to {{ m.strong(tenancy_display_name) }} on DataMap.{% endcall %}
+{{ m.details([{"label": "Tenancy", "value": tenancy_display_name ~ " · " ~ tenancy_path}, {"label": "Datasets", "value": datasets_count|string}]) }}
+{% call m.paragraph() %}Your datasets in Public stay where they are.{% endcall %}
+{{ m.button("Open DataMap", open_url) }}
+{% endblock %}
+{% block reason %}You received this email because an administrator gave your DataMap account access to a tenancy.{% endblock %}

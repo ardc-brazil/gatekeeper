@@ -296,7 +296,8 @@ class TestSelfAccess:
 
         assert_status_code(response, 200)
         assert response.json()["id"] == account["id"]
-        assert response.json()["roles"] == []
+        assert response.json()["roles"] == ["datasets_write"]
+        assert response.json()["tenancies"] == ["datamap/production/public"]
         assert response.json()["has_password"] is True
 
     def test_an_account_without_a_role_cannot_read_anyone_else(

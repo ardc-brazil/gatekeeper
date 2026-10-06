@@ -14,7 +14,6 @@ from app.controller.v1.user.resource import (
     UserCreateRequest,
     UserGetResponse,
     UserProvider,
-    UserTenanciesRequest,
     UserPasswordChangeRequest,
     UserUpdateRequest,
 )
@@ -92,7 +91,6 @@ def create(
             name=payload.name,
             email=payload.email,
             providers=payload.providers,
-            roles=payload.roles,
         )
     )
 
@@ -220,34 +218,6 @@ def get_by_provider_reference(
         provider_name=provider, reference=reference, is_enabled=is_enabled
     )
     return _adapt_get_response(user)
-
-
-# POST /users/{id}/tenancies
-@router.post(
-    "/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)]
-)
-@inject
-def add_tenancy(
-    id: UUID,
-    payload: UserTenanciesRequest,
-    service: UserService = Depends(Provide[Container.user_service]),
-) -> None:
-    service.add_tenancies(user_id=id, tenancies=payload.tenancies)
-    return {}
-
-
-# DELETE /users/{id}/tenancies
-@router.delete(
-    "/{id}/tenancies", dependencies=[Depends(authenticate), Depends(authorize)]
-)
-@inject
-def remove_tenancy(
-    id: UUID,
-    payload: UserTenanciesRequest,
-    service: UserService = Depends(Provide[Container.user_service]),
-) -> None:
-    service.remove_tenancies(user_id=id, tenancies=payload.tenancies)
-    return {}
 
 
 # POST /users/{id}/enforce

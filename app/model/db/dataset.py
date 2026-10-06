@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.model.db.doi import DOI
 from app.model.dataset import DesignState, VisibilityStatus, FileCollocationStatus
 
 
@@ -80,8 +81,8 @@ class Dataset(Base):
     members_can_edit = Column(
         Boolean,
         nullable=False,
-        default=True,
-        server_default=sqlalchemy.true(),
+        default=False,
+        server_default=sqlalchemy.false(),
     )
 
     versions = relationship("DatasetVersion", lazy="subquery", backref="dataset")
@@ -122,7 +123,7 @@ class DatasetVersion(Base):
         secondary=version_data_file_association,
         backref="dataset_versions",
     )
-    doi = relationship("DOI", lazy="subquery", backref="dataset_version", uselist=False)
+    doi = relationship(DOI, lazy="subquery", backref="dataset_version", uselist=False)
 
     __table_args__ = (
         Index("idx_dataset_versions_name", "name"),

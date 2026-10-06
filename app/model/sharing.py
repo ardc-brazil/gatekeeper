@@ -53,7 +53,10 @@ class TenancyAccess:
     name: str
     path: str
     members: int
-    members_can_edit: bool = True
+    members_can_edit: bool = False
+    is_default: bool = False
+    is_legacy: bool = False
+    datasets: int = 0
 
 
 @dataclass

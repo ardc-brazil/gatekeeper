@@ -1,15 +1,17 @@
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 from uuid import uuid4
 from app.exception.not_found import NotFoundException
+from app.model.tenancy import DEFAULT_TENANCY, TenancyEventType
 from app.model.user import User, UserProvider
 from app.model.db.user import User as UserDBModel, Provider as ProviderDBModel
 from app.model.db.tenancy import Tenancy as TenancyDBModel
 from app.repository.tenancy import TenancyRepository
+from app.repository.tenancy_event import TenancyEventRepository
 from app.repository.user import UserRepository
-from app.service.email import EmailService
-from app.service.user import UserService, admin_addresses
+from app.service.email_template import EmailTemplate
+from app.service.user import UserService
 from casbin import SyncedEnforcer
 
 
@@ -39,6 +41,14 @@ class TestUserService(unittest.TestCase):
             id=user_id, is_enabled=True
         )
         self.casbin_enforcer.get_roles_for_user.assert_called_once_with(str(user_id))
+
+    def test_roles_of_reads_the_enforcer_without_loading_the_account(self):
+        user_id = uuid4()
+        self.casbin_enforcer.get_roles_for_user.return_value = ["admin"]
+
+        self.assertEqual(self.user_service.roles_of(user_id), ["admin"])
+        self.casbin_enforcer.get_roles_for_user.assert_called_once_with(str(user_id))
+        self.user_repository.fetch_by_id.assert_not_called()
 
     def test_fetch_by_id_not_found(self):
         user_id = uuid4()
@@ -119,9 +129,6 @@ class TestUserService(unittest.TestCase):
         )
 
     def test_create_success(self):
-        # Callers never send an id: UserCreateRequest carries only name, email,
-        # roles and providers. The id exists only after the user is persisted,
-        # so the roles must be bound to the persisted id, not to the input one.
         persisted_id = uuid4()
         user = User(
             name="Test User",
@@ -144,11 +151,8 @@ class TestUserService(unittest.TestCase):
 
         self.assertEqual(created_id, persisted_id)
         self.user_repository.upsert.assert_called_once()
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(
-            str(persisted_id), "role1"
-        )
-        self.casbin_enforcer.add_grouping_policy.assert_any_call(
-            str(persisted_id), "role2"
+        self.casbin_enforcer.add_grouping_policy.assert_called_once_with(
+            str(persisted_id), "datasets_write"
         )
 
     def test_create_persists_the_tenancies_it_was_given(self):
@@ -171,38 +175,11 @@ class TestUserService(unittest.TestCase):
 
         self.user_service.create(user)
 
-        self.tenancy_repository.fetch.assert_called_once_with(
+        self.tenancy_repository.fetch.assert_any_call(
             tenancy="datamap/production/data-amazon"
         )
         created = self.user_repository.upsert.call_args.kwargs["user"]
         self.assertIn(existing_tenancy, created.tenancies)
-
-    def test_remove_tenancies_success(self):
-        user_id = uuid4()
-        keep = Mock(spec=TenancyDBModel)
-        keep.name = "keep-me"
-        drop = Mock(spec=TenancyDBModel)
-        drop.name = "drop-me"
-        db_user = Mock(spec=UserDBModel)
-        db_user.tenancies = [keep, drop]
-        self.user_repository.fetch_by_id.return_value = db_user
-
-        self.user_service.remove_tenancies(user_id=user_id, tenancies=["drop-me"])
-
-        self.assertEqual(db_user.tenancies, [keep])
-        self.user_repository.upsert.assert_called_once_with(user=db_user)
-
-    def test_remove_tenancies_ignores_one_the_user_does_not_have(self):
-        user_id = uuid4()
-        keep = Mock(spec=TenancyDBModel)
-        keep.name = "keep-me"
-        db_user = Mock(spec=UserDBModel)
-        db_user.tenancies = [keep]
-        self.user_repository.fetch_by_id.return_value = db_user
-
-        self.user_service.remove_tenancies(user_id=user_id, tenancies=["never-had-it"])
-
-        self.assertEqual(db_user.tenancies, [keep])
 
     def test_update_success(self):
         user_id = uuid4()
@@ -319,118 +296,124 @@ CREATED = datetime(2026, 10, 3, 14, 5, tzinfo=timezone.utc)
 BCRYPT_LIKE = "$2b$10$" + "x" * 53
 
 
-class TestNewAccountNotification(unittest.TestCase):
+class TestDefaultAccess(unittest.TestCase):
     def setUp(self):
         self.user_repository = Mock(spec=UserRepository)
         self.tenancy_repository = Mock(spec=TenancyRepository)
+        self.tenancy_repository.fetch.side_effect = lambda tenancy: TenancyDBModel(
+            name=tenancy, is_enabled=True
+        )
         self.casbin_enforcer = Mock(spec=SyncedEnforcer)
-        self.email_service = Mock(spec=EmailService)
+        self.events = Mock(spec=TenancyEventRepository)
         self.user_id = uuid4()
         persisted = Mock(spec=UserDBModel)
         persisted.id = self.user_id
-        persisted.created_at = CREATED
         self.user_repository.upsert.return_value = persisted
-
-    def service(self, admin_emails: str) -> UserService:
-        return UserService(
+        self.service = UserService(
             self.user_repository,
             self.tenancy_repository,
             self.casbin_enforcer,
-            email_service=self.email_service,
-            admin_emails=admin_emails,
+            tenancy_events=self.events,
         )
 
-    def orcid_user(self) -> User:
-        return User(
-            name="Ana Souza",
-            email="ana.souza@usp.br",
-            providers=[UserProvider(name="orcid", reference="0000-0002-1825-0097")],
-            roles=[],
+    def account(self, **overrides) -> User:
+        values = dict(
+            name="Ana Souza", email="ana.souza@usp.br", providers=[], roles=[]
         )
+        values.update(overrides)
+        return User(**values)
 
-    def sent(self) -> list[dict]:
-        return [call.kwargs for call in self.email_service.enqueue.call_args_list]
+    def created(self) -> UserDBModel:
+        return self.user_repository.upsert.call_args.kwargs["user"]
 
-    def test_every_admin_is_told_about_a_new_account(self):
-        self.service("admin.one@usp.br, admin.two@usp.br").create(self.orcid_user())
+    def test_a_new_account_is_in_public(self):
+        self.service.create(self.account())
 
-        self.assertEqual(
-            [kwargs["recipient"] for kwargs in self.sent()],
-            ["admin.one@usp.br", "admin.two@usp.br"],
-        )
+        self.assertEqual([t.name for t in self.created().tenancies], [DEFAULT_TENANCY])
 
-    def test_the_message_names_the_account_and_how_it_signs_in(self):
-        self.service("admin.one@usp.br").create(self.orcid_user())
-
-        (kwargs,) = self.sent()
-        self.assertEqual(kwargs["template"], "new_account_pending")
-        self.assertEqual(
-            kwargs["context"],
-            {
-                "name": "Ana Souza",
-                "email": "ana.souza@usp.br",
-                "sign_in_method": "ORCID",
-                "created_at": "October 3, 2026 at 14:05 UTC",
-            },
-        )
-        self.assertEqual(kwargs["related_type"], "user")
-        self.assertEqual(kwargs["related_id"], self.user_id)
-        self.assertTrue(
-            kwargs["dedup_key"].startswith(f"new_account_pending:{self.user_id}:")
-        )
-        self.assertLessEqual(len(kwargs["dedup_key"]), 256)
-
-    def test_each_admin_has_a_dedup_key_of_its_own(self):
-        self.service("admin.one@usp.br,admin.two@usp.br").create(self.orcid_user())
-
-        keys = {kwargs["dedup_key"] for kwargs in self.sent()}
-        self.assertEqual(len(keys), 2)
-
-    def test_an_account_created_with_a_password_is_stored_confirmed_and_says_so(self):
-        self.service("admin.one@usp.br").create(
-            User(name="Ana Souza", email="ana.souza@usp.br", providers=[], roles=[]),
-            password_hash=BCRYPT_LIKE,
-            email_verified_at=CREATED,
-        )
-
-        created = self.user_repository.upsert.call_args.kwargs["user"]
-        self.assertEqual(created.password_hash, BCRYPT_LIKE)
-        self.assertEqual(created.email_verified_at, CREATED)
-        self.assertEqual(
-            self.sent()[0]["context"]["sign_in_method"], "Email and password"
-        )
-
-    def test_an_account_created_through_the_api_without_a_provider_says_so(self):
-        self.service("admin.one@usp.br").create(
-            User(name="Ana Souza", email="ana.souza@usp.br", providers=[], roles=[])
+    def test_public_comes_after_the_tenancies_given_and_only_once(self):
+        self.service.create(
+            self.account(tenancies=["datamap/production/data-amazon", DEFAULT_TENANCY])
         )
 
         self.assertEqual(
-            self.sent()[0]["context"]["sign_in_method"], "Created through the API"
+            [t.name for t in self.created().tenancies],
+            ["datamap/production/data-amazon", DEFAULT_TENANCY],
         )
 
-    def test_nobody_is_told_when_the_list_is_empty(self):
-        self.service("").create(self.orcid_user())
+    def test_a_new_account_can_work_at_once(self):
+        self.service.create(self.account())
 
-        self.email_service.enqueue.assert_not_called()
+        self.casbin_enforcer.add_grouping_policy.assert_called_once_with(
+            str(self.user_id), "datasets_write"
+        )
 
-    def test_a_failure_to_queue_does_not_undo_the_account(self):
-        self.email_service.enqueue.side_effect = RuntimeError("database gone")
+    def test_the_roles_given_are_ignored(self):
+        for roles in (["admin"], ["admin", "datasets_write"], ["datasets_read"]):
+            with self.subTest(roles=roles):
+                self.casbin_enforcer.add_grouping_policy.reset_mock()
+
+                self.service.create(self.account(roles=roles))
+
+                self.assertEqual(
+                    self.casbin_enforcer.add_grouping_policy.call_args_list,
+                    [call(str(self.user_id), "datasets_write")],
+                )
+
+    def test_every_membership_is_recorded_with_no_actor(self):
+        self.service.create(self.account(tenancies=["datamap/production/data-amazon"]))
+
+        self.assertEqual(
+            self.events.append.call_args_list,
+            [
+                call(
+                    tenancy="datamap/production/data-amazon",
+                    event_type=TenancyEventType.MEMBER_ADDED,
+                    user_id=self.user_id,
+                ),
+                call(
+                    tenancy=DEFAULT_TENANCY,
+                    event_type=TenancyEventType.MEMBER_ADDED,
+                    user_id=self.user_id,
+                ),
+            ],
+        )
+
+    def test_a_failed_role_grant_does_not_undo_the_account(self):
+        self.casbin_enforcer.add_grouping_policy.side_effect = RuntimeError(
+            "policy store gone"
+        )
+
+        with self.assertLogs("service:UserService", level="ERROR") as logs:
+            user_id = self.service.create(self.account(tenancies=[DEFAULT_TENANCY]))
+
+        self.assertEqual(user_id, self.user_id)
+        self.assertEqual(logs.records[0].role, "datasets_write")
+        self.assertEqual(logs.records[0].user_id, str(self.user_id))
+        self.events.append.assert_called_once_with(
+            tenancy=DEFAULT_TENANCY,
+            event_type=TenancyEventType.MEMBER_ADDED,
+            user_id=self.user_id,
+        )
+
+    def test_a_failure_to_record_does_not_undo_the_account(self):
+        self.events.append.side_effect = RuntimeError("database gone")
 
         with self.assertLogs("service:UserService", level="ERROR"):
-            user_id = self.service("admin.one@usp.br").create(self.orcid_user())
+            user_id = self.service.create(self.account())
 
         self.assertEqual(user_id, self.user_id)
 
-
-class TestAdminAddresses(unittest.TestCase):
-    def test_a_comma_separated_list_is_split_and_trimmed(self):
-        self.assertEqual(
-            admin_addresses(" a@usp.br , b@usp.br,, "), ["a@usp.br", "b@usp.br"]
+    def test_an_account_created_with_a_password_is_stored_confirmed(self):
+        self.service.create(
+            self.account(), password_hash=BCRYPT_LIKE, email_verified_at=CREATED
         )
 
-    def test_an_empty_value_is_nobody(self):
-        self.assertEqual(admin_addresses(""), [])
+        self.assertEqual(self.created().password_hash, BCRYPT_LIKE)
+        self.assertEqual(self.created().email_verified_at, CREATED)
+
+    def test_nobody_is_emailed_about_a_new_account_any_more(self):
+        self.assertNotIn("new_account_pending", [t.value for t in EmailTemplate])
 
 
 class TestCredentialFields(unittest.TestCase):

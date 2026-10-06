@@ -2,7 +2,15 @@ import time
 from datetime import timedelta
 
 from tests.integration.fixtures.embargo import client_headers, manual_doi
+from tests.integration.fixtures.embargo import set_embargo as embargo_for
 from tests.integration.fixtures.sharing import set_embargo, token_of
+from tests.integration.fixtures.tenancy import (
+    PUBLIC,
+    as_user,
+    create_dataset,
+    new_account,
+    roles_of,
+)
 from tests.integration.utils.assertions import assert_status_code
 from tests.integration.utils.database import execute
 
@@ -189,3 +197,62 @@ class TestAnonymousLinks:
         )
 
         assert columns == "id,link_id,outcome,viewed_at"
+
+
+class TestAnOwnerWithOnlyDatasetsWrite:
+    def test_revokes_their_link_and_another_account_is_refused(self, http_client):
+        owner, stranger = new_account(http_client), new_account(http_client)
+        assert roles_of(owner["id"]) == ["datasets_write"]
+        dataset = create_dataset(http_client, owner["id"], PUBLIC)
+        headers = as_user(owner["id"], PUBLIC)
+        assert_status_code(
+            embargo_for(http_client, dataset["id"], headers, visible=False), 200
+        )
+        link = create_link(http_client, headers, dataset["id"])
+        path = f"/datasets/{dataset['id']}/anonymous-links/{link['id']}"
+
+        by_stranger = http_client.delete(path, headers=as_user(stranger["id"], PUBLIC))
+        still_active = link_state(http_client, headers, dataset["id"])["revoked_at"]
+        by_owner = http_client.delete(path, headers=headers)
+
+        assert_status_code(by_stranger, 404)
+        assert still_active is None
+        assert_status_code(by_owner, 204)
+        assert link_state(http_client, headers, dataset["id"])["revoked_at"] is not None
+
+    def test_a_member_who_can_see_the_dataset_is_refused_with_403(self, http_client):
+        owner, member = new_account(http_client), new_account(http_client)
+        dataset = create_dataset(http_client, owner["id"], PUBLIC)
+        headers = as_user(owner["id"], PUBLIC)
+        assert_status_code(
+            embargo_for(http_client, dataset["id"], headers, visible=True), 200
+        )
+        link = create_link(http_client, headers, dataset["id"])
+        member_headers = as_user(member["id"], PUBLIC)
+
+        seen = http_client.get(f"/datasets/{dataset['id']}", headers=member_headers)
+        by_member = http_client.delete(
+            f"/datasets/{dataset['id']}/anonymous-links/{link['id']}",
+            headers=member_headers,
+        )
+
+        assert_status_code(seen, 200)
+        assert_status_code(by_member, 403)
+        assert by_member.json() == {"detail": "forbidden"}
+        assert link_state(http_client, headers, dataset["id"])["revoked_at"] is None
+
+    def test_revokes_through_a_path_with_upper_case_ids(self, http_client):
+        owner = new_account(http_client)
+        dataset = create_dataset(http_client, owner["id"], PUBLIC)
+        headers = as_user(owner["id"], PUBLIC)
+        assert_status_code(
+            embargo_for(http_client, dataset["id"], headers, visible=False), 200
+        )
+        link = create_link(http_client, headers, dataset["id"])
+
+        revoked = http_client.delete(
+            f"/datasets/{dataset['id'].upper()}/anonymous-links/{link['id'].upper()}",
+            headers=headers,
+        )
+
+        assert_status_code(revoked, 204)

@@ -1,0 +1,15 @@
+{% extends "base.txt" %}
+{% block content %}
+Hi {{ user_name }},
+
+An administrator could not give you access to {{ requested_name }}.
+{% if decision_message %}
+
+“{{ decision_message }}”
+{% endif %}
+
+You can still work in Public and can send another request.
+
+Open DataMap: {{ open_url }}
+{% endblock %}
+{% block reason %}You received this email because you asked for access to a tenancy on DataMap.{% endblock %}

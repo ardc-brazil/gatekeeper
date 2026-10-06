@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Tenancy request from {{ requester_name }}{% endblock %}
+{% block preheader %}{{ requester_name }} asked for access to {{ requested_name }}.{% endblock %}
+{% block label %}Tenancy request{% endblock %}
+{% block content %}
+{{ m.heading("A tenancy request is waiting") }}
+{% call m.paragraph() %}{{ m.strong(requester_name) }} asked for access to a tenancy.{% endcall %}
+{{ m.details([{"label": "Name", "value": requester_name}, {"label": "Email", "value": (requester_email or "No email") ~ (" (confirmed)" if email_confirmed else " (not confirmed)")}, {"label": "Tenancy asked for", "value": requested_name}, {"label": "Why", "value": reason}, {"label": "Requested", "value": requested_at}]) }}
+{{ m.button("Review request", review_url) }}
+{% endblock %}
+{% block reason %}You received this email because your address is on DataMap's list of administrators.{% endblock %}

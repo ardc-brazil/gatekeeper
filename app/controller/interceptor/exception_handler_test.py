@@ -7,11 +7,12 @@ from fastapi.testclient import TestClient
 
 from app import setup
 from app.controller.interceptor.exception_handler import (
+    _answers_quietly,
     bad_request_exception_handler,
     generic_exception_handler,
 )
 from app.exception.bad_request import BadRequestException, ErrorDetails
-from app.exception.forbidden import ForbiddenException
+from app.exception.forbidden import ForbiddenException, NotAMemberOfTenancyException
 from app.exception.too_many_requests import TooManyRequestsException
 
 
@@ -97,6 +98,19 @@ class TestForbiddenHandler(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json(), {"detail": "forbidden"})
 
+    def test_a_caller_outside_the_tenancy_is_told_why(self):
+        app = FastAPI()
+        setup.setup_error_handlers(app)
+
+        @app.post("/datasets")
+        def create():
+            raise NotAMemberOfTenancyException("user x is not in tenancy y")
+
+        response = TestClient(app, raise_server_exceptions=False).post("/datasets")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": "not_a_member_of_tenancy"})
+
 
 class TestTooManyRequestsHandler(unittest.TestCase):
     def test_a_refused_retry_answers_429_with_its_code(self):
@@ -111,6 +125,43 @@ class TestTooManyRequestsHandler(unittest.TestCase):
 
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.json(), {"detail": "resend_too_soon"})
+
+
+class TestQuietValidation(unittest.TestCase):
+    def request(self, method: str, path: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            method=method, scope={"route": SimpleNamespace(path=path)}
+        )
+
+    def test_the_tenancy_routes_answer_invalid_request(self):
+        for method, path in (
+            ("POST", "/v1/users/{id}/tenancy-requests"),
+            ("GET", "/v1/users/{id}/tenancies"),
+            ("POST", "/v1/users/{id}/tenancy-invitations/{invitation_id}/accept"),
+            ("GET", "/v1/users/{id}/tenancies/{path:path}/members"),
+            ("GET", "/v1/users/{id}/tenancies/{path:path}/lookup"),
+            ("POST", "/v1/users/{id}/tenancies/{path:path}/invitations"),
+            (
+                "DELETE",
+                "/v1/users/{id}/tenancies/{path:path}/invitations/{invitation_id}",
+            ),
+            ("GET", "/v1/admin/tenancy-requests"),
+            ("POST", "/v1/admin/tenancies/{path:path}/members"),
+            ("GET", "/v1/admin/users"),
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(_answers_quietly(self.request(method, path)))
+
+    def test_other_routes_keep_the_default(self):
+        for method, path in (
+            ("POST", "/v1/datasets/"),
+            ("PUT", "/v1/users/{id}/roles"),
+            ("GET", "/v1/admin/emails/"),
+            ("POST", "/v1/datasets/{dataset_id}/share"),
+            ("GET", "/v1/datasets/{dataset_id}/share/lookup"),
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(_answers_quietly(self.request(method, path)))
 
 
 if __name__ == "__main__":

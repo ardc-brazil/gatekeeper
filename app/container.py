@@ -20,6 +20,10 @@ from app.repository.doi import DOIRepository
 from app.repository.email import EmailRepository
 from app.repository.embargo_notification import EmbargoNotificationRepository
 from app.repository.permission import PermissionRepository
+from app.repository.tenancy_event import TenancyEventRepository
+from app.repository.tenancy_invitation import TenancyInvitationRepository
+from app.repository.tenancy_membership import TenancyMembershipRepository
+from app.repository.tenancy_request import TenancyRequestRepository
 from app.repository.user import UserRepository
 
 from app.service.account import AccountService
@@ -39,6 +43,11 @@ from app.service.notification import EmbargoNotificationService
 from app.service.password import PasswordHasher
 from app.service.permission import PermissionService
 from app.service.share import ShareService
+from app.service.tenancy_admin import TenancyAdminService
+from app.service.tenancy_invitation import TenancyInvitationService
+from app.service.tenancy_membership import TenancyMembershipService
+from app.service.tenancy_notifier import TenancyNotifier
+from app.service.tenancy_request import TenancyRequestService
 from app.service.tus import TusService
 from app.service.user import UserService
 
@@ -74,11 +83,13 @@ class Container(containers.DeclarativeContainer):
             "app.controller.v1.invitation.invitation",
             "app.controller.v1.anonymous.anonymous",
             "app.controller.v1.user.user",
+            "app.controller.v1.user.tenancy_access",
             "app.controller.v1.tenancy.tenancy",
             "app.controller.v1.tus.tus",
             "app.controller.v1.internal.dataset_collocation",
             "app.controller.v1.internal.notification",
             "app.controller.v1.admin.email",
+            "app.controller.v1.admin.tenancy",
             "app.controller.v1.infrastructure.infrastructure",
         ]
     )
@@ -114,11 +125,6 @@ class Container(containers.DeclarativeContainer):
     tenancy_repository = providers.Factory(
         TenancyRepository,
         session_factory=db.provided.session,
-    )
-
-    tenancy_service = providers.Factory(
-        TenancyService,
-        repository=tenancy_repository,
     )
 
     casbin_adapter = providers.Singleton(
@@ -168,13 +174,58 @@ class Container(containers.DeclarativeContainer):
         session_factory=db.provided.session,
     )
 
+    tenancy_event_repository = providers.Factory(
+        TenancyEventRepository,
+        session_factory=db.provided.session,
+    )
+
     user_service = providers.Factory(
         UserService,
         repository=user_repository,
         tenancy_repository=tenancy_repository,
         casbin_enforcer=casbin_enforcer,
+        tenancy_events=tenancy_event_repository,
+    )
+
+    tenancy_membership_repository = providers.Factory(
+        TenancyMembershipRepository,
+        session_factory=db.provided.session,
+    )
+
+    tenancy_notifier = providers.Factory(
+        TenancyNotifier,
         email_service=email_service,
         admin_emails=config.ADMIN_NOTIFICATION_EMAILS,
+        public_base_url=config.PUBLIC_BASE_URL,
+    )
+
+    tenancy_membership_service = providers.Factory(
+        TenancyMembershipService,
+        tenancies=tenancy_repository,
+        memberships=tenancy_membership_repository,
+        users=user_repository,
+        notifier=tenancy_notifier,
+    )
+
+    tenancy_service = providers.Factory(
+        TenancyService,
+        repository=tenancy_repository,
+        membership_service=tenancy_membership_service,
+    )
+
+    tenancy_request_repository = providers.Factory(
+        TenancyRequestRepository,
+        session_factory=db.provided.session,
+    )
+
+    tenancy_request_service = providers.Factory(
+        TenancyRequestService,
+        requests=tenancy_request_repository,
+        tenancies=tenancy_repository,
+        memberships=tenancy_membership_repository,
+        membership_service=tenancy_membership_service,
+        users=user_repository,
+        notifier=tenancy_notifier,
     )
 
     auth_service = providers.Factory(
@@ -362,6 +413,30 @@ class Container(containers.DeclarativeContainer):
         anonymous_link_repository=dataset_anonymous_link_repository,
     )
 
+    tenancy_invitation_repository = providers.Factory(
+        TenancyInvitationRepository,
+        session_factory=db.provided.session,
+    )
+
+    tenancy_invitation_service = providers.Factory(
+        TenancyInvitationService,
+        invitations=tenancy_invitation_repository,
+        memberships=tenancy_membership_repository,
+        membership_service=tenancy_membership_service,
+        tenancies=tenancy_repository,
+        users=user_repository,
+        notifier=tenancy_notifier,
+    )
+
+    tenancy_admin_service = providers.Factory(
+        TenancyAdminService,
+        tenancies=tenancy_repository,
+        memberships=tenancy_membership_repository,
+        membership_service=tenancy_membership_service,
+        invitations=tenancy_invitation_repository,
+        users=user_repository,
+    )
+
     share_service = providers.Factory(
         ShareService,
         dataset_service=dataset_service,
@@ -375,6 +450,8 @@ class Container(containers.DeclarativeContainer):
         audit=dataset_access_audit,
         email_service=email_service,
         public_base_url=config.PUBLIC_BASE_URL,
+        tenancy_repository=tenancy_repository,
+        membership_service=tenancy_membership_service,
     )
 
     anonymous_link_service = providers.Factory(
@@ -399,6 +476,7 @@ class Container(containers.DeclarativeContainer):
         anonymous_link_repository=dataset_anonymous_link_repository,
         audit=dataset_access_audit,
         email_service=email_service,
+        membership_service=tenancy_membership_service,
         public_base_url=config.PUBLIC_BASE_URL,
     )
 

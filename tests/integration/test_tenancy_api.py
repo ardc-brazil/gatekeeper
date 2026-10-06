@@ -5,6 +5,7 @@ from tests.integration.utils.assertions import (
     assert_json_response,
     assert_response_contains_fields,
 )
+from tests.integration.utils.database import execute
 
 
 class TestTenancyGetEndpoints:
@@ -106,7 +107,7 @@ class TestTenancyCRUDOperations:
     def test_create_tenancy_success_201(self, http_client, valid_headers):
         """Test creating a new tenancy successfully."""
         # Arrange - Use unique name to avoid conflicts
-        unique_name = f"test/tenancy/creation/{str(uuid.uuid4())[:8]}"
+        unique_name = f"datamap/production/creation-{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
 
         # Act
@@ -117,6 +118,21 @@ class TestTenancyCRUDOperations:
         # Assert
         assert_status_code(response, 201)
         # POST returns empty response body
+
+    def test_create_tenancy_outside_production_is_refused(
+        self, http_client, valid_headers
+    ):
+        name = f"datamap/staging/refused-{str(uuid.uuid4())[:8]}"
+
+        response = http_client.post(
+            "/tenancies/",
+            json={"name": name, "is_enabled": True},
+            headers=valid_headers,
+        )
+
+        assert_status_code(response, 400)
+        assert response.json() == {"detail": "namespace_invalid"}
+        assert execute(f"SELECT count(*) FROM tenancies WHERE name = '{name}'") == "0"
 
     def test_create_tenancy_invalid_data_422(self, http_client, valid_headers):
         """Test creating tenancy with invalid data returns 422."""
@@ -153,7 +169,7 @@ class TestTenancyCRUDOperations:
     def test_update_tenancy_success(self, http_client, valid_headers):
         """Test updating an existing tenancy successfully."""
         # Arrange - First create a tenancy with unique name
-        unique_name = f"test/tenancy/update/{str(uuid.uuid4())[:8]}"
+        unique_name = f"datamap/production/update-{str(uuid.uuid4())[:8]}"
         create_data = {"name": unique_name, "is_enabled": True}
         create_response = http_client.post(
             "/tenancies/", json=create_data, headers=valid_headers
@@ -171,6 +187,31 @@ class TestTenancyCRUDOperations:
         # Assert
         assert_status_code(response, 200)
         # PUT returns empty response body
+
+    def test_renaming_onto_an_existing_path_keeps_the_legacy_conflict(
+        self, http_client, valid_headers
+    ):
+        suffix = str(uuid.uuid4())[:8]
+        source = f"datamap/production/rename-{suffix}"
+        taken = f"datamap/production/taken-{suffix}"
+        for name in (source, taken):
+            created = http_client.post(
+                "/tenancies/",
+                json={"name": name, "is_enabled": True},
+                headers=valid_headers,
+            )
+            assert_status_code(created, 201)
+
+        response = http_client.put(
+            f"/tenancies/{source}",
+            json={"name": taken, "is_enabled": True},
+            headers=valid_headers,
+        )
+
+        assert_status_code(response, 409)
+        assert_response_matches_dict(
+            response, {"detail": f"tenancy_already_exists: {taken}"}
+        )
 
     def test_update_tenancy_not_found_404(self, http_client, valid_headers):
         """Test updating a non-existent tenancy returns 404."""
@@ -206,7 +247,7 @@ class TestTenancyCRUDOperations:
     def test_delete_tenancy_success_204(self, http_client, valid_headers):
         """Test deleting (disabling) a tenancy successfully."""
         # Arrange - First create a tenancy with unique name
-        unique_name = f"test/tenancy/delete/{str(uuid.uuid4())[:8]}"
+        unique_name = f"datamap/production/delete-{str(uuid.uuid4())[:8]}"
         create_data = {"name": unique_name, "is_enabled": True}
         create_response = http_client.post(
             "/tenancies/", json=create_data, headers=valid_headers
@@ -248,7 +289,7 @@ class TestTenancyCRUDOperations:
     def test_enable_tenancy_success(self, http_client, valid_headers):
         """Test enabling a disabled tenancy successfully."""
         # Arrange - First create and then disable a tenancy with unique name
-        unique_name = f"test/tenancy/enable/{str(uuid.uuid4())[:8]}"
+        unique_name = f"datamap/production/enable-{str(uuid.uuid4())[:8]}"
         create_data = {"name": unique_name, "is_enabled": True}
         create_response = http_client.post(
             "/tenancies/", json=create_data, headers=valid_headers
@@ -269,6 +310,27 @@ class TestTenancyCRUDOperations:
         # Assert
         assert_status_code(response, 200)
         # POST returns empty response body
+
+    def test_enabling_under_a_display_name_now_taken_is_display_name_taken(
+        self, http_client, valid_headers
+    ):
+        suffix = str(uuid.uuid4())[:8]
+        dormant = f"datamap/production/dormant-{suffix}"
+        execute(
+            "INSERT INTO tenancies (name, display_name, is_enabled) VALUES "
+            f"('{dormant}', 'Dup {suffix}', false), "
+            f"('datamap/production/active-{suffix}', 'DUP {suffix}', true)"
+        )
+
+        response = http_client.post(
+            f"/tenancies/{dormant}/enable", headers=valid_headers
+        )
+
+        assert_status_code(response, 409)
+        assert_response_matches_dict(response, {"detail": "display_name_taken"})
+        assert (
+            execute(f"SELECT is_enabled FROM tenancies WHERE name = '{dormant}'") == "f"
+        )
 
     def test_enable_tenancy_not_found_404(self, http_client, valid_headers):
         """Test enabling a non-existent tenancy returns 404."""
@@ -297,10 +359,12 @@ class TestTenancyCRUDOperations:
 class TestTenancyPathHandling:
     """Integration tests for Tenancy path handling with slashes."""
 
-    def test_tenancy_path_with_multiple_slashes(self, http_client, valid_headers):
-        """Test tenancy paths with multiple slashes."""
+    def test_a_production_path_is_created_and_read_back_by_its_full_path(
+        self, http_client, valid_headers
+    ):
+        """A datamap/production/{namespace} path round-trips through the URL."""
         # Arrange - Use unique name to avoid conflicts
-        unique_name = f"test/multiple/slashes/in/path/{str(uuid.uuid4())[:8]}"
+        unique_name = f"datamap/production/slashes-{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
 
         # Act - Create
@@ -318,10 +382,12 @@ class TestTenancyPathHandling:
             response, {"name": unique_name, "is_enabled": True}
         )
 
-    def test_tenancy_path_with_special_characters(self, http_client, valid_headers):
-        """Test tenancy paths with special characters."""
+    def test_a_namespace_with_digits_and_hyphens_is_created_and_read_back(
+        self, http_client, valid_headers
+    ):
+        """A namespace with digits and hyphens round-trips through the URL."""
         # Arrange - Use unique name to avoid conflicts
-        unique_name = f"test/special-chars_123/{str(uuid.uuid4())[:8]}"
+        unique_name = f"datamap/production/special-chars-123-{str(uuid.uuid4())[:8]}"
         tenancy_data = {"name": unique_name, "is_enabled": True}
 
         # Act - Create
@@ -359,7 +425,7 @@ class TestTenancyWorkflow:
         """Test complete tenancy lifecycle: create -> get -> update -> disable -> enable -> get."""
         # Use unique name to avoid conflicts
         unique_suffix = str(uuid.uuid4())[:8]
-        tenancy_name = f"test/lifecycle/tenancy/{unique_suffix}"
+        tenancy_name = f"datamap/production/lifecycle-{unique_suffix}"
 
         # 1. Create tenancy
         create_data = {"name": tenancy_name, "is_enabled": True}

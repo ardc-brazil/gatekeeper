@@ -1,38 +1,15 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 from app.exception.not_found import NotFoundException
 from app.logging_config import fields
 from app.model.db.user import Provider as ProviderDBModel, User as UserDBModel
-from app.model.user import User, UserProvider, UserQuery
+from app.model.tenancy import DEFAULT_TENANCY, TenancyEventType
+from app.model.user import DEFAULT_ROLE, User, UserProvider, UserQuery
 from app.repository.tenancy import TenancyRepository
+from app.repository.tenancy_event import TenancyEventRepository
 from app.repository.user import UserRepository
-from app.service.email import EmailService
-from app.service.email_format import long_date
-from app.service.email_template import EmailTemplate
-from app.service.share_token import hash_token
 from casbin import SyncedEnforcer
-
-PROVIDER_LABELS = {"orcid": "ORCID", "github": "GitHub"}
-
-
-def admin_addresses(value: str) -> list[str]:
-    return [address.strip() for address in (value or "").split(",") if address.strip()]
-
-
-def sign_in_method(providers: list, has_password: bool) -> str:
-    if has_password:
-        return "Email and password"
-    if providers:
-        return ", ".join(
-            PROVIDER_LABELS.get(provider.name, provider.name) for provider in providers
-        )
-    return "Created through the API"
-
-
-def created_on(moment: datetime) -> str:
-    utc = moment.astimezone(timezone.utc)
-    return f"{long_date(utc)} at {utc:%H:%M} UTC"
 
 
 class UserService:
@@ -41,14 +18,12 @@ class UserService:
         repository: UserRepository,
         tenancy_repository: TenancyRepository,
         casbin_enforcer: SyncedEnforcer,
-        email_service: EmailService | None = None,
-        admin_emails: str = "",
+        tenancy_events: TenancyEventRepository | None = None,
     ) -> None:
         self._repository: UserRepository = repository
         self._tenancy_repository: TenancyRepository = tenancy_repository
         self._casbin_enforcer: SyncedEnforcer = casbin_enforcer
-        self._email = email_service
-        self._admin_emails = admin_addresses(admin_emails)
+        self._tenancy_events = tenancy_events
         self._logger = logging.getLogger("service:UserService")
 
     def __adapt_user(self, user: UserDBModel) -> User:
@@ -116,50 +91,43 @@ class UserService:
                 ProviderDBModel(name=provider.name, reference=provider.reference)
             )
 
-        for tenancy in user.tenancies or []:
+        tenancies = list(dict.fromkeys([*(user.tenancies or []), DEFAULT_TENANCY]))
+        for tenancy in tenancies:
             dbUser.tenancies.append(self._tenancy_repository.fetch(tenancy=tenancy))
 
         created = self._repository.upsert(user=dbUser)
         user_id = created.id
 
-        for role in user.roles:
-            self._casbin_enforcer.add_grouping_policy(str(user_id), role)
-
-        self._notify_admins(
-            user_id, user, created.created_at, password_hash is not None
-        )
+        self._grant_roles(user_id, [DEFAULT_ROLE])
+        self._record_memberships(user_id, tenancies)
         return user_id
 
-    def _notify_admins(
-        self, user_id: UUID, user: User, created_at: datetime, has_password: bool
-    ) -> None:
-        if self._email is None:
-            return
-        for recipient in self._admin_emails:
+    def _grant_roles(self, user_id: UUID, roles: list[str]) -> None:
+        for role in roles:
             try:
-                self._email.enqueue(
-                    template=EmailTemplate.NEW_ACCOUNT_PENDING.value,
-                    recipient=recipient,
-                    context={
-                        "name": user.name,
-                        "email": user.email,
-                        "sign_in_method": sign_in_method(
-                            user.providers or [], has_password
-                        ),
-                        "created_at": created_on(created_at),
-                    },
-                    related_type="user",
-                    related_id=user_id,
-                    dedup_key=f"new_account_pending:{user_id}:{hash_token(recipient.lower())[:16]}",
+                self._casbin_enforcer.add_grouping_policy(str(user_id), role)
+            except Exception:
+                self._logger.error(
+                    "role not granted",
+                    exc_info=True,
+                    extra=fields(user_id=str(user_id), role=role),
+                )
+
+    def _record_memberships(self, user_id: UUID, tenancies: list[str]) -> None:
+        if self._tenancy_events is None:
+            return
+        for tenancy in tenancies:
+            try:
+                self._tenancy_events.append(
+                    tenancy=tenancy,
+                    event_type=TenancyEventType.MEMBER_ADDED,
+                    user_id=user_id,
                 )
             except Exception:
                 self._logger.error(
-                    "email enqueue failed",
+                    "tenancy event not recorded",
                     exc_info=True,
-                    extra=fields(
-                        template=EmailTemplate.NEW_ACCOUNT_PENDING.value,
-                        user_id=str(user_id),
-                    ),
+                    extra=fields(user_id=str(user_id), tenancy=tenancy),
                 )
 
     def update(self, id: UUID, name: str, email: str) -> User:
@@ -235,33 +203,11 @@ class UserService:
 
         return users
 
+    def roles_of(self, user_id: UUID) -> list[str]:
+        return self._casbin_enforcer.get_roles_for_user(str(user_id))
+
     def enforce(self, user_id: UUID, resource: str, action: str) -> bool:
         return self._casbin_enforcer.enforce(str(user_id), resource, action)
 
     def load_policy(self) -> bool:
         return self._casbin_enforcer.load_policy()
-
-    def add_tenancies(self, user_id: UUID, tenancies: list[str]) -> None:
-        # TODO check editor has the access to the tenancy
-        # TODO: Only admins should have permission to add user to a tenancy
-        user: UserDBModel = self._repository.fetch_by_id(id=user_id)
-        if user is None:
-            raise NotFoundException(f"not_found: {user_id}")
-        for tenancy in tenancies:
-            # Only way I found to make this work with pre-existing tenancy data
-            existing_tenancy = self._tenancy_repository.fetch(tenancy=tenancy)
-            user.tenancies.append(existing_tenancy)
-        self._repository.upsert(user=user)
-
-    def remove_tenancies(self, user_id: UUID, tenancies: list[str]) -> None:
-        # TODO check editor has the access to the tenancy
-        # TODO: Only admins should have permission to add user to a tenancy
-        user: UserDBModel = self._repository.fetch_by_id(id=user_id)
-        if user is None:
-            raise NotFoundException(f"not_found: {user_id}")
-        to_remove = set(tenancies)
-        user.tenancies = [
-            tenancy for tenancy in user.tenancies if tenancy.name not in to_remove
-        ]
-
-        self._repository.upsert(user=user)

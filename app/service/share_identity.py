@@ -1,6 +1,8 @@
 import re
 
 from app.exception.bad_request import BadRequestException, ErrorDetails
+from app.model.db.user import User
+from app.repository.user import UserRepository
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _ORCID = re.compile(r"^(\d{4})-?(\d{4})-?(\d{4})-?(\d{3}[\dX])$")
@@ -36,3 +38,11 @@ def normalise_orcid(value: str) -> str:
     if not orcid_checksum_ok(orcid):
         raise BadRequestException(errors=[ErrorDetails(code="invalid_orcid")])
     return orcid
+
+
+def find_account(
+    users: UserRepository, email: str | None, orcid: str | None
+) -> User | None:
+    if email is not None:
+        return users.fetch_by_email_insensitive(email)
+    return users.fetch_by_provider(provider_name="orcid", reference=orcid)
