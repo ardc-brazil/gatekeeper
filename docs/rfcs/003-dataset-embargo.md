@@ -501,6 +501,8 @@ Local development and the integration suite run [Mailpit](https://mailpit.axllen
 
 #### Templates
 
+Messages are rendered in the recipient's language, stored per message in `email_messages.locale`; see RFC 006, *Email*.
+
 Every message is rendered by the gatekeeper's existing `EmailTemplateRenderer` from `app/resources/email_templates/`, in the DataMap identity those templates already carry: `base.html` holds the header, footer and dark-mode styles, `_macros.html` the building blocks (heading, paragraph, details panel, bullet list, button, note, link fallback). New messages are new templates in the same style, extending `base.html` and built only from the macros:
 
 | Message | Template |

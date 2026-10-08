@@ -19,6 +19,7 @@ RFCs (Request for Comments) document significant architectural decisions and fea
 |-----|-------|--------|
 | [001](rfcs/001-dataset-pagination-fulltext-search.md) | Dataset Pagination and Full-Text Search | Implemented |
 | [005](rfcs/005-platform-metrics-and-dashboards.md) | Platform Metrics and Dashboards | Accepted |
+| [006](rfcs/006-internationalization.md) | Internationalization (pt-BR and English) | Draft |
 
 ## Contributing
 

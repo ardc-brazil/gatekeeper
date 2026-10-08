@@ -493,6 +493,8 @@ Bodies are `{"detail": "<code>"}` like the rest of the API.
 
 ### Emails
 
+RFC 006 supersedes "in English" below: each email follows the recipient's language, and an admin address uses the locale of the account that owns it.
+
 Through the outbox like every other email, in English, on the transactional
 shell (`_transactional.html`) — the "same shell" of the design's 1g. None
 carries a token, so `secret_fields` is empty for all of them. Admin messages
