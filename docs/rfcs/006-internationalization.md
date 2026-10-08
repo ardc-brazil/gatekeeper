@@ -4,7 +4,7 @@
 |--------|----------|
 | Author | DataMap Team |
 | Created | 2026-10-01 |
-| Updated | 2026-10-08 (rewritten against RFC 003, 008 and 009 as built) |
+| Updated | 2026-10-08 (rewritten against RFC 003, 008 and 009 as built; terminology settled) |
 
 ## Summary
 
@@ -173,7 +173,7 @@ their emails and screens "in English".
 | Email locale | resolved at enqueue, stored on the row, reused at dispatch | resolved at dispatch (a retry could change language) |
 | Preference route | `PUT /users/{id}/locale` with `authorize_self` | `PUT /users/me/locale` (new route shape, needs a Casbin row for `datasets_write`) |
 | Email to someone with no account | the locale the webapp detected for that request; for a dataset invitation, the inviter's | bilingual message; always the default |
-| Normative text (Data Policy) | translated, then reviewed by a person before release | left in one language |
+| Normative text (Data Policy) | translated, then reviewed line by line by the maintainer before release | left in one language |
 
 ## Locale resolution
 
@@ -478,17 +478,20 @@ and the login page renders it through `errorMessage`.
 Consistency across tracks matters more than any one choice. Every translating
 track reads `datamap-webapp/messages/GLOSSARY.md`, created in Phase 0 and
 shared with the email catalogs. Tracks propose additions in their PR
-description; the cleanup phase merges them. Proposed entries, to be confirmed
-in review of this RFC:
+description; the cleanup phase merges them. Three product terms stay in
+English in both locales, treated as names: **dataset**, **workspace** and
+**snapshot**. They keep their English plural (`os datasets`) and take the
+masculine article (`o dataset`, `o workspace`, `o snapshot`).
+
 
 | English | pt-BR | Note |
 |---|---|---|
-| dataset | conjunto de dados | *open question*: keep "dataset" as a loanword? |
-| workspace / tenancy | *open question* | The UI says "workspace" since RFC 009 |
+| dataset | dataset | A name, never "conjunto de dados" |
+| workspace / tenancy | workspace | The UI's word for a tenancy since RFC 009 |
 | embargo | embargo | |
 | findable / registered (DOI) | localizável / registrado | DataCite states, explained where shown |
 | upload / download | enviar / baixar | |
-| snapshot | *open question* | |
+| snapshot | snapshot | |
 | sign in / sign out / sign up | entrar / sair / criar conta | |
 | anonymous link | link anônimo | |
 | share | compartilhar | |
@@ -531,8 +534,9 @@ Anything not listed belongs to W0: the layouts, `components/{Navbar,Profile,Cont
 T1, T4 and T6 are the largest (150 to 200 strings each). T8 touches the
 four error maps that T3, T4, T6 and T7 import: those tracks call
 `errorMessage` and do not edit the maps, so T8 can run alongside them.
-**T10 is not merged without a person's review of the Portuguese text**, since
-the Data Policy has normative weight.
+**T10 is not merged without the maintainer's careful review of the Portuguese
+text**, since the Data Policy has normative weight; the maintainer reviews
+every track's translation, but this one line by line.
 
 Each track's PR description lists the strings it could not translate with
 confidence, so the review goes there first. There are ten tracks and one
@@ -618,7 +622,6 @@ since sign-in and the switcher are the only ways the preference changes.
 
 ## Open questions
 
-1. **Terminology**: "dataset" as a loanword or "conjunto de dados";
-   *workspace/tenancy* and *snapshot* in Portuguese.
-2. **Who reviews the Data Policy translation**: the author of this RFC, or the
-   administrators who own the policy.
+None. Settled in review: *dataset*, *workspace* and *snapshot* stay in English
+in Portuguese text, and the maintainer reviews every translation, the Data
+Policy included.
