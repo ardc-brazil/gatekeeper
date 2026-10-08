@@ -294,6 +294,8 @@ and the code screen says the email can take up to a minute.
 
 ### Notifications
 
+RFC 006 supersedes "in English" below, for these emails and for the screens: both follow the recipient's language, and the sign-up, email-verification and password-reset requests carry an optional `locale`.
+
 New templates in `app/resources/email_templates/`, in English like the existing
 ones, with the code or token in `secret_fields`:
 
