@@ -181,6 +181,7 @@ Runbooks, for when something needs doing rather than reading:
 | [observability.md](docs/runbooks/observability.md) | metrics, dashboards and logs |
 | [snapshot-audit.md](docs/runbooks/snapshot-audit.md) | find datasets whose DOI is public but whose files are not |
 | [post-deploy-verification.md](docs/runbooks/post-deploy-verification.md) | what to check after a deploy |
+| [merge-duplicate-users.md](docs/runbooks/merge-duplicate-users.md) | one person with two accounts (email and ORCID): move everything onto one |
 
 Scripts the deploy and the timers run, all with unit tests:
 
