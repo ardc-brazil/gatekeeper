@@ -1,0 +1,1 @@
+| 2026-11-01 | RFC 012 revisada com D25–D27 e os seis pontos finais (modelo de metadados tabela a tabela, DataMap Metadata Document, curador, níveis, consentimento de embargo, backfill ao final); Caio: foco na qualificação, implementação depois da banca (D28) | D28 |
