@@ -549,3 +549,35 @@ Implementation starts after the qualification exam. Order:
 | 2026-10-29 | Families as the unit; exemplar pool includes the same instrument class in production; multi-suggestions optional; manual as upload (D19) |
 | 2026-10-30 | Depositor note as a context source; answer written as `human` (D22). Exact signature; no manual merge; sentinels in tabular files (D23). No post-hoc exclusion in analysis (D24) |
 | 2026-11-01 | No data-before-draft (D25). Own service, LLM by configuration, async extraction with per-user progress, new version as draft (D26). One database, samples in MinIO, backfill at the end, `curator` role, typed tables, processing levels, import document, Scribe, Ollama (D27). Scribe polls the database; restricted credentials; suggestions off in A; `origin_note` as a dataset field; regenerate never overwrites approved fields |
+| 2026-11-05 | Rule-check flags (`units_parseable`, `standard_name_in_table`, `units_compatible_with_standard_name`) shown per variable on the review screen, as a validation signal next to provenance and confidence (D32; addendum below) |
+
+## Addendum (2026-11-05): rule-check flags on the review screen
+
+**Context.** The pilot already computes three deterministic checks per
+variable after generation (`piloto/src/piloto/writer.py`, `_flags`):
+`units_parseable` (the unit string parses), `standard_name_in_table` (the
+chosen standard name exists in the CF table) and
+`units_compatible_with_standard_name` (the unit has the canonical dimension
+of that standard name). They are stored on the variable record but the review
+screen (design v2, October 2026) shows only provenance and confidence. The
+systematic review found one study in which attaching an automatic validation
+report to the generated proposal cut review time from 47 to 18 minutes for
+twenty tables, without a controlled design (Pyatetsky, Suleykin and Sorokina,
+2025, `pyatetsky2025bridging` in `research/master/literature-review/referencias-rsl.bib`).
+
+**Decision (D32, 2026-11-05).** The Scribe persists the flags with each
+variable field (`column_metadata.flags` jsonb, same keys as the pilot), and
+the family review table shows them as one signal per variable, next to
+provenance and confidence: green when every applicable check passes, amber
+with the failing check named (for example "unit `degC` is not compatible with
+`air_pressure`"). The signal is informational: it does not block accept, is
+not a verdict, and is not a judge. The filter bar gains "has a failing check"
+alongside "pending" and "low confidence". Bulk accept by `min_confidence`
+skips variables with a failing check unless the user opts in.
+
+**Not changed.** The rules themselves (header units win, `qc_` names derived,
+standard names outside the CF table dropped) stay in `generate`. No new
+endpoint: flags travel in the existing field payload. Increment A.
+
+**To fold into the body later:** `column_metadata` table (add `flags`), the
+family review screen description, and the field payload in Endpoints.
